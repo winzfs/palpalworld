@@ -3,6 +3,12 @@ import { BUILDING_CATALOG, WORLD, type BuildingState, type BuildingType, type Ve
 import type { InventoryStore } from "../inventory/InventoryStore";
 import type { WorldState } from "../world/WorldState";
 
+const buildingItemPrefix = "building_";
+
+function getBuildingItemId(buildingType: BuildingType) {
+  return `${buildingItemPrefix}${buildingType}`;
+}
+
 export type PlaceBuildingResult =
   | {
       ok: true;
@@ -35,7 +41,7 @@ export class BuildingService {
       return { ok: false, reason: "blocked" };
     }
 
-    const consumed = this.inventories.consumeItems(playerId, definition.requires);
+    const consumed = this.inventories.consumeItems(playerId, [{ itemId: getBuildingItemId(buildingType), amount: 1 }]);
     if (!consumed) return { ok: false, reason: "missing_materials" };
 
     const building: BuildingState = {
