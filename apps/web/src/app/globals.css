@@ -56,12 +56,15 @@ button {
   display: grid;
   grid-template-rows: 1fr;
   background: radial-gradient(circle at top, #24304c, #0d0c18 70%);
+  touch-action: none;
+  user-select: none;
 }
 
 .game-canvas-root {
   position: absolute;
   inset: 0;
   overflow: hidden;
+  touch-action: none;
 }
 
 .game-hud {
@@ -287,14 +290,31 @@ button {
   margin-top: 10px;
 }
 
+.mobile-control-hint {
+  pointer-events: none;
+  position: absolute;
+  left: 50%;
+  bottom: calc(154px + var(--safe-bottom));
+  transform: translateX(-50%);
+  padding: 5px 9px;
+  border: 1px solid rgb(242 209 107 / 0.35);
+  border-radius: 999px;
+  background: rgb(0 0 0 / 0.36);
+  color: var(--jrpg-muted);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
 .mobile-actions {
   pointer-events: auto;
   position: absolute;
   right: calc(16px + var(--safe-right));
   bottom: calc(20px + var(--safe-bottom));
   display: grid;
-  grid-template-columns: repeat(2, 64px);
+  grid-template-columns: repeat(2, 72px);
   gap: 12px;
+  touch-action: none;
+  z-index: 10;
 }
 
 .action-button,
@@ -307,43 +327,84 @@ button {
   border: 2px solid var(--jrpg-border);
   box-shadow: 0 12px 32px rgb(0 0 0 / 0.35);
   user-select: none;
+  -webkit-user-select: none;
+  touch-action: none;
 }
 
 .action-button {
-  width: 64px;
-  height: 64px;
+  width: 72px;
+  height: 72px;
   font-weight: 900;
+  cursor: pointer;
+}
+
+.action-button--attack {
+  border-color: #ef8844;
+}
+
+.action-button--interact {
+  border-color: var(--jrpg-border-bright);
 }
 
 .mobile-joystick {
   pointer-events: auto;
   position: absolute;
-  left: calc(24px + var(--safe-left));
-  bottom: calc(28px + var(--safe-bottom));
-  width: 128px;
-  height: 128px;
+  left: calc(18px + var(--safe-left));
+  bottom: calc(18px + var(--safe-bottom));
+  width: 152px;
+  height: 152px;
+  touch-action: none;
+  z-index: 10;
 }
 
 .joystick-base {
   position: relative;
-  width: 128px;
-  height: 128px;
+  width: 152px;
+  height: 152px;
+  background:
+    radial-gradient(circle, rgb(242 209 107 / 0.14), rgb(20 18 28 / 0.82) 64%),
+    rgb(20 18 28 / 0.82);
+}
+
+.joystick-cross {
+  pointer-events: none;
+  position: absolute;
+  background: rgb(242 209 107 / 0.16);
+  border-radius: 999px;
+}
+
+.joystick-cross--horizontal {
+  width: 96px;
+  height: 8px;
+  left: 28px;
+  top: 72px;
+}
+
+.joystick-cross--vertical {
+  width: 8px;
+  height: 96px;
+  left: 72px;
+  top: 28px;
 }
 
 .joystick-stick {
+  pointer-events: none;
   position: absolute;
-  width: 58px;
-  height: 58px;
+  width: 62px;
+  height: 62px;
   border-radius: 999px;
-  background: rgb(242 209 107 / 0.92);
+  background: radial-gradient(circle at 35% 30%, #fff7bf, rgb(242 209 107 / 0.95));
+  border: 2px solid #3b2f1e;
   transform: translate(-50%, -50%);
   left: 50%;
   top: 50%;
+  box-shadow: 0 8px 20px rgb(0 0 0 / 0.35);
 }
 
 @media (min-width: 900px) {
   .mobile-joystick,
-  .mobile-actions {
+  .mobile-actions,
+  .mobile-control-hint {
     display: none;
   }
 }
@@ -357,12 +418,13 @@ button {
   .top-left-panel {
     min-width: unset;
     width: calc(100vw - 24px - var(--safe-left) - var(--safe-right));
+    font-size: 12px;
   }
 
   .inventory-panel {
     right: calc(12px + var(--safe-right));
-    bottom: calc(164px + var(--safe-bottom));
-    width: min(220px, calc(100vw - 180px));
+    bottom: calc(178px + var(--safe-bottom));
+    width: min(220px, calc(100vw - 190px));
     max-height: 190px;
     overflow: hidden;
   }
