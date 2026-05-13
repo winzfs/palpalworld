@@ -1,0 +1,11 @@
+{
+  "name": "PalPalWorld",
+  "short_name": "PalPal",
+  "description": "2D multiplayer creature survival RPG",
+  "start_url": "/",
+  "display": "fullscreen",
+  "background_color": "#020617",
+  "theme_color": "#111827",
+  "orientation": "any",
+  "icons": []
+}
