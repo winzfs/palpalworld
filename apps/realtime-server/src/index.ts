@@ -9,8 +9,11 @@ import { BuildingService } from "./buildings/BuildingService";
 import { CombatService } from "./combat/CombatService";
 import { CraftingService } from "./crafting/CraftingService";
 import { CreatureService } from "./creatures/CreatureService";
+import { EquipmentService } from "./equipment/EquipmentService";
 import { InventoryStore } from "./inventory/InventoryStore";
+import { PlayerService } from "./players/PlayerService";
 import { ResourceService } from "./resources/ResourceService";
+import { StatService } from "./stats/StatService";
 import { WorldState } from "./world/WorldState";
 
 const port = Number(process.env.PORT ?? 4000);
@@ -34,6 +37,9 @@ const io = new Server<ClientToServerEvents, ServerToClientEvents>(httpServer, {
 
 const world = new WorldState();
 const inventories = new InventoryStore();
+const equipment = new EquipmentService(inventories);
+const stats = new StatService(inventories);
+const players = new PlayerService(equipment, stats);
 const resources = new ResourceService(world);
 const creatures = new CreatureService(world);
 const combat = new CombatService(world, creatures);
@@ -43,14 +49,22 @@ const lastInputs = new Map<string, PlayerInputPayload["movement"]>();
 
 function createPlayer(socketId: string, nickname: string): PlayerPublicState {
   const safeNickname = nickname.trim().slice(0, 16) || `Player-${socketId.slice(0, 4)}`;
+  const profile = players.getPlayerProfile(socketId);
   return {
     id: socketId,
     nickname: safeNickname,
     position: { x: 160 + Math.random() * 120, y: 160 + Math.random() * 120 },
     direction: "down",
-    hp: 100,
-    maxHp: 100,
+    hp: profile.stats.maxHp,
+    maxHp: profile.stats.maxHp,
   };
+}
+
+function emitProfile(playerId: string) {
+  const socket = io.sockets.sockets.get(playerId);
+  if (!socket) return;
+  socket.emit("server:equipment_updated", equipment.getEquipment(playerId));
+  socket.emit("server:player_profile_updated", players.getPlayerProfile(playerId));
 }
 
 function handleAttack(playerId: string) {
@@ -68,15 +82,19 @@ function handleAttack(playerId: string) {
 
   if (result.defeated) {
     playerSocket?.emit("server:inventory_updated", inventories.addItems(playerId, result.drops));
+    playerSocket?.emit("server:player_profile_updated", players.addExp(playerId, 25 + result.creature.level * 8));
   }
 }
 
 io.on("connection", (socket) => {
   socket.on("client:join_world", ({ nickname }) => {
+    socket.emit("server:inventory_updated", inventories.createStarterInventory(socket.id));
+    const profile = players.createPlayerProfile(socket.id);
     const player = createPlayer(socket.id, nickname);
     world.players.set(socket.id, player);
-    socket.emit("server:inventory_updated", inventories.createStarterInventory(socket.id));
 
+    socket.emit("server:equipment_updated", profile.equipment);
+    socket.emit("server:player_profile_updated", profile);
     socket.emit("server:toast", { type: "success", message: "스타터 섬에 접속했습니다." });
     io.emit("server:chat_message", {
       playerId: socket.id,
@@ -130,6 +148,46 @@ io.on("connection", (socket) => {
     socket.emit("server:toast", { type: "success", message: result.message });
   });
 
+  socket.on("client:equip_item", ({ itemInstanceId }) => {
+    const result = equipment.equip(socket.id, itemInstanceId);
+    if (!result.ok) {
+      const reasonMessage = {
+        missing_item: "장비 아이템을 찾을 수 없습니다.",
+        not_equippable: "착용할 수 없는 아이템입니다.",
+      }[result.reason];
+      socket.emit("server:toast", { type: "warning", message: reasonMessage });
+      return;
+    }
+
+    const player = world.players.get(socket.id);
+    const profile = players.getPlayerProfile(socket.id, result.equipment);
+    if (player) {
+      player.maxHp = profile.stats.maxHp;
+      player.hp = Math.min(player.hp, player.maxHp);
+    }
+    socket.emit("server:equipment_updated", result.equipment);
+    socket.emit("server:player_profile_updated", profile);
+    socket.emit("server:toast", { type: "success", message: result.message });
+  });
+
+  socket.on("client:unequip_item", ({ slot }) => {
+    const result = equipment.unequip(socket.id, slot);
+    if (!result.ok) {
+      socket.emit("server:toast", { type: "warning", message: "해제할 장비가 없습니다." });
+      return;
+    }
+
+    const player = world.players.get(socket.id);
+    const profile = players.getPlayerProfile(socket.id, result.equipment);
+    if (player) {
+      player.maxHp = profile.stats.maxHp;
+      player.hp = Math.min(player.hp, player.maxHp);
+    }
+    socket.emit("server:equipment_updated", result.equipment);
+    socket.emit("server:player_profile_updated", profile);
+    socket.emit("server:toast", { type: "success", message: result.message });
+  });
+
   socket.on("client:place_building", ({ buildingType, position }) => {
     const result = buildings.place(socket.id, buildingType, position);
     if (!result.ok) {
@@ -167,6 +225,7 @@ io.on("connection", (socket) => {
     const player = world.players.get(socket.id);
     world.players.delete(socket.id);
     inventories.deleteInventory(socket.id);
+    players.deletePlayerProfile(socket.id);
     lastInputs.delete(socket.id);
 
     if (player) {
@@ -192,9 +251,10 @@ setInterval(() => {
   for (const [playerId, player] of world.players.entries()) {
     const input = lastInputs.get(playerId) ?? { x: 0, y: 0 };
     const movement = normalizeVector(input);
+    const profile = players.getPlayerProfile(playerId);
     player.position = {
-      x: player.position.x + movement.x * WORLD.playerMoveSpeed * deltaSeconds,
-      y: player.position.y + movement.y * WORLD.playerMoveSpeed * deltaSeconds,
+      x: player.position.x + movement.x * profile.stats.moveSpeed * deltaSeconds,
+      y: player.position.y + movement.y * profile.stats.moveSpeed * deltaSeconds,
     };
 
     if (Math.abs(movement.x) > Math.abs(movement.y)) {
