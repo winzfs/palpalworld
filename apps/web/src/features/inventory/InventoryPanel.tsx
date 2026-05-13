@@ -6,10 +6,12 @@ import { ItemSlot } from "../ui/ItemSlot";
 
 export function InventoryPanel({
   inventory,
-  onPlaceBuildingItem,
+  selectedBuildingItemId,
+  onSelectBuildingItem,
 }: {
   inventory: InventoryState | null;
-  onPlaceBuildingItem?: (itemId: string) => void;
+  selectedBuildingItemId?: string | null;
+  onSelectBuildingItem?: (itemId: string) => void;
 }) {
   const stackItems = inventory?.items ?? [];
   const buildingItems = stackItems.filter((item) => isBuildingItemId(item.itemId));
@@ -31,19 +33,22 @@ export function InventoryPanel({
       </div>
 
       <div className="feature-panel__section-title">건설</div>
+      <div className="feature-panel__hint">건설 아이템을 선택한 뒤, 원하는 필드 위치를 클릭하면 설치됩니다.</div>
       <div className="inventory-grid">
         {buildingItems.length > 0 ? (
           buildingItems.map((item) => {
             const building = getProgressionBuildingByItemId(item.itemId);
             const icon = getIconAsset(item.itemId);
+            const selected = selectedBuildingItemId === item.itemId;
             return (
               <ItemSlot
                 key={item.itemId}
                 label={building ? `${building.name} 설치` : getItemLabel(item.itemId)}
                 amount={item.amount}
-                detail="눌러서 필드에 설치"
+                detail={selected ? "선택됨 · 필드 클릭" : "선택 후 필드 클릭"}
                 iconSrc={icon?.src}
-                onClick={onPlaceBuildingItem ? () => onPlaceBuildingItem(item.itemId) : undefined}
+                selected={selected}
+                onClick={onSelectBuildingItem ? () => onSelectBuildingItem(item.itemId) : undefined}
               />
             );
           })
