@@ -28,7 +28,7 @@ export class InventoryStore {
     };
   }
 
-  hasItems(playerId: PlayerId, requirements: ItemStack[]): boolean {
+  hasItems(playerId: PlayerId, requirements: readonly ItemStack[]): boolean {
     const items = this.inventories.get(playerId) ?? [];
     return requirements.every((requirement) => {
       const owned = items.find((item) => item.itemId === requirement.itemId)?.amount ?? 0;
@@ -50,7 +50,7 @@ export class InventoryStore {
     return this.getInventory(playerId);
   }
 
-  addItems(playerId: PlayerId, stacks: ItemStack[]): InventoryState {
+  addItems(playerId: PlayerId, stacks: readonly ItemStack[]): InventoryState {
     let next = this.getInventory(playerId);
     for (const stack of stacks) {
       next = this.addItem(playerId, stack.itemId, stack.amount);
@@ -58,7 +58,7 @@ export class InventoryStore {
     return next;
   }
 
-  consumeItems(playerId: PlayerId, requirements: ItemStack[]): InventoryState | null {
+  consumeItems(playerId: PlayerId, requirements: readonly ItemStack[]): InventoryState | null {
     if (!this.hasItems(playerId, requirements)) return null;
 
     const items = this.inventories.get(playerId) ?? [];
