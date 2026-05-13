@@ -51,14 +51,15 @@ export class BuildingService {
     const consumed = this.inventories.consumeItems(playerId, [{ itemId, amount: 1 }]);
     if (!consumed) return { ok: false, reason: "missing_materials" };
 
-    const building: BuildingState = {
+    const building = {
       id: `${buildingType}-${Date.now()}-${Math.floor(Math.random() * 9999)}`,
       type: buildingType,
       ownerPlayerId: playerId,
       position,
+      currentTile: (player as any).currentTile,
       hp: definition.maxHp,
       maxHp: definition.maxHp,
-    };
+    } as BuildingState;
 
     this.world.buildings.set(building.id, building);
 
