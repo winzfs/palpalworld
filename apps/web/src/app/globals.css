@@ -245,7 +245,19 @@ button {
   box-shadow: 0 0 0 2px rgb(250 204 21 / 0.2);
 }
 
+.item-slot__icon {
+  flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
+  image-rendering: pixelated;
+  border: 1px solid rgb(242 209 107 / 0.25);
+  border-radius: 6px;
+  background: rgb(0 0 0 / 0.25);
+}
+
 .item-slot__label {
+  flex: 1 1 auto;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -253,10 +265,12 @@ button {
 
 .item-slot__amount,
 .inventory-slot b {
+  flex: 0 0 auto;
   color: var(--jrpg-gold);
 }
 
 .item-slot__detail {
+  flex: 0 0 auto;
   color: var(--jrpg-muted);
 }
 
