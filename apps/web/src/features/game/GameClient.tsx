@@ -17,6 +17,7 @@ type TypedSocket = Socket<ServerToClientEvents, ClientToServerEvents>;
 
 const configuredServerUrl = process.env.NEXT_PUBLIC_REALTIME_SERVER_URL;
 const demoPlayerId = "demo-player";
+const joystickRadius = 56;
 
 function resolveRealtimeServerUrl() {
   if (configuredServerUrl) return configuredServerUrl;
@@ -292,7 +293,7 @@ export function GameClient() {
   const playerCount = snapshot?.players.length ?? 0;
   const buildingCount = snapshot?.buildings.length ?? 0;
   const objectiveText = useMemo(() => {
-    return "채집 → 제작 → 건설 → 전투를 테스트하세요. E/상호로 자원을 채집하고 공격 버튼으로 몬스터를 공격합니다.";
+    return "채집 → 제작 → 건설 → 전투를 테스트하세요. 왼쪽 조이스틱으로 이동하고 오른쪽 버튼으로 공격/상호작용합니다.";
   }, []);
 
   return (
@@ -359,61 +360,129 @@ function MobileControls({
   onInteract: () => void;
 }) {
   const [stick, setStick] = useState({ x: 0, y: 0 });
-  const touchIdRef = useRef<number | null>(null);
+  const pointerIdRef = useRef<number | null>(null);
+  const activeInputRef = useRef<GameSceneInput>({ x: 0, y: 0, primary: false, secondary: false });
 
-  const updateInput = useCallback(
-    (nextStick: { x: number; y: number }, primary = false, secondary = false) => {
-      setStick(nextStick);
-      onInputChange({ x: nextStick.x, y: nextStick.y, primary, secondary });
+  const emitInput = useCallback(
+    (patch: Partial<GameSceneInput>) => {
+      const next = { ...activeInputRef.current, ...patch };
+      activeInputRef.current = next;
+      onInputChange(next);
     },
     [onInputChange],
   );
 
+  const updateStickFromPointer = useCallback(
+    (event: React.PointerEvent<HTMLDivElement>) => {
+      const rect = event.currentTarget.getBoundingClientRect();
+      const centerX = rect.left + rect.width / 2;
+      const centerY = rect.top + rect.height / 2;
+      const rawX = event.clientX - centerX;
+      const rawY = event.clientY - centerY;
+      const distance = Math.hypot(rawX, rawY);
+      const clampedDistance = Math.min(distance, joystickRadius);
+      const angle = Math.atan2(rawY, rawX);
+      const visual = {
+        x: Math.cos(angle) * clampedDistance,
+        y: Math.sin(angle) * clampedDistance,
+      };
+      const movement = {
+        x: distance === 0 ? 0 : visual.x / joystickRadius,
+        y: distance === 0 ? 0 : visual.y / joystickRadius,
+      };
+
+      setStick(visual);
+      emitInput({ x: movement.x, y: movement.y });
+    },
+    [emitInput],
+  );
+
+  const stopMovement = useCallback(() => {
+    pointerIdRef.current = null;
+    setStick({ x: 0, y: 0 });
+    emitInput({ x: 0, y: 0 });
+  }, [emitInput]);
+
+  const setPrimary = useCallback(
+    (pressed: boolean) => {
+      emitInput({ primary: pressed });
+    },
+    [emitInput],
+  );
+
+  const setSecondary = useCallback(
+    (pressed: boolean) => {
+      emitInput({ secondary: pressed });
+      if (pressed) onInteract();
+    },
+    [emitInput, onInteract],
+  );
+
   return (
     <>
+      <div className="mobile-control-hint">왼쪽 이동 · 오른쪽 행동</div>
+
       <div
         className="mobile-joystick"
-        onTouchStart={(event) => {
-          const touch = event.changedTouches[0];
-          if (!touch) return;
-          touchIdRef.current = touch.identifier;
+        role="application"
+        aria-label="이동 조이스틱"
+        onPointerDown={(event) => {
+          event.preventDefault();
+          pointerIdRef.current = event.pointerId;
+          event.currentTarget.setPointerCapture(event.pointerId);
+          updateStickFromPointer(event);
         }}
-        onTouchMove={(event) => {
-          const touch = [...event.changedTouches].find((item) => item.identifier === touchIdRef.current);
-          if (!touch) return;
-          const rect = event.currentTarget.getBoundingClientRect();
-          const centerX = rect.left + rect.width / 2;
-          const centerY = rect.top + rect.height / 2;
-          const rawX = (touch.clientX - centerX) / 48;
-          const rawY = (touch.clientY - centerY) / 48;
-          const length = Math.hypot(rawX, rawY);
-          const next = length > 1 ? { x: rawX / length, y: rawY / length } : { x: rawX, y: rawY };
-          updateInput(next);
+        onPointerMove={(event) => {
+          if (pointerIdRef.current !== event.pointerId) return;
+          event.preventDefault();
+          updateStickFromPointer(event);
         }}
-        onTouchEnd={() => {
-          touchIdRef.current = null;
-          updateInput({ x: 0, y: 0 });
+        onPointerUp={(event) => {
+          if (pointerIdRef.current !== event.pointerId) return;
+          event.preventDefault();
+          event.currentTarget.releasePointerCapture(event.pointerId);
+          stopMovement();
+        }}
+        onPointerCancel={(event) => {
+          if (pointerIdRef.current !== event.pointerId) return;
+          stopMovement();
         }}
       >
         <div className="joystick-base">
-          <div
-            className="joystick-stick"
-            style={{ transform: `translate(calc(-50% + ${stick.x * 34}px), calc(-50% + ${stick.y * 34}px))` }}
-          />
+          <div className="joystick-cross joystick-cross--horizontal" />
+          <div className="joystick-cross joystick-cross--vertical" />
+          <div className="joystick-stick" style={{ transform: `translate(calc(-50% + ${stick.x}px), calc(-50% + ${stick.y}px))` }} />
         </div>
       </div>
 
-      <div className="mobile-actions">
-        <button className="action-button" onTouchStart={() => updateInput(stick, true, false)} onTouchEnd={() => updateInput(stick)}>
+      <div className="mobile-actions" aria-label="행동 버튼">
+        <button
+          className="action-button action-button--attack"
+          onPointerDown={(event) => {
+            event.preventDefault();
+            event.currentTarget.setPointerCapture(event.pointerId);
+            setPrimary(true);
+          }}
+          onPointerUp={(event) => {
+            event.preventDefault();
+            setPrimary(false);
+          }}
+          onPointerCancel={() => setPrimary(false)}
+        >
           공격
         </button>
         <button
-          className="action-button"
-          onTouchStart={() => {
-            updateInput(stick, false, true);
-            onInteract();
+          className="action-button action-button--interact"
+          onPointerDown={(event) => {
+            event.preventDefault();
+            event.currentTarget.setPointerCapture(event.pointerId);
+            setSecondary(true);
           }}
-          onTouchEnd={() => updateInput(stick)}
+          onPointerUp={(event) => {
+            event.preventDefault();
+            setSecondary(false);
+          }}
+          onPointerCancel={() => setSecondary(false)}
         >
           상호
         </button>
