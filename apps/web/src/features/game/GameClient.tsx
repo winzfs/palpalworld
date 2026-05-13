@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { io, type Socket } from "socket.io-client";
 import type {
+  BuildingType,
   ClientToServerEvents,
   InventoryState,
   PlayerInputPayload,
@@ -17,13 +18,26 @@ const serverUrl = process.env.NEXT_PUBLIC_REALTIME_SERVER_URL ?? "http://localho
 
 const itemLabels: Record<string, string> = {
   wood: "나무",
+  hardwood: "단단한 나무",
   stone: "돌",
   fiber: "섬유",
   ore: "광석",
   berry: "열매",
+  herb: "약초",
+  coal: "석탄",
+  ice_crystal: "얼음 결정",
+  ember_shard: "불씨 조각",
+  pal_essence: "펄 정수",
+  leaf_pelt: "잎사귀 털가죽",
+  flame_tail: "불꽃 꼬리털",
+  water_jelly: "물방울 젤리",
+  spark_core: "전기 코어",
   capture_orb: "포획구",
   basic_axe: "기본 도끼",
   basic_pickaxe: "기본 곡괭이",
+  basic_sickle: "기본 낫",
+  workbench_kit: "작업대 키트",
+  base_core_kit: "거점 코어 키트",
 };
 
 export function GameClient() {
@@ -44,6 +58,23 @@ export function GameClient() {
       return;
     }
     socketRef.current?.emit("client:interact_entity", { entityId });
+  }, []);
+
+  const handleCraft = useCallback((recipeId: string) => {
+    socketRef.current?.emit("client:craft_item", { recipeId });
+  }, []);
+
+  const handlePlaceBuilding = useCallback((buildingType: BuildingType) => {
+    const position = sceneRef.current?.getLocalPlayerPosition();
+    if (!position) {
+      setChatLines((prev) => [...prev.slice(-5), "[warning] 플레이어 위치를 아직 알 수 없습니다."]);
+      return;
+    }
+
+    socketRef.current?.emit("client:place_building", {
+      buildingType,
+      position: { x: position.x + 64, y: position.y },
+    });
   }, []);
 
   useEffect(() => {
@@ -118,8 +149,9 @@ export function GameClient() {
   }, []);
 
   const playerCount = snapshot?.players.length ?? 0;
+  const buildingCount = snapshot?.buildings.length ?? 0;
   const objectiveText = useMemo(() => {
-    return "자원에 가까이 간 뒤 E 또는 상호 버튼으로 채집하세요.";
+    return "채집 → 제작 → 건설 흐름을 테스트하세요. E/상호로 자원을 채집할 수 있습니다.";
   }, []);
 
   return (
@@ -132,6 +164,7 @@ export function GameClient() {
           <div>상태: {connectionState}</div>
           <div>닉네임: {nickname}</div>
           <div>접속자: {playerCount}</div>
+          <div>건물: {buildingCount}</div>
         </div>
 
         <div className="hud-panel top-right-panel">
@@ -155,6 +188,18 @@ export function GameClient() {
                 <b>{item.amount}</b>
               </div>
             ))}
+          </div>
+        </div>
+
+        <div className="hud-panel build-panel">
+          <strong>제작 / 건설</strong>
+          <div className="control-grid">
+            <button onClick={() => handleCraft("workbench_kit")}>작업대 키트 제작</button>
+            <button onClick={() => handleCraft("base_core_kit")}>거점 코어 키트 제작</button>
+            <button onClick={() => handleCraft("capture_orb")}>포획구 제작</button>
+            <button onClick={() => handlePlaceBuilding("workbench")}>작업대 설치</button>
+            <button onClick={() => handlePlaceBuilding("base_core")}>거점 코어 설치</button>
+            <button onClick={() => handlePlaceBuilding("storage_box")}>보관함 설치</button>
           </div>
         </div>
 
