@@ -40,16 +40,29 @@ const itemLabels: Record<string, string> = {
   base_core_kit: "거점 코어 키트",
 };
 
+function createClientNickname() {
+  const savedNickname = window.localStorage.getItem("palpalworld.nickname");
+  if (savedNickname) return savedNickname;
+
+  const nextNickname = `Pal-${Math.floor(1000 + Math.random() * 9000)}`;
+  window.localStorage.setItem("palpalworld.nickname", nextNickname);
+  return nextNickname;
+}
+
 export function GameClient() {
-  const [nickname] = useState(() => `Pal-${Math.floor(Math.random() * 9999)}`);
+  const [nickname, setNickname] = useState("...");
   const [snapshot, setSnapshot] = useState<WorldSnapshot | null>(null);
   const [inventory, setInventory] = useState<InventoryState | null>(null);
-  const [connectionState, setConnectionState] = useState("connecting");
+  const [connectionState, setConnectionState] = useState("preparing");
   const [chatLines, setChatLines] = useState<string[]>([]);
   const socketRef = useRef<TypedSocket | null>(null);
   const sceneRef = useRef<GameWorldScene | null>(null);
   const inputRef = useRef<GameSceneInput>({ x: 0, y: 0, primary: false, secondary: false });
   const inputSequenceRef = useRef(0);
+
+  useEffect(() => {
+    setNickname(createClientNickname());
+  }, []);
 
   const handleInteract = useCallback(() => {
     const entityId = sceneRef.current?.getNearestInteractableId();
@@ -78,12 +91,15 @@ export function GameClient() {
   }, []);
 
   useEffect(() => {
+    if (nickname === "...") return;
+
     const socket: TypedSocket = io(serverUrl, {
       transports: ["websocket"],
       autoConnect: true,
     });
 
     socketRef.current = socket;
+    setConnectionState("connecting");
 
     socket.on("connect", () => {
       setConnectionState("online");
@@ -151,7 +167,7 @@ export function GameClient() {
   const playerCount = snapshot?.players.length ?? 0;
   const buildingCount = snapshot?.buildings.length ?? 0;
   const objectiveText = useMemo(() => {
-    return "채집 → 제작 → 건설 흐름을 테스트하세요. E/상호로 자원을 채집할 수 있습니다.";
+    return "채집 → 제작 → 건설 → 전투를 테스트하세요. E/상호로 자원을 채집하고 공격 버튼으로 몬스터를 공격합니다.";
   }, []);
 
   return (
