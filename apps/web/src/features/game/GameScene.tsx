@@ -20,6 +20,10 @@ export type GameSceneInput = {
   secondary: boolean;
 };
 
+function distance(a: Vector2, b: Vector2) {
+  return Math.hypot(a.x - b.x, a.y - b.y);
+}
+
 export class GameWorldScene {
   private root: HTMLDivElement;
   private canvas: HTMLCanvasElement;
@@ -115,6 +119,23 @@ export class GameWorldScene {
 
   getLocalPlayerPosition() {
     return this.snapshot?.players.find((player) => player.id === this.localPlayerId)?.position ?? null;
+  }
+
+  private getPlacementValidity(position: Vector2) {
+    const localPlayer = this.getLocalPlayerPosition();
+    if (!localPlayer) return { ok: false, reason: "플레이어 위치를 찾을 수 없습니다." };
+
+    if (distance(localPlayer, position) > WORLD.buildRange) {
+      return { ok: false, reason: "너무 멀리 설치할 수 없습니다." };
+    }
+
+    for (const building of this.snapshot?.buildings ?? []) {
+      if (distance(building.position, position) < WORLD.tileSize) {
+        return { ok: false, reason: "이미 다른 건물이 있는 위치입니다." };
+      }
+    }
+
+    return { ok: true, reason: "설치 가능" };
   }
 
   private getCameraOffset() {
@@ -242,6 +263,7 @@ export class GameWorldScene {
   private drawPlacementPreview(ctx: CanvasRenderingContext2D, cameraX: number, cameraY: number) {
     if (!this.placementPreviewBuildingType || !this.pointerWorldPosition) return;
 
+    const validity = this.getPlacementValidity(this.pointerWorldPosition);
     const previewBuilding: BuildingState = {
       id: "placement-preview",
       type: this.placementPreviewBuildingType,
@@ -253,23 +275,41 @@ export class GameWorldScene {
 
     const x = this.pointerWorldPosition.x - cameraX;
     const y = this.pointerWorldPosition.y - cameraY;
+    const accent = validity.ok ? "34, 197, 94" : "239, 68, 68";
 
     ctx.save();
-    ctx.globalAlpha = 0.48;
+    ctx.globalAlpha = validity.ok ? 0.5 : 0.34;
     this.renderer.drawBuilding(ctx, previewBuilding, x, y);
     ctx.restore();
 
     ctx.save();
-    ctx.strokeStyle = "rgba(250, 204, 21, 0.82)";
+    ctx.strokeStyle = `rgba(${accent}, 0.9)`;
+    ctx.fillStyle = `rgba(${accent}, 0.16)`;
     ctx.lineWidth = 2;
     ctx.setLineDash([6, 4]);
     ctx.beginPath();
     ctx.ellipse(x, y + 24, 30, 11, 0, 0, Math.PI * 2);
+    ctx.fill();
     ctx.stroke();
+    ctx.restore();
+
+    ctx.save();
+    ctx.fillStyle = "rgba(15, 23, 42, 0.86)";
+    ctx.strokeStyle = `rgba(${accent}, 0.82)`;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.roundRect(x - 82, y - 64, 164, 26, 8);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = validity.ok ? "#bbf7d0" : "#fecaca";
+    ctx.font = "12px system-ui";
+    ctx.textAlign = "center";
+    ctx.fillText(validity.reason, x, y - 46);
     ctx.restore();
   }
 
   private drawInteractionHint(ctx: CanvasRenderingContext2D, cameraX: number, cameraY: number) {
+    if (this.placementPreviewBuildingType) return;
     const nearestId = this.getNearestInteractableId();
     const target = this.snapshot?.resources.find((resource) => resource.id === nearestId);
     if (!target) return;
