@@ -1,4 +1,5 @@
 import type { PlayerProfileState, WorldSnapshot } from "@palpalworld/shared";
+import { MiniMapPanel } from "../world/MiniMapPanel";
 import { StatRow } from "../ui/StatRow";
 
 export function CharacterPanel({
@@ -33,6 +34,8 @@ export function CharacterPanel({
       <StatRow label="접속자" value={playerCount} />
       <StatRow label="건물" value={buildingCount} />
       <div className="feature-panel__hint">서버: {serverEndpoint || "확인 중"}</div>
+      <div className="feature-panel__section-title">미니맵</div>
+      <MiniMapPanel snapshot={snapshot} localPlayerId={player?.id ?? null} />
     </div>
   );
 }
