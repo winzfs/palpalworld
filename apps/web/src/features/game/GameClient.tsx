@@ -17,7 +17,12 @@ import type {
 } from "@palpalworld/shared";
 import { CharacterPanel } from "../character/CharacterPanel";
 import { CraftingPanel } from "../crafting/CraftingPanel";
-import { getProgressionBuilding, getProgressionRecipe } from "../crafting/progressionCatalog";
+import {
+  getBuildingItemId,
+  getProgressionBuilding,
+  getProgressionBuildingByItemId,
+  getProgressionRecipe,
+} from "../crafting/progressionCatalog";
 import { EquipmentPanel } from "../equipment/EquipmentPanel";
 import { InventoryPanel } from "../inventory/InventoryPanel";
 import { getItemLabel } from "../items/itemLabels";
@@ -34,7 +39,7 @@ const joystickRadius = 56;
 const panelDefaults: Record<PanelId, { x: number; y: number; width: number; collapsed?: boolean }> = {
   status: { x: 8, y: 8, width: 320 },
   objective: { x: 8, y: 60, width: 270, collapsed: true },
-  inventory: { x: 8, y: 108, width: 300, collapsed: true },
+  inventory: { x: 8, y: 108, width: 340, collapsed: true },
   equipment: { x: 8, y: 156, width: 300, collapsed: true },
   build: { x: 8, y: 204, width: 420, collapsed: true },
   chat: { x: 8, y: 252, width: 320, collapsed: true },
@@ -43,10 +48,8 @@ const panelDefaults: Record<PanelId, { x: number; y: number; width: number; coll
 function resolveRealtimeServerUrl() {
   if (configuredServerUrl) return configuredServerUrl;
   if (typeof window === "undefined") return "http://localhost:4000";
-
   const { protocol, hostname } = window.location;
   if (hostname === "localhost" || hostname === "127.0.0.1") return "http://localhost:4000";
-
   const githubForwardedHost = hostname.match(/^(?<prefix>.+)-(?<port>\d+)\.(?<domain>app\.github\.dev|githubpreview\.dev)$/);
   if (githubForwardedHost?.groups) return `${protocol}//${githubForwardedHost.groups.prefix}-4000.${githubForwardedHost.groups.domain}`;
   return `${protocol}//${hostname}:4000`;
@@ -297,12 +300,7 @@ export function GameClient() {
     });
   }, []);
 
-  const handlePlaceBuilding = useCallback((buildingType: BuildingType | string) => {
-    const position = sceneRef.current?.getLocalPlayerPosition() ?? demoPositionRef.current;
-    if (socketRef.current?.connected) {
-      socketRef.current.emit("client:place_building", { buildingType: buildingType as BuildingType, position: { x: position.x + 64, y: position.y } });
-      return;
-    }
+  const handleCraftBuildingItem = useCallback((buildingType: string) => {
     const building = getProgressionBuilding(buildingType);
     if (!building) {
       setChatLines((prev) => [...prev.slice(-5), `[demo] 알 수 없는 건설물: ${buildingType}`]);
@@ -312,12 +310,41 @@ export function GameClient() {
       const base = current ?? createDemoInventory();
       const consumed = consumeInventoryItems(base, building.requires);
       if (!consumed) {
-        setChatLines((prev) => [...prev.slice(-5), `[demo] ${building.name} 건설 재료 부족: ${building.requires.map((i) => `${getItemLabel(i.itemId)} ${i.amount}`).join(" · ")}`]);
+        setChatLines((prev) => [...prev.slice(-5), `[demo] ${building.name} 설치 아이템 재료 부족: ${building.requires.map((i) => `${getItemLabel(i.itemId)} ${i.amount}`).join(" · ")}`]);
         return base;
       }
+      const itemId = getBuildingItemId(building.type);
+      setChatLines((prev) => [...prev.slice(-5), `[demo] ${building.name} 설치 아이템 제작 완료. 인벤토리 건설 탭에서 설치하세요.`]);
+      return addInventoryItem(consumed, itemId, 1);
+    });
+  }, []);
+
+  const handlePlaceBuildingItem = useCallback((itemId: string) => {
+    const building = getProgressionBuildingByItemId(itemId);
+    if (!building) {
+      setChatLines((prev) => [...prev.slice(-5), `[demo] 설치할 수 없는 아이템: ${getItemLabel(itemId)}`]);
+      return;
+    }
+
+    const position = sceneRef.current?.getLocalPlayerPosition() ?? demoPositionRef.current;
+    setInventory((current) => {
+      const base = current ?? createDemoInventory();
+      const consumed = consumeInventoryItems(base, [{ itemId, amount: 1 }]);
+      if (!consumed) {
+        setChatLines((prev) => [...prev.slice(-5), `[demo] ${building.name} 설치 아이템이 없습니다.`]);
+        return base;
+      }
+
       demoBuildingsRef.current = [
         ...demoBuildingsRef.current,
-        { id: `demo-building-${Date.now()}`, type: buildingType as BuildingType, ownerPlayerId: demoPlayerId, position: { x: position.x + 64, y: position.y }, hp: building.maxHp, maxHp: building.maxHp },
+        {
+          id: `demo-building-${building.type}-${Date.now()}`,
+          type: building.type as BuildingType,
+          ownerPlayerId: demoPlayerId,
+          position: { x: position.x + 64, y: position.y },
+          hp: building.maxHp,
+          maxHp: building.maxHp,
+        },
       ];
       setChatLines((prev) => [...prev.slice(-5), `[demo] ${building.name} 설치 완료`]);
       applyDemoSnapshot();
@@ -359,7 +386,7 @@ export function GameClient() {
 
   const handleSceneReady = useCallback((scene: GameWorldScene) => { sceneRef.current = scene; }, []);
   const handleInputChange = useCallback((input: GameSceneInput) => { inputRef.current = input; }, []);
-  const objectiveText = useMemo(() => "초반~중후반 제작/건설 목록을 열어 차근차근 제작하고, 재료가 부족하면 채집/전투로 확보하세요.", []);
+  const objectiveText = useMemo(() => "건설물은 먼저 설치 아이템으로 제작한 뒤, 인벤토리의 건설 탭에서 눌러 필드에 설치하세요.", []);
 
   return (
     <main className="game-shell">
@@ -367,9 +394,9 @@ export function GameClient() {
       <section className="game-hud" aria-label="Game HUD">
         <DraggablePanel id="status" title="캐릭터"><CharacterPanel nickname={nickname} connectionState={connectionState} serverEndpoint={serverEndpoint} snapshot={snapshot} /></DraggablePanel>
         <DraggablePanel id="objective" title="목표"><p>{objectiveText}</p></DraggablePanel>
-        <DraggablePanel id="inventory" title="인벤토리"><InventoryPanel inventory={inventory} /></DraggablePanel>
+        <DraggablePanel id="inventory" title="인벤토리"><InventoryPanel inventory={inventory} onPlaceBuildingItem={handlePlaceBuildingItem} /></DraggablePanel>
         <DraggablePanel id="equipment" title="장비"><EquipmentPanel inventory={inventory} /></DraggablePanel>
-        <DraggablePanel id="build" title="제작 / 건설"><CraftingPanel onCraft={handleCraft} onPlaceBuilding={handlePlaceBuilding} /></DraggablePanel>
+        <DraggablePanel id="build" title="제작 / 건설"><CraftingPanel onCraft={handleCraft} onCraftBuildingItem={handleCraftBuildingItem} /></DraggablePanel>
         <DraggablePanel id="chat" title="로그"><LogPanel lines={chatLines} /></DraggablePanel>
         <MobileControls onInputChange={handleInputChange} onInteract={handleInteract} />
       </section>
