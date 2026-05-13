@@ -1,12 +1,15 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent, type ReactNode } from "react";
 import { io, type Socket } from "socket.io-client";
 import type {
+  BuildingState,
   BuildingType,
   ClientToServerEvents,
+  CreaturePublicState,
   InventoryState,
   PlayerInputPayload,
+  ResourceNodeState,
   ServerToClientEvents,
   Vector2,
   WorldSnapshot,
@@ -14,28 +17,19 @@ import type {
 import { GameScene, type GameSceneInput, type GameWorldScene } from "./GameScene";
 
 type TypedSocket = Socket<ServerToClientEvents, ClientToServerEvents>;
+type PanelId = "status" | "objective" | "inventory" | "build" | "chat";
 
 const configuredServerUrl = process.env.NEXT_PUBLIC_REALTIME_SERVER_URL;
 const demoPlayerId = "demo-player";
 const joystickRadius = 56;
 
-function resolveRealtimeServerUrl() {
-  if (configuredServerUrl) return configuredServerUrl;
-  if (typeof window === "undefined") return "http://localhost:4000";
-
-  const { protocol, hostname } = window.location;
-
-  if (hostname === "localhost" || hostname === "127.0.0.1") {
-    return "http://localhost:4000";
-  }
-
-  const githubForwardedHost = hostname.match(/^(?<prefix>.+)-(?<port>\d+)\.(?<domain>app\.github\.dev|githubpreview\.dev)$/);
-  if (githubForwardedHost?.groups) {
-    return `${protocol}//${githubForwardedHost.groups.prefix}-4000.${githubForwardedHost.groups.domain}`;
-  }
-
-  return `${protocol}//${hostname}:4000`;
-}
+const panelDefaults: Record<PanelId, { x: number; y: number; width: number; collapsed?: boolean }> = {
+  status: { x: 8, y: 8, width: 320 },
+  objective: { x: 8, y: 60, width: 270, collapsed: true },
+  inventory: { x: 8, y: 108, width: 270, collapsed: true },
+  build: { x: 8, y: 156, width: 270, collapsed: true },
+  chat: { x: 8, y: 204, width: 300, collapsed: true },
+};
 
 const itemLabels: Record<string, string> = {
   wood: "나무",
@@ -61,10 +55,24 @@ const itemLabels: Record<string, string> = {
   base_core_kit: "거점 코어 키트",
 };
 
+function resolveRealtimeServerUrl() {
+  if (configuredServerUrl) return configuredServerUrl;
+  if (typeof window === "undefined") return "http://localhost:4000";
+
+  const { protocol, hostname } = window.location;
+  if (hostname === "localhost" || hostname === "127.0.0.1") return "http://localhost:4000";
+
+  const githubForwardedHost = hostname.match(/^(?<prefix>.+)-(?<port>\d+)\.(?<domain>app\.github\.dev|githubpreview\.dev)$/);
+  if (githubForwardedHost?.groups) {
+    return `${protocol}//${githubForwardedHost.groups.prefix}-4000.${githubForwardedHost.groups.domain}`;
+  }
+
+  return `${protocol}//${hostname}:4000`;
+}
+
 function createClientNickname() {
   const savedNickname = window.localStorage.getItem("palpalworld.nickname");
   if (savedNickname) return savedNickname;
-
   const nextNickname = `Pal-${Math.floor(1000 + Math.random() * 9000)}`;
   window.localStorage.setItem("palpalworld.nickname", nextNickname);
   return nextNickname;
@@ -83,7 +91,59 @@ function createDemoInventory(): InventoryState {
   };
 }
 
-function createDemoSnapshot(nickname: string, position: Vector2): WorldSnapshot {
+function createDemoResources(): ResourceNodeState[] {
+  return [
+    { id: "demo-tree-1", regionId: "starter_meadow", resourceType: "wood", position: { x: 320, y: 240 }, remainingAmount: 100, maxAmount: 100 },
+    { id: "demo-tree-2", regionId: "starter_meadow", resourceType: "wood", position: { x: 230, y: 420 }, remainingAmount: 100, maxAmount: 100 },
+    { id: "demo-stone-1", regionId: "starter_meadow", resourceType: "stone", position: { x: 520, y: 360 }, remainingAmount: 100, maxAmount: 100 },
+    { id: "demo-fiber-1", regionId: "starter_meadow", resourceType: "fiber", position: { x: 440, y: 250 }, remainingAmount: 60, maxAmount: 60 },
+    { id: "demo-berry-1", regionId: "starter_meadow", resourceType: "berry", position: { x: 680, y: 300 }, remainingAmount: 40, maxAmount: 40 },
+    { id: "demo-ore-1", regionId: "stone_hills", resourceType: "ore", position: { x: 920, y: 520 }, remainingAmount: 120, maxAmount: 120 },
+  ];
+}
+
+function createDemoCreatures(): CreaturePublicState[] {
+  return [
+    { id: "demo-leafbun", speciesId: "leafbun", regionId: "starter_meadow", position: { x: 380, y: 330 }, level: 2, hp: 71, maxHp: 71, traitIds: ["nimble"] },
+    { id: "demo-droplet", speciesId: "droplet", regionId: "starter_meadow", position: { x: 720, y: 430 }, level: 3, hp: 86, maxHp: 86, traitIds: ["sturdy"] },
+    { id: "demo-sparkit", speciesId: "sparkit", regionId: "starter_meadow", position: { x: 560, y: 540 }, level: 4, hp: 90, maxHp: 90, traitIds: ["brave"] },
+  ];
+}
+
+function createDemoBuildings(): BuildingState[] {
+  return [{ id: "demo-workbench", type: "workbench", ownerPlayerId: demoPlayerId, position: { x: 210, y: 250 }, hp: 300, maxHp: 300 }];
+}
+
+function addInventoryItem(inventory: InventoryState, itemId: string, amount: number): InventoryState {
+  const items = inventory.items.map((item) => ({ ...item }));
+  const existing = items.find((item) => item.itemId === itemId);
+  if (existing) existing.amount += amount;
+  else items.push({ itemId, amount });
+  return { ...inventory, items: items.filter((item) => item.amount > 0) };
+}
+
+function consumeInventoryItems(inventory: InventoryState, requirements: { itemId: string; amount: number }[]): InventoryState | null {
+  for (const requirement of requirements) {
+    const owned = inventory.items.find((item) => item.itemId === requirement.itemId)?.amount ?? 0;
+    if (owned < requirement.amount) return null;
+  }
+
+  const items = inventory.items.map((item) => ({ ...item }));
+  for (const requirement of requirements) {
+    const existing = items.find((item) => item.itemId === requirement.itemId);
+    if (existing) existing.amount -= requirement.amount;
+  }
+
+  return { ...inventory, items: items.filter((item) => item.amount > 0) };
+}
+
+function createDemoSnapshot(
+  nickname: string,
+  position: Vector2,
+  resources: ResourceNodeState[],
+  creatures: CreaturePublicState[],
+  buildings: BuildingState[],
+): WorldSnapshot {
   return {
     worldId: "offline-demo",
     serverTime: Date.now(),
@@ -97,23 +157,42 @@ function createDemoSnapshot(nickname: string, position: Vector2): WorldSnapshot 
         maxHp: 100,
       },
     ],
-    creatures: [
-      { id: "demo-leafbun", speciesId: "leafbun", regionId: "starter_meadow", position: { x: 380, y: 330 }, level: 2, hp: 71, maxHp: 71, traitIds: ["nimble"] },
-      { id: "demo-droplet", speciesId: "droplet", regionId: "starter_meadow", position: { x: 720, y: 430 }, level: 3, hp: 86, maxHp: 86, traitIds: ["sturdy"] },
-      { id: "demo-sparkit", speciesId: "sparkit", regionId: "starter_meadow", position: { x: 560, y: 540 }, level: 4, hp: 90, maxHp: 90, traitIds: ["brave"] },
-    ],
-    resources: [
-      { id: "demo-tree-1", regionId: "starter_meadow", resourceType: "wood", position: { x: 320, y: 240 }, remainingAmount: 100, maxAmount: 100 },
-      { id: "demo-tree-2", regionId: "starter_meadow", resourceType: "wood", position: { x: 230, y: 420 }, remainingAmount: 100, maxAmount: 100 },
-      { id: "demo-stone-1", regionId: "starter_meadow", resourceType: "stone", position: { x: 520, y: 360 }, remainingAmount: 100, maxAmount: 100 },
-      { id: "demo-fiber-1", regionId: "starter_meadow", resourceType: "fiber", position: { x: 440, y: 250 }, remainingAmount: 60, maxAmount: 60 },
-      { id: "demo-berry-1", regionId: "starter_meadow", resourceType: "berry", position: { x: 680, y: 300 }, remainingAmount: 40, maxAmount: 40 },
-      { id: "demo-ore-1", regionId: "stone_hills", resourceType: "ore", position: { x: 920, y: 520 }, remainingAmount: 120, maxAmount: 120 },
-    ],
-    buildings: [
-      { id: "demo-workbench", type: "workbench", ownerPlayerId: demoPlayerId, position: { x: 210, y: 250 }, hp: 300, maxHp: 300 },
-    ],
+    creatures: creatures.filter((creature) => creature.hp > 0),
+    resources: resources.filter((resource) => resource.remainingAmount > 0),
+    buildings,
   };
+}
+
+function findNearestResource(resources: ResourceNodeState[], position: Vector2, maxRange = 180) {
+  let nearest: ResourceNodeState | null = null;
+  let nearestDistance = Number.POSITIVE_INFINITY;
+
+  for (const resource of resources) {
+    if (resource.remainingAmount <= 0) continue;
+    const distance = Math.hypot(resource.position.x - position.x, resource.position.y - position.y);
+    if (distance < nearestDistance) {
+      nearest = resource;
+      nearestDistance = distance;
+    }
+  }
+
+  return nearest && nearestDistance <= maxRange ? nearest : null;
+}
+
+function findNearestCreature(creatures: CreaturePublicState[], position: Vector2, maxRange = 180) {
+  let nearest: CreaturePublicState | null = null;
+  let nearestDistance = Number.POSITIVE_INFINITY;
+
+  for (const creature of creatures) {
+    if (creature.hp <= 0) continue;
+    const distance = Math.hypot(creature.position.x - position.x, creature.position.y - position.y);
+    if (distance < nearestDistance) {
+      nearest = creature;
+      nearestDistance = distance;
+    }
+  }
+
+  return nearest && nearestDistance <= maxRange ? nearest : null;
 }
 
 export function GameClient() {
@@ -129,17 +208,26 @@ export function GameClient() {
   const inputSequenceRef = useRef(0);
   const hasServerSnapshotRef = useRef(false);
   const demoPositionRef = useRef<Vector2>({ x: 250, y: 320 });
+  const demoResourcesRef = useRef<ResourceNodeState[]>(createDemoResources());
+  const demoCreaturesRef = useRef<CreaturePublicState[]>(createDemoCreatures());
+  const demoBuildingsRef = useRef<BuildingState[]>(createDemoBuildings());
+  const lastDemoAttackAtRef = useRef(0);
+
+  const applyDemoSnapshot = useCallback(() => {
+    const nextSnapshot = createDemoSnapshot(nickname, demoPositionRef.current, demoResourcesRef.current, demoCreaturesRef.current, demoBuildingsRef.current);
+    setSnapshot(nextSnapshot);
+    sceneRef.current?.applySnapshot(nextSnapshot, demoPlayerId);
+  }, [nickname]);
 
   useEffect(() => {
     setNickname(createClientNickname());
     setServerEndpoint(resolveRealtimeServerUrl());
+    setInventory(createDemoInventory());
   }, []);
 
   useEffect(() => {
     if (connectionState !== "error" && connectionState !== "offline") return;
     if (hasServerSnapshotRef.current) return;
-
-    setInventory((current) => current ?? createDemoInventory());
     setChatLines((prev) => [...prev.slice(-5), "[info] 서버 연결 전까지 오프라인 데모 월드로 표시합니다."]);
   }, [connectionState]);
 
@@ -148,7 +236,7 @@ export function GameClient() {
     let lastTick = performance.now();
 
     const tickDemoWorld = (now: number) => {
-      const shouldRunDemo = !hasServerSnapshotRef.current && (connectionState === "error" || connectionState === "offline" || connectionState === "connecting");
+      const shouldRunDemo = !hasServerSnapshotRef.current && connectionState !== "online";
       if (shouldRunDemo) {
         const deltaSeconds = Math.min(0.05, (now - lastTick) / 1000);
         const input = inputRef.current;
@@ -158,10 +246,7 @@ export function GameClient() {
           x: demoPositionRef.current.x + normalized.x * 180 * deltaSeconds,
           y: demoPositionRef.current.y + normalized.y * 180 * deltaSeconds,
         };
-
-        const nextSnapshot = createDemoSnapshot(nickname, demoPositionRef.current);
-        setSnapshot(nextSnapshot);
-        sceneRef.current?.applySnapshot(nextSnapshot, demoPlayerId);
+        applyDemoSnapshot();
       }
 
       lastTick = now;
@@ -170,43 +255,133 @@ export function GameClient() {
 
     animationFrame = requestAnimationFrame(tickDemoWorld);
     return () => cancelAnimationFrame(animationFrame);
-  }, [connectionState, nickname]);
+  }, [applyDemoSnapshot, connectionState]);
+
+  const handleDemoInteract = useCallback(() => {
+    const resource = findNearestResource(demoResourcesRef.current, demoPositionRef.current);
+    if (!resource) {
+      setChatLines((prev) => [...prev.slice(-5), "[demo] 가까운 자원이 없습니다. 자원 가까이 이동해보세요."]);
+      return;
+    }
+
+    const gainAmount = resource.resourceType === "berry" ? 4 : resource.resourceType === "fiber" ? 5 : resource.resourceType === "ore" ? 4 : 8;
+    resource.remainingAmount = Math.max(0, resource.remainingAmount - 25);
+    setInventory((current) => addInventoryItem(current ?? createDemoInventory(), resource.resourceType, gainAmount));
+    setChatLines((prev) => [...prev.slice(-5), `[demo] ${itemLabels[resource.resourceType] ?? resource.resourceType} ${gainAmount}개 획득`]);
+    applyDemoSnapshot();
+  }, [applyDemoSnapshot]);
 
   const handleInteract = useCallback(() => {
+    if (!socketRef.current?.connected) {
+      handleDemoInteract();
+      return;
+    }
+
     const entityId = sceneRef.current?.getNearestInteractableId();
     if (!entityId) {
       setChatLines((prev) => [...prev.slice(-5), "[info] 가까운 상호작용 대상이 없습니다."]);
       return;
     }
-    socketRef.current?.emit("client:interact_entity", { entityId });
-    if (!socketRef.current?.connected) {
-      setChatLines((prev) => [...prev.slice(-5), `[demo] ${entityId} 채집 테스트`]);
-    }
-  }, []);
+    socketRef.current.emit("client:interact_entity", { entityId });
+  }, [handleDemoInteract]);
 
-  const handleCraft = useCallback((recipeId: string) => {
-    socketRef.current?.emit("client:craft_item", { recipeId });
-    if (!socketRef.current?.connected) {
-      setChatLines((prev) => [...prev.slice(-5), `[demo] ${recipeId} 제작 버튼 테스트`]);
-    }
-  }, []);
+  const handleDemoAttack = useCallback(() => {
+    if (socketRef.current?.connected) return;
+    const now = performance.now();
+    if (now - lastDemoAttackAtRef.current < 380) return;
+    lastDemoAttackAtRef.current = now;
 
-  const handlePlaceBuilding = useCallback((buildingType: BuildingType) => {
-    const position = sceneRef.current?.getLocalPlayerPosition();
-    if (!position) {
-      setChatLines((prev) => [...prev.slice(-5), "[warning] 플레이어 위치를 아직 알 수 없습니다."]);
+    const target = findNearestCreature(demoCreaturesRef.current, demoPositionRef.current);
+    if (!target) {
+      setChatLines((prev) => [...prev.slice(-5), "[demo] 공격 범위 안에 몬스터가 없습니다."]);
       return;
     }
 
-    socketRef.current?.emit("client:place_building", {
-      buildingType,
-      position: { x: position.x + 64, y: position.y },
-    });
-
-    if (!socketRef.current?.connected) {
-      setChatLines((prev) => [...prev.slice(-5), `[demo] ${buildingType} 설치 버튼 테스트`]);
+    target.hp = Math.max(0, target.hp - 18);
+    if (target.hp <= 0) {
+      setInventory((current) => addInventoryItem(current ?? createDemoInventory(), "pal_essence", 1));
+      setChatLines((prev) => [...prev.slice(-5), `[demo] ${target.speciesId} 처치! 펄 정수 획득`]);
+    } else {
+      setChatLines((prev) => [...prev.slice(-5), `[demo] ${target.speciesId}에게 18 피해`]);
     }
+    applyDemoSnapshot();
+  }, [applyDemoSnapshot]);
+
+  const handleCraft = useCallback((recipeId: string) => {
+    socketRef.current?.emit("client:craft_item", { recipeId });
+    if (socketRef.current?.connected) return;
+
+    const recipeRequirements: Record<string, { itemId: string; amount: number }[]> = {
+      workbench_kit: [
+        { itemId: "wood", amount: 20 },
+        { itemId: "stone", amount: 8 },
+      ],
+      base_core_kit: [
+        { itemId: "wood", amount: 40 },
+        { itemId: "stone", amount: 30 },
+        { itemId: "pal_essence", amount: 1 },
+      ],
+      capture_orb: [
+        { itemId: "stone", amount: 5 },
+        { itemId: "fiber", amount: 3 },
+      ],
+    };
+
+    const outputAmount = recipeId === "capture_orb" ? 3 : 1;
+    setInventory((current) => {
+      const base = current ?? createDemoInventory();
+      const consumed = consumeInventoryItems(base, recipeRequirements[recipeId] ?? []);
+      if (!consumed) {
+        setChatLines((prev) => [...prev.slice(-5), `[demo] ${recipeId} 재료 부족`]);
+        return base;
+      }
+      setChatLines((prev) => [...prev.slice(-5), `[demo] ${itemLabels[recipeId] ?? recipeId} 제작 완료`]);
+      return addInventoryItem(consumed, recipeId, outputAmount);
+    });
   }, []);
+
+  const handlePlaceBuilding = useCallback(
+    (buildingType: BuildingType) => {
+      const position = sceneRef.current?.getLocalPlayerPosition() ?? demoPositionRef.current;
+      socketRef.current?.emit("client:place_building", {
+        buildingType,
+        position: { x: position.x + 64, y: position.y },
+      });
+
+      if (socketRef.current?.connected) return;
+
+      const requirements: Partial<Record<BuildingType, { itemId: string; amount: number }[]>> = {
+        workbench: [{ itemId: "workbench_kit", amount: 1 }],
+        base_core: [{ itemId: "base_core_kit", amount: 1 }],
+        storage_box: [{ itemId: "wood", amount: 25 }],
+      };
+
+      setInventory((current) => {
+        const base = current ?? createDemoInventory();
+        const consumed = consumeInventoryItems(base, requirements[buildingType] ?? []);
+        if (!consumed) {
+          setChatLines((prev) => [...prev.slice(-5), `[demo] ${buildingType} 건설 재료 부족`]);
+          return base;
+        }
+
+        demoBuildingsRef.current = [
+          ...demoBuildingsRef.current,
+          {
+            id: `demo-building-${Date.now()}`,
+            type: buildingType,
+            ownerPlayerId: demoPlayerId,
+            position: { x: position.x + 64, y: position.y },
+            hp: 250,
+            maxHp: 250,
+          },
+        ];
+        setChatLines((prev) => [...prev.slice(-5), `[demo] ${buildingType} 설치 완료`]);
+        applyDemoSnapshot();
+        return consumed;
+      });
+    },
+    [applyDemoSnapshot],
+  );
 
   useEffect(() => {
     if (nickname === "..." || !serverEndpoint) return;
@@ -230,9 +405,7 @@ export function GameClient() {
       setChatLines((prev) => [...prev.slice(-5), `[error] 서버 연결 실패: ${error.message}`]);
     });
 
-    socket.on("disconnect", () => {
-      setConnectionState("offline");
-    });
+    socket.on("disconnect", () => setConnectionState("offline"));
 
     socket.on("server:world_snapshot", (nextSnapshot) => {
       hasServerSnapshotRef.current = true;
@@ -240,17 +413,9 @@ export function GameClient() {
       sceneRef.current?.applySnapshot(nextSnapshot, socket.id ?? null);
     });
 
-    socket.on("server:inventory_updated", (nextInventory) => {
-      setInventory(nextInventory);
-    });
-
-    socket.on("server:chat_message", (line) => {
-      setChatLines((prev) => [...prev.slice(-5), `${line.nickname}: ${line.message}`]);
-    });
-
-    socket.on("server:toast", (toast) => {
-      setChatLines((prev) => [...prev.slice(-5), `[${toast.type}] ${toast.message}`]);
-    });
+    socket.on("server:inventory_updated", (nextInventory) => setInventory(nextInventory));
+    socket.on("server:chat_message", (line) => setChatLines((prev) => [...prev.slice(-5), `${line.nickname}: ${line.message}`]));
+    socket.on("server:toast", (toast) => setChatLines((prev) => [...prev.slice(-5), `[${toast.type}] ${toast.message}`]));
 
     return () => {
       socket.disconnect();
@@ -273,6 +438,7 @@ export function GameClient() {
           sequence: inputSequenceRef.current++,
         };
         socketRef.current?.emit("client:player_input", payload);
+        if (input.primary) handleDemoAttack();
         lastSent = now;
       }
       animationFrame = requestAnimationFrame(sendInput);
@@ -280,7 +446,7 @@ export function GameClient() {
 
     animationFrame = requestAnimationFrame(sendInput);
     return () => cancelAnimationFrame(animationFrame);
-  }, []);
+  }, [handleDemoAttack]);
 
   const handleSceneReady = useCallback((scene: GameWorldScene) => {
     sceneRef.current = scene;
@@ -292,38 +458,26 @@ export function GameClient() {
 
   const playerCount = snapshot?.players.length ?? 0;
   const buildingCount = snapshot?.buildings.length ?? 0;
-  const objectiveText = useMemo(() => {
-    return "채집 → 제작 → 건설 → 전투를 테스트하세요. 왼쪽 조이스틱으로 이동하고 오른쪽 버튼으로 공격/상호작용합니다.";
-  }, []);
+  const objectiveText = useMemo(() => "제목바를 드래그해 패널을 옮기고, 접기/펼치기로 화면을 정리하세요. 자원 근처에서 상호, 몬스터 근처에서 공격을 누르세요.", []);
 
   return (
     <main className="game-shell">
       <GameScene onReady={handleSceneReady} onInputChange={handleInputChange} onInteract={handleInteract} />
 
       <section className="game-hud" aria-label="Game HUD">
-        <div className="hud-panel top-left-panel">
-          <strong>PalPalWorld</strong>
+        <DraggablePanel id="status" title="PalPalWorld">
           <div>상태: {connectionState}</div>
           <div>닉네임: {nickname}</div>
           <div>접속자: {playerCount}</div>
           <div>건물: {buildingCount}</div>
           <small>서버: {serverEndpoint || "확인 중"}</small>
-        </div>
+        </DraggablePanel>
 
-        <div className="hud-panel top-right-panel">
-          <strong>목표</strong>
+        <DraggablePanel id="objective" title="목표">
           <p>{objectiveText}</p>
-        </div>
+        </DraggablePanel>
 
-        <div className="hud-panel bottom-left-panel">
-          <strong>채팅</strong>
-          {chatLines.map((line, index) => (
-            <div key={`${line}-${index}`}>{line}</div>
-          ))}
-        </div>
-
-        <div className="hud-panel inventory-panel">
-          <strong>인벤토리</strong>
+        <DraggablePanel id="inventory" title="인벤토리">
           <div className="inventory-grid">
             {(inventory?.items ?? []).map((item) => (
               <div className="inventory-slot" key={item.itemId}>
@@ -332,10 +486,9 @@ export function GameClient() {
               </div>
             ))}
           </div>
-        </div>
+        </DraggablePanel>
 
-        <div className="hud-panel build-panel">
-          <strong>제작 / 건설</strong>
+        <DraggablePanel id="build" title="제작 / 건설">
           <div className="control-grid">
             <button onClick={() => handleCraft("workbench_kit")}>작업대 키트 제작</button>
             <button onClick={() => handleCraft("base_core_kit")}>거점 코어 키트 제작</button>
@@ -344,7 +497,13 @@ export function GameClient() {
             <button onClick={() => handlePlaceBuilding("base_core")}>거점 코어 설치</button>
             <button onClick={() => handlePlaceBuilding("storage_box")}>보관함 설치</button>
           </div>
-        </div>
+        </DraggablePanel>
+
+        <DraggablePanel id="chat" title="로그">
+          {chatLines.map((line, index) => (
+            <div key={`${line}-${index}`}>{line}</div>
+          ))}
+        </DraggablePanel>
 
         <MobileControls onInputChange={handleInputChange} onInteract={handleInteract} />
       </section>
@@ -352,13 +511,54 @@ export function GameClient() {
   );
 }
 
-function MobileControls({
-  onInputChange,
-  onInteract,
-}: {
-  onInputChange: (input: GameSceneInput) => void;
-  onInteract: () => void;
-}) {
+function DraggablePanel({ id, title, children }: { id: PanelId; title: string; children: ReactNode }) {
+  const defaults = panelDefaults[id];
+  const [position, setPosition] = useState({ x: defaults.x, y: defaults.y });
+  const [collapsed, setCollapsed] = useState(Boolean(defaults.collapsed));
+  const dragRef = useRef<{ pointerId: number; startX: number; startY: number; panelX: number; panelY: number } | null>(null);
+
+  useEffect(() => {
+    setPosition((current) => ({
+      x: Math.min(current.x, Math.max(4, window.innerWidth - 132)),
+      y: Math.min(current.y, Math.max(4, window.innerHeight - 44)),
+    }));
+  }, []);
+
+  return (
+    <section className={`hud-panel draggable-panel ${collapsed ? "draggable-panel--collapsed" : ""}`} style={{ left: position.x, top: position.y, width: defaults.width }}>
+      <header
+        className="draggable-panel__header"
+        onPointerDown={(event) => {
+          event.preventDefault();
+          dragRef.current = { pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, panelX: position.x, panelY: position.y };
+          event.currentTarget.setPointerCapture(event.pointerId);
+        }}
+        onPointerMove={(event) => {
+          const drag = dragRef.current;
+          if (!drag || drag.pointerId !== event.pointerId) return;
+          setPosition({
+            x: Math.max(4, Math.min(window.innerWidth - 86, drag.panelX + event.clientX - drag.startX)),
+            y: Math.max(4, Math.min(window.innerHeight - 42, drag.panelY + event.clientY - drag.startY)),
+          });
+        }}
+        onPointerUp={(event) => {
+          if (dragRef.current?.pointerId === event.pointerId) dragRef.current = null;
+        }}
+        onPointerCancel={() => {
+          dragRef.current = null;
+        }}
+      >
+        <strong>{title}</strong>
+        <button className="draggable-panel__toggle" onPointerDown={(event) => event.stopPropagation()} onClick={() => setCollapsed((value) => !value)}>
+          {collapsed ? "펼치기" : "접기"}
+        </button>
+      </header>
+      {!collapsed ? <div className="draggable-panel__body">{children}</div> : null}
+    </section>
+  );
+}
+
+function MobileControls({ onInputChange, onInteract }: { onInputChange: (input: GameSceneInput) => void; onInteract: () => void }) {
   const [stick, setStick] = useState({ x: 0, y: 0 });
   const pointerIdRef = useRef<number | null>(null);
   const activeInputRef = useRef<GameSceneInput>({ x: 0, y: 0, primary: false, secondary: false });
@@ -373,7 +573,7 @@ function MobileControls({
   );
 
   const updateStickFromPointer = useCallback(
-    (event: React.PointerEvent<HTMLDivElement>) => {
+    (event: PointerEvent<HTMLDivElement>) => {
       const rect = event.currentTarget.getBoundingClientRect();
       const centerX = rect.left + rect.width / 2;
       const centerY = rect.top + rect.height / 2;
@@ -382,17 +582,9 @@ function MobileControls({
       const distance = Math.hypot(rawX, rawY);
       const clampedDistance = Math.min(distance, joystickRadius);
       const angle = Math.atan2(rawY, rawX);
-      const visual = {
-        x: Math.cos(angle) * clampedDistance,
-        y: Math.sin(angle) * clampedDistance,
-      };
-      const movement = {
-        x: distance === 0 ? 0 : visual.x / joystickRadius,
-        y: distance === 0 ? 0 : visual.y / joystickRadius,
-      };
-
+      const visual = { x: Math.cos(angle) * clampedDistance, y: Math.sin(angle) * clampedDistance };
       setStick(visual);
-      emitInput({ x: movement.x, y: movement.y });
+      emitInput({ x: distance === 0 ? 0 : visual.x / joystickRadius, y: distance === 0 ? 0 : visual.y / joystickRadius });
     },
     [emitInput],
   );
@@ -403,25 +595,9 @@ function MobileControls({
     emitInput({ x: 0, y: 0 });
   }, [emitInput]);
 
-  const setPrimary = useCallback(
-    (pressed: boolean) => {
-      emitInput({ primary: pressed });
-    },
-    [emitInput],
-  );
-
-  const setSecondary = useCallback(
-    (pressed: boolean) => {
-      emitInput({ secondary: pressed });
-      if (pressed) onInteract();
-    },
-    [emitInput, onInteract],
-  );
-
   return (
     <>
       <div className="mobile-control-hint">왼쪽 이동 · 오른쪽 행동</div>
-
       <div
         className="mobile-joystick"
         role="application"
@@ -443,10 +619,7 @@ function MobileControls({
           event.currentTarget.releasePointerCapture(event.pointerId);
           stopMovement();
         }}
-        onPointerCancel={(event) => {
-          if (pointerIdRef.current !== event.pointerId) return;
-          stopMovement();
-        }}
+        onPointerCancel={stopMovement}
       >
         <div className="joystick-base">
           <div className="joystick-cross joystick-cross--horizontal" />
@@ -460,14 +633,13 @@ function MobileControls({
           className="action-button action-button--attack"
           onPointerDown={(event) => {
             event.preventDefault();
-            event.currentTarget.setPointerCapture(event.pointerId);
-            setPrimary(true);
+            emitInput({ primary: true });
           }}
           onPointerUp={(event) => {
             event.preventDefault();
-            setPrimary(false);
+            emitInput({ primary: false });
           }}
-          onPointerCancel={() => setPrimary(false)}
+          onPointerCancel={() => emitInput({ primary: false })}
         >
           공격
         </button>
@@ -475,14 +647,14 @@ function MobileControls({
           className="action-button action-button--interact"
           onPointerDown={(event) => {
             event.preventDefault();
-            event.currentTarget.setPointerCapture(event.pointerId);
-            setSecondary(true);
+            emitInput({ secondary: true });
+            onInteract();
           }}
           onPointerUp={(event) => {
             event.preventDefault();
-            setSecondary(false);
+            emitInput({ secondary: false });
           }}
-          onPointerCancel={() => setSecondary(false)}
+          onPointerCancel={() => emitInput({ secondary: false })}
         >
           상호
         </button>
