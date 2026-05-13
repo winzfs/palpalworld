@@ -8,6 +8,7 @@ import type {
   InventoryState,
   PlayerInputPayload,
   ServerToClientEvents,
+  Vector2,
   WorldSnapshot,
 } from "@palpalworld/shared";
 import { GameScene, type GameSceneInput, type GameWorldScene } from "./GameScene";
@@ -15,6 +16,7 @@ import { GameScene, type GameSceneInput, type GameWorldScene } from "./GameScene
 type TypedSocket = Socket<ServerToClientEvents, ClientToServerEvents>;
 
 const configuredServerUrl = process.env.NEXT_PUBLIC_REALTIME_SERVER_URL;
+const demoPlayerId = "demo-player";
 
 function resolveRealtimeServerUrl() {
   if (configuredServerUrl) return configuredServerUrl;
@@ -67,6 +69,52 @@ function createClientNickname() {
   return nextNickname;
 }
 
+function createDemoInventory(): InventoryState {
+  return {
+    ownerPlayerId: demoPlayerId,
+    items: [
+      { itemId: "wood", amount: 30 },
+      { itemId: "stone", amount: 20 },
+      { itemId: "fiber", amount: 10 },
+      { itemId: "capture_orb", amount: 5 },
+    ],
+    itemInstances: [],
+  };
+}
+
+function createDemoSnapshot(nickname: string, position: Vector2): WorldSnapshot {
+  return {
+    worldId: "offline-demo",
+    serverTime: Date.now(),
+    players: [
+      {
+        id: demoPlayerId,
+        nickname: nickname === "..." ? "Demo" : nickname,
+        position,
+        direction: "down",
+        hp: 100,
+        maxHp: 100,
+      },
+    ],
+    creatures: [
+      { id: "demo-leafbun", speciesId: "leafbun", regionId: "starter_meadow", position: { x: 380, y: 330 }, level: 2, hp: 71, maxHp: 71, traitIds: ["nimble"] },
+      { id: "demo-droplet", speciesId: "droplet", regionId: "starter_meadow", position: { x: 720, y: 430 }, level: 3, hp: 86, maxHp: 86, traitIds: ["sturdy"] },
+      { id: "demo-sparkit", speciesId: "sparkit", regionId: "starter_meadow", position: { x: 560, y: 540 }, level: 4, hp: 90, maxHp: 90, traitIds: ["brave"] },
+    ],
+    resources: [
+      { id: "demo-tree-1", regionId: "starter_meadow", resourceType: "wood", position: { x: 320, y: 240 }, remainingAmount: 100, maxAmount: 100 },
+      { id: "demo-tree-2", regionId: "starter_meadow", resourceType: "wood", position: { x: 230, y: 420 }, remainingAmount: 100, maxAmount: 100 },
+      { id: "demo-stone-1", regionId: "starter_meadow", resourceType: "stone", position: { x: 520, y: 360 }, remainingAmount: 100, maxAmount: 100 },
+      { id: "demo-fiber-1", regionId: "starter_meadow", resourceType: "fiber", position: { x: 440, y: 250 }, remainingAmount: 60, maxAmount: 60 },
+      { id: "demo-berry-1", regionId: "starter_meadow", resourceType: "berry", position: { x: 680, y: 300 }, remainingAmount: 40, maxAmount: 40 },
+      { id: "demo-ore-1", regionId: "stone_hills", resourceType: "ore", position: { x: 920, y: 520 }, remainingAmount: 120, maxAmount: 120 },
+    ],
+    buildings: [
+      { id: "demo-workbench", type: "workbench", ownerPlayerId: demoPlayerId, position: { x: 210, y: 250 }, hp: 300, maxHp: 300 },
+    ],
+  };
+}
+
 export function GameClient() {
   const [nickname, setNickname] = useState("...");
   const [snapshot, setSnapshot] = useState<WorldSnapshot | null>(null);
@@ -78,11 +126,50 @@ export function GameClient() {
   const sceneRef = useRef<GameWorldScene | null>(null);
   const inputRef = useRef<GameSceneInput>({ x: 0, y: 0, primary: false, secondary: false });
   const inputSequenceRef = useRef(0);
+  const hasServerSnapshotRef = useRef(false);
+  const demoPositionRef = useRef<Vector2>({ x: 250, y: 320 });
 
   useEffect(() => {
     setNickname(createClientNickname());
     setServerEndpoint(resolveRealtimeServerUrl());
   }, []);
+
+  useEffect(() => {
+    if (connectionState !== "error" && connectionState !== "offline") return;
+    if (hasServerSnapshotRef.current) return;
+
+    setInventory((current) => current ?? createDemoInventory());
+    setChatLines((prev) => [...prev.slice(-5), "[info] 서버 연결 전까지 오프라인 데모 월드로 표시합니다."]);
+  }, [connectionState]);
+
+  useEffect(() => {
+    let animationFrame = 0;
+    let lastTick = performance.now();
+
+    const tickDemoWorld = (now: number) => {
+      const shouldRunDemo = !hasServerSnapshotRef.current && (connectionState === "error" || connectionState === "offline" || connectionState === "connecting");
+      if (shouldRunDemo) {
+        const deltaSeconds = Math.min(0.05, (now - lastTick) / 1000);
+        const input = inputRef.current;
+        const length = Math.hypot(input.x, input.y) || 1;
+        const normalized = length > 1 ? { x: input.x / length, y: input.y / length } : input;
+        demoPositionRef.current = {
+          x: demoPositionRef.current.x + normalized.x * 180 * deltaSeconds,
+          y: demoPositionRef.current.y + normalized.y * 180 * deltaSeconds,
+        };
+
+        const nextSnapshot = createDemoSnapshot(nickname, demoPositionRef.current);
+        setSnapshot(nextSnapshot);
+        sceneRef.current?.applySnapshot(nextSnapshot, demoPlayerId);
+      }
+
+      lastTick = now;
+      animationFrame = requestAnimationFrame(tickDemoWorld);
+    };
+
+    animationFrame = requestAnimationFrame(tickDemoWorld);
+    return () => cancelAnimationFrame(animationFrame);
+  }, [connectionState, nickname]);
 
   const handleInteract = useCallback(() => {
     const entityId = sceneRef.current?.getNearestInteractableId();
@@ -91,10 +178,16 @@ export function GameClient() {
       return;
     }
     socketRef.current?.emit("client:interact_entity", { entityId });
+    if (!socketRef.current?.connected) {
+      setChatLines((prev) => [...prev.slice(-5), `[demo] ${entityId} 채집 테스트`]);
+    }
   }, []);
 
   const handleCraft = useCallback((recipeId: string) => {
     socketRef.current?.emit("client:craft_item", { recipeId });
+    if (!socketRef.current?.connected) {
+      setChatLines((prev) => [...prev.slice(-5), `[demo] ${recipeId} 제작 버튼 테스트`]);
+    }
   }, []);
 
   const handlePlaceBuilding = useCallback((buildingType: BuildingType) => {
@@ -108,6 +201,10 @@ export function GameClient() {
       buildingType,
       position: { x: position.x + 64, y: position.y },
     });
+
+    if (!socketRef.current?.connected) {
+      setChatLines((prev) => [...prev.slice(-5), `[demo] ${buildingType} 설치 버튼 테스트`]);
+    }
   }, []);
 
   useEffect(() => {
@@ -137,6 +234,7 @@ export function GameClient() {
     });
 
     socket.on("server:world_snapshot", (nextSnapshot) => {
+      hasServerSnapshotRef.current = true;
       setSnapshot(nextSnapshot);
       sceneRef.current?.applySnapshot(nextSnapshot, socket.id ?? null);
     });
@@ -156,6 +254,7 @@ export function GameClient() {
     return () => {
       socket.disconnect();
       socketRef.current = null;
+      hasServerSnapshotRef.current = false;
     };
   }, [nickname, serverEndpoint]);
 
