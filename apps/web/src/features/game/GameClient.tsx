@@ -26,8 +26,9 @@ function resolveRealtimeServerUrl() {
     return "http://localhost:4000";
   }
 
-  if (hostname.includes("-3000.")) {
-    return `${protocol}//${hostname.replace("-3000.", "-4000.")}`;
+  const githubForwardedHost = hostname.match(/^(?<prefix>.+)-(?<port>\d+)\.(?<domain>app\.github\.dev|githubpreview\.dev)$/);
+  if (githubForwardedHost?.groups) {
+    return `${protocol}//${githubForwardedHost.groups.prefix}-4000.${githubForwardedHost.groups.domain}`;
   }
 
   return `${protocol}//${hostname}:4000`;
