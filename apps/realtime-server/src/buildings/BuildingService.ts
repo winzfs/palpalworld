@@ -1,5 +1,5 @@
 import { distance } from "@palpalworld/game-core";
-import { BUILDING_CATALOG, WORLD, type BuildingState, type BuildingType, type Vector2 } from "@palpalworld/shared";
+import { BUILDING_CATALOG, WORLD, type BuildingState, type BuildingType, type ItemId, type Vector2 } from "@palpalworld/shared";
 import type { InventoryStore } from "../inventory/InventoryStore";
 import type { WorldState } from "../world/WorldState";
 
@@ -7,6 +7,13 @@ const buildingItemPrefix = "building_";
 
 function getBuildingItemId(buildingType: BuildingType) {
   return `${buildingItemPrefix}${buildingType}`;
+}
+
+function isAllowedPlacementItem(buildingType: BuildingType, itemId: ItemId) {
+  const definition = BUILDING_CATALOG[buildingType];
+  if (!definition) return false;
+  if (itemId === getBuildingItemId(buildingType)) return true;
+  return definition.requires.length === 1 && definition.requires[0]?.itemId === itemId && definition.requires[0]?.amount === 1;
 }
 
 export type PlaceBuildingResult =
@@ -26,12 +33,12 @@ export class BuildingService {
     private readonly inventories: InventoryStore,
   ) {}
 
-  place(playerId: string, buildingType: BuildingType, position: Vector2): PlaceBuildingResult {
+  place(playerId: string, buildingType: BuildingType, position: Vector2, itemId = getBuildingItemId(buildingType)): PlaceBuildingResult {
     const player = this.world.players.get(playerId);
     if (!player) return { ok: false, reason: "missing_player" };
 
     const definition = BUILDING_CATALOG[buildingType];
-    if (!definition) return { ok: false, reason: "missing_building" };
+    if (!definition || !isAllowedPlacementItem(buildingType, itemId)) return { ok: false, reason: "missing_building" };
 
     if (distance(player.position, position) > WORLD.buildRange) {
       return { ok: false, reason: "out_of_range" };
@@ -41,7 +48,7 @@ export class BuildingService {
       return { ok: false, reason: "blocked" };
     }
 
-    const consumed = this.inventories.consumeItems(playerId, [{ itemId: getBuildingItemId(buildingType), amount: 1 }]);
+    const consumed = this.inventories.consumeItems(playerId, [{ itemId, amount: 1 }]);
     if (!consumed) return { ok: false, reason: "missing_materials" };
 
     const building: BuildingState = {
