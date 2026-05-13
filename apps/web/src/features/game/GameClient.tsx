@@ -197,6 +197,12 @@ export function GameClient() {
   const demoBuildingsRef = useRef<BuildingState[]>(createDemoBuildings());
   const lastDemoAttackAtRef = useRef(0);
 
+  const selectedPlacementBuilding = useMemo(
+    () => (selectedBuildingItemId ? getProgressionBuildingByItemId(selectedBuildingItemId) : null),
+    [selectedBuildingItemId],
+  );
+  const placementBuildingType = selectedPlacementBuilding?.type as BuildingType | undefined;
+
   const applyDemoSnapshot = useCallback(() => {
     const nextSnapshot = createDemoSnapshot(nickname, demoPositionRef.current, demoDirectionRef.current, demoResourcesRef.current, demoCreaturesRef.current, demoBuildingsRef.current);
     setSnapshot(nextSnapshot);
@@ -420,11 +426,11 @@ export function GameClient() {
 
   const handleSceneReady = useCallback((scene: GameWorldScene) => { sceneRef.current = scene; }, []);
   const handleInputChange = useCallback((input: GameSceneInput) => { inputRef.current = input; }, []);
-  const objectiveText = useMemo(() => selectedBuildingItemId ? "배치 모드입니다. 설치할 필드 위치를 클릭하세요." : "건설물은 먼저 설치 아이템으로 제작한 뒤, 인벤토리의 건설 탭에서 선택하고 필드를 클릭해 설치하세요.", [selectedBuildingItemId]);
+  const objectiveText = useMemo(() => selectedBuildingItemId ? "배치 모드입니다. 반투명 건설물을 원하는 위치에 맞춘 뒤 클릭하세요." : "건설물은 먼저 설치 아이템으로 제작한 뒤, 인벤토리의 건설 탭에서 선택하고 필드를 클릭해 설치하세요.", [selectedBuildingItemId]);
 
   return (
     <main className={`game-shell ${selectedBuildingItemId ? "game-shell--placing" : ""}`}>
-      <GameScene onReady={handleSceneReady} onInputChange={handleInputChange} onInteract={handleInteract} onWorldClick={handleWorldClick} />
+      <GameScene onReady={handleSceneReady} onInputChange={handleInputChange} onInteract={handleInteract} onWorldClick={handleWorldClick} placementBuildingType={placementBuildingType} />
       <section className="game-hud" aria-label="Game HUD">
         <DraggablePanel id="status" title="캐릭터"><CharacterPanel nickname={nickname} connectionState={connectionState} serverEndpoint={serverEndpoint} snapshot={snapshot} /></DraggablePanel>
         <DraggablePanel id="objective" title="목표"><p>{objectiveText}</p></DraggablePanel>
