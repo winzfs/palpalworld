@@ -6,7 +6,9 @@ import { normalizeVector } from "@palpalworld/game-core";
 import type { ClientToServerEvents, PlayerInputPayload, PlayerPublicState, ServerToClientEvents } from "@palpalworld/shared";
 import { WORLD } from "@palpalworld/shared";
 import { BuildingService } from "./buildings/BuildingService";
+import { CombatService } from "./combat/CombatService";
 import { CraftingService } from "./crafting/CraftingService";
+import { CreatureService } from "./creatures/CreatureService";
 import { InventoryStore } from "./inventory/InventoryStore";
 import { ResourceService } from "./resources/ResourceService";
 import { WorldState } from "./world/WorldState";
@@ -33,6 +35,8 @@ const io = new Server<ClientToServerEvents, ServerToClientEvents>(httpServer, {
 const world = new WorldState();
 const inventories = new InventoryStore();
 const resources = new ResourceService(world);
+const creatures = new CreatureService(world);
+const combat = new CombatService(world, creatures);
 const crafting = new CraftingService(inventories);
 const buildings = new BuildingService(world, inventories);
 const lastInputs = new Map<string, PlayerInputPayload["movement"]>();
@@ -47,6 +51,24 @@ function createPlayer(socketId: string, nickname: string): PlayerPublicState {
     hp: 100,
     maxHp: 100,
   };
+}
+
+function handleAttack(playerId: string) {
+  const result = combat.attackNearestCreature(playerId);
+  if (!result.ok) return;
+
+  io.emit("server:entity_updated", result.creature);
+  const playerSocket = io.sockets.sockets.get(playerId);
+  playerSocket?.emit("server:toast", {
+    type: result.defeated ? "success" : "info",
+    message: result.defeated
+      ? `${result.creature.speciesId} 처치! ${result.drops.length > 0 ? "전리품 획득" : "전리품 없음"}`
+      : `${result.creature.speciesId}에게 ${result.damage} 피해`,
+  });
+
+  if (result.defeated) {
+    playerSocket?.emit("server:inventory_updated", inventories.addItems(playerId, result.drops));
+  }
 }
 
 io.on("connection", (socket) => {
@@ -66,6 +88,9 @@ io.on("connection", (socket) => {
 
   socket.on("client:player_input", (payload) => {
     lastInputs.set(socket.id, payload.movement);
+    if (payload.primaryAction) {
+      handleAttack(socket.id);
+    }
   });
 
   socket.on("client:interact_entity", ({ entityId }) => {
@@ -162,6 +187,7 @@ setInterval(() => {
   lastTick = now;
 
   resources.tickRespawns(now);
+  creatures.tickRespawns(now);
 
   for (const [playerId, player] of world.players.entries()) {
     const input = lastInputs.get(playerId) ?? { x: 0, y: 0 };
