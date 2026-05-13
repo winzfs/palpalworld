@@ -59,7 +59,7 @@ export class ResourceService {
       if (resource.respawnAt > now) continue;
 
       resource.remainingAmount = resource.maxAmount;
-      resource.respawnAt = undefined;
+      delete resource.respawnAt;
     }
   }
 
