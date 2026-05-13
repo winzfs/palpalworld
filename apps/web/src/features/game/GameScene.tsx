@@ -10,6 +10,7 @@ import {
   type Vector2,
   type WorldSnapshot,
 } from "@palpalworld/shared";
+import { MAP_TILE_SIZE, getMapTile, getPortalPosition, type MapDirection } from "../../../../../packages/shared/src/worldTiles";
 import { SpriteRenderer } from "../rendering/SpriteRenderer";
 import { TileMapRenderer } from "../rendering/TileMapRenderer";
 
@@ -32,6 +33,13 @@ export type WorldClickTarget =
 function distance(a: Vector2, b: Vector2) {
   return Math.hypot(a.x - b.x, a.y - b.y);
 }
+
+const portalLabels: Record<MapDirection, string> = {
+  north: "북쪽 포탈",
+  south: "남쪽 포탈",
+  west: "서쪽 포탈",
+  east: "동쪽 포탈",
+};
 
 export class GameWorldScene {
   private root: HTMLDivElement;
@@ -128,7 +136,11 @@ export class GameWorldScene {
   }
 
   getLocalPlayerPosition() {
-    return this.snapshot?.players.find((player) => player.id === this.localPlayerId)?.position ?? null;
+    return this.getLocalPlayer()?.position ?? null;
+  }
+
+  private getLocalPlayer() {
+    return this.snapshot?.players.find((player) => player.id === this.localPlayerId) ?? this.snapshot?.players[0] ?? null;
   }
 
   getPlacementValidity(position: Vector2): PlacementValidity {
@@ -168,7 +180,7 @@ export class GameWorldScene {
 
   private getCameraOffset() {
     const rect = this.root.getBoundingClientRect();
-    const localPlayer = this.snapshot?.players.find((player) => player.id === this.localPlayerId);
+    const localPlayer = this.getLocalPlayer();
     return {
       x: localPlayer ? localPlayer.position.x - rect.width / 2 : 0,
       y: localPlayer ? localPlayer.position.y - rect.height / 2 : 0,
@@ -264,12 +276,53 @@ export class GameWorldScene {
     const now = performance.now();
 
     this.tileMapRenderer.draw(ctx, rect.width, rect.height, camera.x, camera.y);
+    this.drawMapBoundaryAndPortals(ctx, camera.x, camera.y);
     this.drawBuildings(ctx, camera.x, camera.y);
     this.drawResources(ctx, camera.x, camera.y);
     this.drawCreatures(ctx, camera.x, camera.y);
     this.drawPlayers(ctx, camera.x, camera.y, now);
     this.drawInteractionHint(ctx, camera.x, camera.y);
     this.drawPlacementPreview(ctx, camera.x, camera.y);
+  }
+
+  private drawMapBoundaryAndPortals(ctx: CanvasRenderingContext2D, cameraX: number, cameraY: number) {
+    const localPlayer = this.getLocalPlayer();
+    const currentTile = (localPlayer as any)?.currentTile;
+    const tile = getMapTile(currentTile);
+
+    const x = -cameraX;
+    const y = -cameraY;
+    ctx.save();
+    ctx.strokeStyle = "rgba(125, 211, 252, 0.42)";
+    ctx.lineWidth = 4;
+    ctx.setLineDash([12, 8]);
+    ctx.strokeRect(x, y, MAP_TILE_SIZE.width, MAP_TILE_SIZE.height);
+    ctx.restore();
+
+    if (!tile) return;
+
+    for (const direction of ["north", "south", "west", "east"] as MapDirection[]) {
+      if (!tile.exits[direction]) continue;
+      const portal = getPortalPosition(direction);
+      const px = portal.x - cameraX;
+      const py = portal.y - cameraY;
+
+      ctx.save();
+      ctx.fillStyle = "rgba(14, 165, 233, 0.18)";
+      ctx.strokeStyle = "rgba(125, 211, 252, 0.95)";
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(px, py, MAP_TILE_SIZE.portalRadius, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.fillStyle = "rgba(224, 242, 254, 0.95)";
+      ctx.font = "13px system-ui";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(portalLabels[direction], px, py);
+      ctx.restore();
+    }
   }
 
   private drawBuildings(ctx: CanvasRenderingContext2D, cameraX: number, cameraY: number) {
