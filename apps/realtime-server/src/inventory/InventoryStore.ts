@@ -1,7 +1,9 @@
-import type { InventoryState, ItemId, ItemStack, PlayerId } from "@palpalworld/shared";
+import type { InventoryState, ItemId, ItemInstance, ItemInstanceId, ItemStack, PlayerId } from "@palpalworld/shared";
+import { ITEM_CATALOG } from "@palpalworld/shared";
 
 export class InventoryStore {
   private inventories = new Map<PlayerId, ItemStack[]>();
+  private itemInstances = new Map<PlayerId, ItemInstance[]>();
 
   createStarterInventory(playerId: PlayerId): InventoryState {
     const items: ItemStack[] = [
@@ -13,19 +15,33 @@ export class InventoryStore {
       { itemId: "stone", amount: 20 },
       { itemId: "fiber", amount: 10 },
     ];
+
+    const instances: ItemInstance[] = [
+      this.createItemInstance(playerId, "training_sword", ["sharp"]),
+      this.createItemInstance(playerId, "explorer_jacket"),
+      this.createItemInstance(playerId, "leather_boots"),
+    ];
+
     this.inventories.set(playerId, items);
+    this.itemInstances.set(playerId, instances);
     return this.getInventory(playerId);
   }
 
   deleteInventory(playerId: PlayerId) {
     this.inventories.delete(playerId);
+    this.itemInstances.delete(playerId);
   }
 
   getInventory(playerId: PlayerId): InventoryState {
     return {
       ownerPlayerId: playerId,
       items: [...(this.inventories.get(playerId) ?? [])].filter((item) => item.amount > 0),
+      itemInstances: [...(this.itemInstances.get(playerId) ?? [])],
     };
+  }
+
+  getItemInstance(playerId: PlayerId, instanceId: ItemInstanceId): ItemInstance | null {
+    return this.itemInstances.get(playerId)?.find((item) => item.instanceId === instanceId) ?? null;
   }
 
   hasItems(playerId: PlayerId, requirements: readonly ItemStack[]): boolean {
@@ -37,6 +53,16 @@ export class InventoryStore {
   }
 
   addItem(playerId: PlayerId, itemId: ItemId, amount: number): InventoryState {
+    const definition = ITEM_CATALOG[itemId as keyof typeof ITEM_CATALOG];
+    if (definition && (definition.category === "equipment" || definition.category === "weapon" || definition.category === "mount_gear")) {
+      const instances = this.itemInstances.get(playerId) ?? [];
+      for (let index = 0; index < amount; index += 1) {
+        instances.push(this.createItemInstance(playerId, itemId));
+      }
+      this.itemInstances.set(playerId, instances);
+      return this.getInventory(playerId);
+    }
+
     const items = this.inventories.get(playerId) ?? [];
     const existing = items.find((item) => item.itemId === itemId);
 
@@ -71,6 +97,18 @@ export class InventoryStore {
 
     this.inventories.set(playerId, this.compact(items));
     return this.getInventory(playerId);
+  }
+
+  private createItemInstance(playerId: PlayerId, itemId: ItemId, traitIds: string[] = []): ItemInstance {
+    return {
+      instanceId: `${itemId}-${Date.now()}-${Math.floor(Math.random() * 999_999)}`,
+      itemId,
+      ownerPlayerId: playerId,
+      level: 1,
+      durability: 100,
+      traitIds,
+      locked: false,
+    };
   }
 
   private compact(items: ItemStack[]) {
