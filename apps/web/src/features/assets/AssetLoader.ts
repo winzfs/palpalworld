@@ -1,10 +1,12 @@
-import type { SpriteAsset } from "./assetTypes";
+import type { SpriteAsset, SpriteSheetAsset } from "./assetTypes";
+
+type LoadableImageAsset = Pick<SpriteAsset | SpriteSheetAsset, "key" | "src">;
 
 export class AssetLoader {
   private readonly imageCache = new Map<string, HTMLImageElement>();
   private readonly failedKeys = new Set<string>();
 
-  getImage(asset: SpriteAsset | null): HTMLImageElement | null {
+  getImage(asset: LoadableImageAsset | null): HTMLImageElement | null {
     if (!asset || this.failedKeys.has(asset.key)) return null;
 
     const cached = this.imageCache.get(asset.key);
