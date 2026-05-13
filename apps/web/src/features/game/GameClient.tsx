@@ -14,7 +14,24 @@ import { GameScene, type GameSceneInput, type GameWorldScene } from "./GameScene
 
 type TypedSocket = Socket<ServerToClientEvents, ClientToServerEvents>;
 
-const serverUrl = process.env.NEXT_PUBLIC_REALTIME_SERVER_URL ?? "http://localhost:4000";
+const configuredServerUrl = process.env.NEXT_PUBLIC_REALTIME_SERVER_URL;
+
+function resolveRealtimeServerUrl() {
+  if (configuredServerUrl) return configuredServerUrl;
+  if (typeof window === "undefined") return "http://localhost:4000";
+
+  const { protocol, hostname } = window.location;
+
+  if (hostname === "localhost" || hostname === "127.0.0.1") {
+    return "http://localhost:4000";
+  }
+
+  if (hostname.includes("-3000.")) {
+    return `${protocol}//${hostname.replace("-3000.", "-4000.")}`;
+  }
+
+  return `${protocol}//${hostname}:4000`;
+}
 
 const itemLabels: Record<string, string> = {
   wood: "나무",
@@ -54,6 +71,7 @@ export function GameClient() {
   const [snapshot, setSnapshot] = useState<WorldSnapshot | null>(null);
   const [inventory, setInventory] = useState<InventoryState | null>(null);
   const [connectionState, setConnectionState] = useState("preparing");
+  const [serverEndpoint, setServerEndpoint] = useState("");
   const [chatLines, setChatLines] = useState<string[]>([]);
   const socketRef = useRef<TypedSocket | null>(null);
   const sceneRef = useRef<GameWorldScene | null>(null);
@@ -62,6 +80,7 @@ export function GameClient() {
 
   useEffect(() => {
     setNickname(createClientNickname());
+    setServerEndpoint(resolveRealtimeServerUrl());
   }, []);
 
   const handleInteract = useCallback(() => {
@@ -91,19 +110,25 @@ export function GameClient() {
   }, []);
 
   useEffect(() => {
-    if (nickname === "...") return;
+    if (nickname === "..." || !serverEndpoint) return;
 
-    const socket: TypedSocket = io(serverUrl, {
-      transports: ["websocket"],
+    const socket: TypedSocket = io(serverEndpoint, {
+      transports: ["websocket", "polling"],
       autoConnect: true,
     });
 
     socketRef.current = socket;
     setConnectionState("connecting");
+    setChatLines((prev) => [...prev.slice(-5), `[info] realtime: ${serverEndpoint}`]);
 
     socket.on("connect", () => {
       setConnectionState("online");
       socket.emit("client:join_world", { nickname });
+    });
+
+    socket.on("connect_error", (error) => {
+      setConnectionState("error");
+      setChatLines((prev) => [...prev.slice(-5), `[error] 서버 연결 실패: ${error.message}`]);
     });
 
     socket.on("disconnect", () => {
@@ -131,7 +156,7 @@ export function GameClient() {
       socket.disconnect();
       socketRef.current = null;
     };
-  }, [nickname]);
+  }, [nickname, serverEndpoint]);
 
   useEffect(() => {
     let animationFrame = 0;
@@ -181,6 +206,7 @@ export function GameClient() {
           <div>닉네임: {nickname}</div>
           <div>접속자: {playerCount}</div>
           <div>건물: {buildingCount}</div>
+          <small>서버: {serverEndpoint || "확인 중"}</small>
         </div>
 
         <div className="hud-panel top-right-panel">
