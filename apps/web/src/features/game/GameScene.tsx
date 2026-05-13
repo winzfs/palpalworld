@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import type { WorldSnapshot } from "@palpalworld/shared";
+import { WORLD, type EntityId, type ResourceNodeState, type WorldSnapshot } from "@palpalworld/shared";
 
 export type GameSceneInput = {
   x: number;
@@ -19,10 +19,12 @@ export class GameWorldScene {
   private snapshot: WorldSnapshot | null = null;
   private localPlayerId: string | null = null;
   private onInputChange: (input: GameSceneInput) => void;
+  private onInteract: () => void;
 
-  constructor(root: HTMLDivElement, onInputChange: (input: GameSceneInput) => void) {
+  constructor(root: HTMLDivElement, onInputChange: (input: GameSceneInput) => void, onInteract: () => void) {
     this.root = root;
     this.onInputChange = onInputChange;
+    this.onInteract = onInteract;
     this.canvas = document.createElement("canvas");
     this.canvas.style.width = "100%";
     this.canvas.style.height = "100%";
@@ -50,6 +52,23 @@ export class GameWorldScene {
     this.localPlayerId = localPlayerId;
   }
 
+  getNearestInteractableId(): EntityId | null {
+    const localPlayer = this.snapshot?.players.find((player) => player.id === this.localPlayerId);
+    if (!localPlayer || !this.snapshot) return null;
+
+    let nearest: ResourceNodeState | null = null;
+    let nearestDistance = Number.POSITIVE_INFINITY;
+
+    for (const resource of this.snapshot.resources) {
+      const distance = Math.hypot(resource.position.x - localPlayer.position.x, resource.position.y - localPlayer.position.y);
+      if (distance > WORLD.interactRange || distance >= nearestDistance) continue;
+      nearest = resource;
+      nearestDistance = distance;
+    }
+
+    return nearest?.id ?? null;
+  }
+
   private resize = () => {
     const dpr = Math.max(1, Math.min(window.devicePixelRatio || 1, 2));
     const rect = this.root.getBoundingClientRect();
@@ -59,7 +78,11 @@ export class GameWorldScene {
   };
 
   private handleKeyDown = (event: KeyboardEvent) => {
-    this.keys.add(event.key.toLowerCase());
+    const key = event.key.toLowerCase();
+    if (key === "e" && !this.keys.has(key)) {
+      this.onInteract();
+    }
+    this.keys.add(key);
     this.emitKeyboardInput();
   };
 
@@ -100,10 +123,15 @@ export class GameWorldScene {
     this.drawResources(ctx, cameraX, cameraY);
     this.drawCreatures(ctx, cameraX, cameraY);
     this.drawPlayers(ctx, cameraX, cameraY);
+    this.drawInteractionHint(ctx, cameraX, cameraY);
   }
 
   private drawGrid(ctx: CanvasRenderingContext2D, width: number, height: number, cameraX: number, cameraY: number) {
-    ctx.fillStyle = "#14532d";
+    const gradient = ctx.createLinearGradient(0, 0, width, height);
+    gradient.addColorStop(0, "#166534");
+    gradient.addColorStop(0.55, "#14532d");
+    gradient.addColorStop(1, "#064e3b");
+    ctx.fillStyle = gradient;
     ctx.fillRect(0, 0, width, height);
 
     ctx.strokeStyle = "rgba(255,255,255,0.06)";
@@ -132,14 +160,22 @@ export class GameWorldScene {
     for (const resource of this.snapshot.resources) {
       const x = resource.position.x - cameraX;
       const y = resource.position.y - cameraY;
-      ctx.fillStyle = resource.resourceType === "wood" ? "#854d0e" : "#64748b";
+      const ratio = resource.remainingAmount / resource.maxAmount;
+
+      ctx.fillStyle = this.resourceColor(resource.resourceType);
       ctx.beginPath();
-      ctx.roundRect(x - 14, y - 14, 28, 28, 8);
+      ctx.roundRect(x - 16, y - 16, 32, 32, 9);
       ctx.fill();
+
+      ctx.fillStyle = "rgba(0,0,0,0.55)";
+      ctx.fillRect(x - 22, y + 22, 44, 5);
+      ctx.fillStyle = "#facc15";
+      ctx.fillRect(x - 22, y + 22, 44 * ratio, 5);
+
       ctx.fillStyle = "#ffffff";
       ctx.font = "12px system-ui";
       ctx.textAlign = "center";
-      ctx.fillText(resource.resourceType, x, y - 20);
+      ctx.fillText(`${resource.resourceType} ${resource.remainingAmount}`, x, y - 22);
     }
   }
 
@@ -182,23 +218,55 @@ export class GameWorldScene {
       ctx.fillRect(x - 22, y + 22, 44 * (player.hp / player.maxHp), 5);
     }
   }
+
+  private drawInteractionHint(ctx: CanvasRenderingContext2D, cameraX: number, cameraY: number) {
+    const nearestId = this.getNearestInteractableId();
+    const target = this.snapshot?.resources.find((resource) => resource.id === nearestId);
+    if (!target) return;
+
+    const x = target.position.x - cameraX;
+    const y = target.position.y - cameraY;
+    ctx.strokeStyle = "#facc15";
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.roundRect(x - 23, y - 23, 46, 46, 12);
+    ctx.stroke();
+
+    ctx.fillStyle = "rgba(15, 23, 42, 0.82)";
+    ctx.beginPath();
+    ctx.roundRect(x - 55, y - 56, 110, 24, 8);
+    ctx.fill();
+    ctx.fillStyle = "#ffffff";
+    ctx.font = "12px system-ui";
+    ctx.fillText("E / 상호작용", x, y - 39);
+  }
+
+  private resourceColor(resourceType: ResourceNodeState["resourceType"]) {
+    if (resourceType === "wood") return "#854d0e";
+    if (resourceType === "stone") return "#64748b";
+    if (resourceType === "fiber") return "#22c55e";
+    if (resourceType === "berry") return "#dc2626";
+    return "#94a3b8";
+  }
 }
 
 export function GameScene({
   onReady,
   onInputChange,
+  onInteract,
 }: {
   onReady: (scene: GameWorldScene) => void;
   onInputChange: (input: GameSceneInput) => void;
+  onInteract: () => void;
 }) {
   const rootRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     if (!rootRef.current) return;
-    const scene = new GameWorldScene(rootRef.current, onInputChange);
+    const scene = new GameWorldScene(rootRef.current, onInputChange, onInteract);
     onReady(scene);
     return () => scene.destroy();
-  }, [onInputChange, onReady]);
+  }, [onInputChange, onInteract, onReady]);
 
   return <div ref={rootRef} className="game-canvas-root" aria-label="Game canvas" />;
 }
