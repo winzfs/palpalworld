@@ -353,6 +353,7 @@ export function GameClient() {
       socketRef.current.emit("client:place_building", {
         buildingType: building.type as BuildingType,
         position,
+        itemId: selectedBuildingItemId,
       });
       setSelectedBuildingItemId(null);
       return;
