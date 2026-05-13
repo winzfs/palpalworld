@@ -199,14 +199,14 @@ io.on("connection", (socket) => {
     socket.emit("server:toast", { type: "success", message: result.message });
   });
 
-  socket.on("client:place_building", ({ buildingType, position }) => {
-    const result = buildings.place(socket.id, buildingType, position);
+  socket.on("client:place_building", ({ buildingType, position, itemId }) => {
+    const result = buildings.place(socket.id, buildingType, position, itemId);
     if (!result.ok) {
       const reasonMessage = {
         missing_player: "플레이어 정보를 찾을 수 없습니다.",
         missing_building: "알 수 없는 건물입니다.",
         out_of_range: "너무 멀리 지을 수 없습니다.",
-        missing_materials: "건설 재료가 부족합니다.",
+        missing_materials: "건설 아이템이 없습니다.",
         blocked: "이미 다른 건물이 있는 위치입니다.",
       }[result.reason];
       socket.emit("server:toast", { type: "warning", message: reasonMessage });
