@@ -20,6 +20,11 @@ export type GameSceneInput = {
   secondary: boolean;
 };
 
+export type PlacementValidity = {
+  ok: boolean;
+  reason: string;
+};
+
 function distance(a: Vector2, b: Vector2) {
   return Math.hypot(a.x - b.x, a.y - b.y);
 }
@@ -40,13 +45,13 @@ export class GameWorldScene {
   private placementPreviewBuildingType: BuildingType | null = null;
   private onInputChange: (input: GameSceneInput) => void;
   private onInteract: () => void;
-  private onWorldClick: (position: Vector2) => void;
+  private onWorldClick: (position: Vector2, validity: PlacementValidity) => void;
 
   constructor(
     root: HTMLDivElement,
     onInputChange: (input: GameSceneInput) => void,
     onInteract: () => void,
-    onWorldClick: (position: Vector2) => void,
+    onWorldClick: (position: Vector2, validity: PlacementValidity) => void,
   ) {
     this.root = root;
     this.onInputChange = onInputChange;
@@ -121,7 +126,9 @@ export class GameWorldScene {
     return this.snapshot?.players.find((player) => player.id === this.localPlayerId)?.position ?? null;
   }
 
-  private getPlacementValidity(position: Vector2) {
+  getPlacementValidity(position: Vector2): PlacementValidity {
+    if (!this.placementPreviewBuildingType) return { ok: true, reason: "설치 모드가 아닙니다." };
+
     const localPlayer = this.getLocalPlayerPosition();
     if (!localPlayer) return { ok: false, reason: "플레이어 위치를 찾을 수 없습니다." };
 
@@ -169,7 +176,7 @@ export class GameWorldScene {
     if (event.button !== 0) return;
     const position = this.screenToWorld(event.clientX, event.clientY);
     this.pointerWorldPosition = position;
-    this.onWorldClick(position);
+    this.onWorldClick(position, this.getPlacementValidity(position));
   };
 
   private handlePointerMove = (event: PointerEvent) => {
@@ -343,7 +350,7 @@ export function GameScene({
   onReady: (scene: GameWorldScene) => void;
   onInputChange: (input: GameSceneInput) => void;
   onInteract: () => void;
-  onWorldClick: (position: Vector2) => void;
+  onWorldClick: (position: Vector2, validity: PlacementValidity) => void;
   placementBuildingType?: BuildingType | null;
 }) {
   const rootRef = useRef<HTMLDivElement | null>(null);
