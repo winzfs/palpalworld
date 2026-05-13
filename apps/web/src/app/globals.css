@@ -87,6 +87,65 @@ button {
   backdrop-filter: blur(10px);
 }
 
+.draggable-panel {
+  position: absolute;
+  max-width: calc(100vw - 8px);
+  overflow: hidden;
+  z-index: 6;
+}
+
+.draggable-panel:active {
+  z-index: 20;
+}
+
+.draggable-panel__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 36px;
+  padding: 7px 8px 7px 10px;
+  border-bottom: 1px solid rgb(250 204 21 / 0.34);
+  color: var(--jrpg-gold);
+  font-weight: 900;
+  background: linear-gradient(rgb(58 45 28 / 0.92), rgb(22 18 28 / 0.92));
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+
+.draggable-panel__header:active {
+  cursor: grabbing;
+}
+
+.draggable-panel__body {
+  padding: 10px;
+  max-height: min(42vh, 300px);
+  overflow: auto;
+}
+
+.draggable-panel--collapsed {
+  width: auto !important;
+  min-width: 120px;
+}
+
+.draggable-panel--collapsed .draggable-panel__header {
+  border-bottom: 0;
+}
+
+.draggable-panel__toggle {
+  flex: 0 0 auto;
+  min-height: 26px;
+  padding: 4px 7px;
+  border: 1px solid rgb(242 209 107 / 0.46);
+  border-radius: 7px;
+  background: rgb(0 0 0 / 0.26);
+  color: var(--jrpg-text);
+  font-size: 11px;
+  font-weight: 800;
+  touch-action: manipulation;
+}
+
 .pixel-panel__header {
   padding: 8px 10px;
   border-bottom: 1px solid rgb(250 204 21 / 0.34);
@@ -242,44 +301,12 @@ button {
   overflow-y: auto;
 }
 
-.top-left-panel {
-  position: absolute;
-  top: calc(12px + var(--safe-top));
-  left: calc(12px + var(--safe-left));
-  min-width: min(320px, calc(100vw - 24px));
-  padding: 12px;
-}
-
-.top-right-panel {
-  position: absolute;
-  top: calc(12px + var(--safe-top));
-  right: calc(12px + var(--safe-right));
-  width: min(300px, calc(100vw - 24px));
-  padding: 12px;
-}
-
-.bottom-left-panel {
-  position: absolute;
-  left: calc(12px + var(--safe-left));
-  bottom: calc(12px + var(--safe-bottom));
-  width: min(380px, calc(100vw - 24px));
-  padding: 12px;
-}
-
-.inventory-panel {
-  position: absolute;
-  right: calc(12px + var(--safe-right));
-  bottom: calc(12px + var(--safe-bottom));
-  width: min(360px, calc(100vw - 24px));
-  padding: 12px;
-}
-
+.top-left-panel,
+.top-right-panel,
+.bottom-left-panel,
+.inventory-panel,
 .build-panel {
-  position: absolute;
-  right: calc(12px + var(--safe-right));
-  top: calc(165px + var(--safe-top));
-  width: min(360px, calc(100vw - 24px));
-  padding: 12px;
+  display: none;
 }
 
 .inventory-grid,
@@ -410,32 +437,13 @@ button {
 }
 
 @media (max-width: 720px) {
-  .top-right-panel,
-  .bottom-left-panel {
-    display: none;
-  }
-
-  .top-left-panel {
-    min-width: unset;
-    width: calc(100vw - 24px - var(--safe-left) - var(--safe-right));
+  .draggable-panel {
     font-size: 12px;
   }
 
-  .inventory-panel {
-    right: calc(12px + var(--safe-right));
-    bottom: calc(178px + var(--safe-bottom));
-    width: min(220px, calc(100vw - 190px));
-    max-height: 190px;
-    overflow: hidden;
-  }
-
-  .build-panel {
-    top: calc(194px + var(--safe-top));
-    left: calc(12px + var(--safe-left));
-    right: auto;
-    width: min(220px, calc(100vw - 24px));
-    max-height: 210px;
-    overflow: hidden;
+  .draggable-panel__body {
+    max-height: 34vh;
+    padding: 8px;
   }
 
   .inventory-grid,
