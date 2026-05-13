@@ -10,7 +10,7 @@ export type GameSceneInput = {
   secondary: boolean;
 };
 
-export class GameScene {
+export class GameWorldScene {
   private root: HTMLDivElement;
   private canvas: HTMLCanvasElement;
   private context: CanvasRenderingContext2D;
@@ -184,23 +184,21 @@ export class GameScene {
   }
 }
 
-export function GameSceneComponent({
+export function GameScene({
   onReady,
   onInputChange,
 }: {
-  onReady: (scene: GameScene) => void;
+  onReady: (scene: GameWorldScene) => void;
   onInputChange: (input: GameSceneInput) => void;
 }) {
   const rootRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     if (!rootRef.current) return;
-    const scene = new GameScene(rootRef.current, onInputChange);
+    const scene = new GameWorldScene(rootRef.current, onInputChange);
     onReady(scene);
     return () => scene.destroy();
   }, [onInputChange, onReady]);
 
   return <div ref={rootRef} className="game-canvas-root" aria-label="Game canvas" />;
 }
-
-export { GameSceneComponent as GameScene };
