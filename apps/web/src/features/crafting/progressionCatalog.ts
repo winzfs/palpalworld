@@ -68,13 +68,32 @@ export function getBuildingItemId(buildingType: string) {
   return `building_${buildingType}`;
 }
 
+export function getBuildingTypeFromBuildingItemId(itemId: string) {
+  if (!itemId.startsWith("building_")) return null;
+  const buildingType = itemId.replace(/^building_/, "");
+  return getProgressionBuilding(buildingType)?.type ?? null;
+}
+
+export function getBuildingByRequiredItemId(itemId: string) {
+  return PROGRESSION_BUILDINGS.find(
+    (building) => building.requires.length === 1 && building.requires[0]?.itemId === itemId && building.requires[0]?.amount === 1,
+  ) ?? null;
+}
+
 export function isBuildingItemId(itemId: string) {
-  return itemId.startsWith("building_") && Boolean(getProgressionBuilding(itemId.replace(/^building_/, "")));
+  return Boolean(getBuildingTypeFromBuildingItemId(itemId) || getBuildingByRequiredItemId(itemId));
 }
 
 export function getProgressionBuildingByItemId(itemId: string) {
-  if (!itemId.startsWith("building_")) return null;
-  return getProgressionBuilding(itemId.replace(/^building_/, ""));
+  const buildingType = getBuildingTypeFromBuildingItemId(itemId);
+  if (buildingType) return getProgressionBuilding(buildingType);
+  return getBuildingByRequiredItemId(itemId);
+}
+
+export function getServerPlacementBuildingItemId(itemId: string) {
+  const building = getProgressionBuildingByItemId(itemId);
+  if (!building) return itemId;
+  return getBuildingItemId(building.type);
 }
 
 export function getProgressionRecipe(recipeId: string) {
