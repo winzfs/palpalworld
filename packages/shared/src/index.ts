@@ -76,6 +76,15 @@ export type CreatureSpecies = {
   drops: LootEntry[];
 };
 
+export type CreatureSpawnDefinition = {
+  id: EntityId;
+  speciesId: string;
+  regionId: RegionId;
+  position: Vector2;
+  level: number;
+  respawnMs: number;
+};
+
 export type RegionDefinition = {
   id: RegionId;
   name: string;
@@ -125,10 +134,13 @@ export type PlayerPublicState = {
 export type CreaturePublicState = {
   id: EntityId;
   speciesId: string;
+  regionId: RegionId;
   position: Vector2;
+  level: number;
   hp: number;
   maxHp: number;
   ownerPlayerId?: PlayerId;
+  respawnAt?: number;
 };
 
 export type ResourceNodeState = {
@@ -194,6 +206,9 @@ export const WORLD = {
   playerMoveSpeed: 180,
   interactRange: 72,
   buildRange: 160,
+  attackRange: 88,
+  playerAttackPower: 14,
+  playerAttackCooldownMs: 450,
   defaultResourceRespawnMs: 30_000,
 } as const;
 
