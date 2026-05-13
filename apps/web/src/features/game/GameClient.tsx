@@ -15,6 +15,7 @@ import type {
   Vector2,
   WorldSnapshot,
 } from "@palpalworld/shared";
+import { BuildingInteractionPanel } from "../buildings/BuildingInteractionPanel";
 import { CharacterPanel } from "../character/CharacterPanel";
 import { CraftingPanel } from "../crafting/CraftingPanel";
 import {
@@ -27,10 +28,10 @@ import { EquipmentPanel } from "../equipment/EquipmentPanel";
 import { InventoryPanel } from "../inventory/InventoryPanel";
 import { getItemLabel } from "../items/itemLabels";
 import { LogPanel } from "../logs/LogPanel";
-import { GameScene, type GameSceneInput, type GameWorldScene, type PlacementValidity } from "./GameScene";
+import { GameScene, type GameSceneInput, type GameWorldScene, type WorldClickTarget } from "./GameScene";
 
 type TypedSocket = Socket<ServerToClientEvents, ClientToServerEvents>;
-type PanelId = "status" | "objective" | "inventory" | "equipment" | "build" | "chat";
+type PanelId = "status" | "objective" | "inventory" | "equipment" | "build" | "buildingInteraction" | "chat";
 
 const configuredServerUrl = process.env.NEXT_PUBLIC_REALTIME_SERVER_URL;
 const demoPlayerId = "demo-player";
@@ -42,6 +43,7 @@ const panelDefaults: Record<PanelId, { x: number; y: number; width: number; coll
   inventory: { x: 8, y: 108, width: 340, collapsed: true },
   equipment: { x: 8, y: 156, width: 300, collapsed: true },
   build: { x: 8, y: 204, width: 420, collapsed: true },
+  buildingInteraction: { x: 440, y: 108, width: 340 },
   chat: { x: 8, y: 252, width: 320, collapsed: true },
 };
 
@@ -185,6 +187,7 @@ export function GameClient() {
   const [serverEndpoint, setServerEndpoint] = useState("");
   const [chatLines, setChatLines] = useState<string[]>([]);
   const [selectedBuildingItemId, setSelectedBuildingItemId] = useState<string | null>(null);
+  const [selectedBuilding, setSelectedBuilding] = useState<BuildingState | null>(null);
   const socketRef = useRef<TypedSocket | null>(null);
   const sceneRef = useRef<GameWorldScene | null>(null);
   const inputRef = useRef<GameSceneInput>({ x: 0, y: 0, primary: false, secondary: false });
@@ -214,6 +217,12 @@ export function GameClient() {
     setServerEndpoint(resolveRealtimeServerUrl());
     setInventory(createDemoInventory());
   }, []);
+
+  useEffect(() => {
+    if (!selectedBuilding) return;
+    const latest = snapshot?.buildings.find((building) => building.id === selectedBuilding.id) ?? null;
+    if (latest) setSelectedBuilding(latest);
+  }, [selectedBuilding, snapshot]);
 
   useEffect(() => {
     if (connectionState !== "error" && connectionState !== "offline") return;
@@ -339,6 +348,7 @@ export function GameClient() {
       return;
     }
 
+    setSelectedBuilding(null);
     setSelectedBuildingItemId((current) => {
       const next = current === itemId ? null : itemId;
       setChatLines((prev) => [...prev.slice(-5), next ? `[build] ${building.name} 배치 모드: 설치할 필드 위치를 클릭하세요.` : `[build] ${building.name} 배치 취소`]);
@@ -346,9 +356,17 @@ export function GameClient() {
     });
   }, []);
 
-  const handleWorldClick = useCallback((position: Vector2, validity: PlacementValidity) => {
+  const handleWorldClick = useCallback((target: WorldClickTarget) => {
+    if (target.kind === "building") {
+      setSelectedBuildingItemId(null);
+      setSelectedBuilding(target.building);
+      setChatLines((prev) => [...prev.slice(-5), `[build] ${target.building.type} 건설물 선택`]);
+      return;
+    }
+
     if (!selectedBuildingItemId) return;
 
+    const { position, validity } = target;
     const building = getProgressionBuildingByItemId(selectedBuildingItemId);
     if (!building) {
       setSelectedBuildingItemId(null);
@@ -379,19 +397,18 @@ export function GameClient() {
         return base;
       }
 
-      demoBuildingsRef.current = [
-        ...demoBuildingsRef.current,
-        {
-          id: `demo-building-${building.type}-${Date.now()}`,
-          type: building.type as BuildingType,
-          ownerPlayerId: demoPlayerId,
-          position,
-          hp: building.maxHp,
-          maxHp: building.maxHp,
-        },
-      ];
+      const placedBuilding: BuildingState = {
+        id: `demo-building-${building.type}-${Date.now()}`,
+        type: building.type as BuildingType,
+        ownerPlayerId: demoPlayerId,
+        position,
+        hp: building.maxHp,
+        maxHp: building.maxHp,
+      };
+      demoBuildingsRef.current = [...demoBuildingsRef.current, placedBuilding];
       setChatLines((prev) => [...prev.slice(-5), `[demo] ${building.name} 설치 완료`]);
       setSelectedBuildingItemId(null);
+      setSelectedBuilding(placedBuilding);
       applyDemoSnapshot();
       return consumed;
     });
@@ -431,7 +448,7 @@ export function GameClient() {
 
   const handleSceneReady = useCallback((scene: GameWorldScene) => { sceneRef.current = scene; }, []);
   const handleInputChange = useCallback((input: GameSceneInput) => { inputRef.current = input; }, []);
-  const objectiveText = useMemo(() => selectedBuildingItemId ? "배치 모드입니다. 초록색 위치에만 설치할 수 있습니다." : "건설물은 먼저 설치 아이템으로 제작한 뒤, 인벤토리의 건설 탭에서 선택하고 필드를 클릭해 설치하세요.", [selectedBuildingItemId]);
+  const objectiveText = useMemo(() => selectedBuildingItemId ? "배치 모드입니다. 초록색 위치에만 설치할 수 있습니다." : "건설물을 클릭하면 상호작용 패널이 열립니다.", [selectedBuildingItemId]);
 
   return (
     <main className={`game-shell ${selectedBuildingItemId ? "game-shell--placing" : ""}`}>
@@ -442,6 +459,15 @@ export function GameClient() {
         <DraggablePanel id="inventory" title="인벤토리"><InventoryPanel inventory={inventory} selectedBuildingItemId={selectedBuildingItemId} onSelectBuildingItem={handleSelectBuildingItem} /></DraggablePanel>
         <DraggablePanel id="equipment" title="장비"><EquipmentPanel inventory={inventory} /></DraggablePanel>
         <DraggablePanel id="build" title="제작 / 건설"><CraftingPanel onCraft={handleCraft} onCraftBuildingItem={handleCraftBuildingItem} /></DraggablePanel>
+        {selectedBuilding ? (
+          <DraggablePanel id="buildingInteraction" title="건설물">
+            <BuildingInteractionPanel
+              building={selectedBuilding}
+              onClose={() => setSelectedBuilding(null)}
+              onOpenCrafting={() => setChatLines((prev) => [...prev.slice(-5), "[build] 제작 패널을 열어 작업을 진행하세요."])}
+            />
+          </DraggablePanel>
+        ) : null}
         <DraggablePanel id="chat" title="로그"><LogPanel lines={chatLines} /></DraggablePanel>
         <MobileControls onInputChange={handleInputChange} onInteract={handleInteract} />
       </section>
