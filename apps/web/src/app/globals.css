@@ -100,27 +100,50 @@ button {
   padding: 12px;
 }
 
-.inventory-grid {
+.build-panel {
+  position: absolute;
+  right: calc(12px + var(--safe-right));
+  top: calc(165px + var(--safe-top));
+  width: min(360px, calc(100vw - 24px));
+  padding: 12px;
+}
+
+.inventory-grid,
+.control-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
   margin-top: 10px;
 }
 
-.inventory-slot {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+.inventory-slot,
+.control-grid button {
   min-height: 38px;
   padding: 8px 10px;
   border-radius: 12px;
   background: rgb(30 41 59 / 0.82);
   border: 1px solid rgb(255 255 255 / 0.1);
   font-size: 13px;
+  color: #f8fafc;
+}
+
+.inventory-slot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
 }
 
 .inventory-slot b {
   color: #facc15;
+}
+
+.control-grid button {
+  cursor: pointer;
+  text-align: left;
+}
+
+.control-grid button:active {
+  transform: translateY(1px);
 }
 
 .mobile-actions {
@@ -203,11 +226,22 @@ button {
     overflow: hidden;
   }
 
-  .inventory-grid {
+  .build-panel {
+    top: calc(194px + var(--safe-top));
+    left: calc(12px + var(--safe-left));
+    right: auto;
+    width: min(220px, calc(100vw - 24px));
+    max-height: 210px;
+    overflow: hidden;
+  }
+
+  .inventory-grid,
+  .control-grid {
     grid-template-columns: 1fr;
   }
 
-  .inventory-slot {
+  .inventory-slot,
+  .control-grid button {
     min-height: 32px;
     font-size: 12px;
     padding: 6px 8px;
