@@ -53,20 +53,24 @@ export class GameWorldScene {
   }
 
   getNearestInteractableId(): EntityId | null {
-    const localPlayer = this.snapshot?.players.find((player) => player.id === this.localPlayerId);
+    const localPlayer = this.getLocalPlayerPosition();
     if (!localPlayer || !this.snapshot) return null;
 
     let nearest: ResourceNodeState | null = null;
     let nearestDistance = Number.POSITIVE_INFINITY;
 
     for (const resource of this.snapshot.resources) {
-      const distance = Math.hypot(resource.position.x - localPlayer.position.x, resource.position.y - localPlayer.position.y);
+      const distance = Math.hypot(resource.position.x - localPlayer.x, resource.position.y - localPlayer.y);
       if (distance > WORLD.interactRange || distance >= nearestDistance) continue;
       nearest = resource;
       nearestDistance = distance;
     }
 
     return nearest?.id ?? null;
+  }
+
+  getLocalPlayerPosition() {
+    return this.snapshot?.players.find((player) => player.id === this.localPlayerId)?.position ?? null;
   }
 
   private resize = () => {
@@ -120,6 +124,7 @@ export class GameWorldScene {
     const cameraY = localPlayer ? localPlayer.position.y - rect.height / 2 : 0;
 
     this.drawGrid(ctx, rect.width, rect.height, cameraX, cameraY);
+    this.drawBuildings(ctx, cameraX, cameraY);
     this.drawResources(ctx, cameraX, cameraY);
     this.drawCreatures(ctx, cameraX, cameraY);
     this.drawPlayers(ctx, cameraX, cameraY);
@@ -152,6 +157,32 @@ export class GameWorldScene {
       ctx.moveTo(0, y);
       ctx.lineTo(width, y);
       ctx.stroke();
+    }
+  }
+
+  private drawBuildings(ctx: CanvasRenderingContext2D, cameraX: number, cameraY: number) {
+    if (!this.snapshot) return;
+    for (const building of this.snapshot.buildings) {
+      const x = building.position.x - cameraX;
+      const y = building.position.y - cameraY;
+
+      ctx.fillStyle = "#92400e";
+      ctx.strokeStyle = "#facc15";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.roundRect(x - 24, y - 24, 48, 48, 8);
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.fillStyle = "rgba(0,0,0,0.55)";
+      ctx.fillRect(x - 24, y + 30, 48, 5);
+      ctx.fillStyle = "#22c55e";
+      ctx.fillRect(x - 24, y + 30, 48 * (building.hp / building.maxHp), 5);
+
+      ctx.fillStyle = "#ffffff";
+      ctx.font = "12px system-ui";
+      ctx.textAlign = "center";
+      ctx.fillText(building.type, x, y - 32);
     }
   }
 
@@ -242,10 +273,12 @@ export class GameWorldScene {
   }
 
   private resourceColor(resourceType: ResourceNodeState["resourceType"]) {
-    if (resourceType === "wood") return "#854d0e";
-    if (resourceType === "stone") return "#64748b";
-    if (resourceType === "fiber") return "#22c55e";
+    if (resourceType === "wood" || resourceType === "hardwood") return "#854d0e";
+    if (resourceType === "stone" || resourceType === "ore" || resourceType === "coal") return "#64748b";
+    if (resourceType === "fiber" || resourceType === "herb") return "#22c55e";
     if (resourceType === "berry") return "#dc2626";
+    if (resourceType === "ice_crystal") return "#67e8f9";
+    if (resourceType === "ember_shard") return "#f97316";
     return "#94a3b8";
   }
 }
