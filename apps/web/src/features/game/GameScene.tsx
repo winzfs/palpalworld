@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { WORLD, type EntityId, type ResourceNodeState, type WorldSnapshot } from "@palpalworld/shared";
+import { WORLD, type EntityId, type ResourceNodeState, type Vector2, type WorldSnapshot } from "@palpalworld/shared";
 import { SpriteRenderer } from "../rendering/SpriteRenderer";
 
 export type GameSceneInput = {
@@ -19,6 +19,8 @@ export class GameWorldScene {
   private keys = new Set<string>();
   private animationFrame = 0;
   private snapshot: WorldSnapshot | null = null;
+  private previousPlayerPositions = new Map<string, Vector2>();
+  private movingPlayerIds = new Set<string>();
   private localPlayerId: string | null = null;
   private onInputChange: (input: GameSceneInput) => void;
   private onInteract: () => void;
@@ -51,6 +53,15 @@ export class GameWorldScene {
   }
 
   applySnapshot(snapshot: WorldSnapshot, localPlayerId: string | null) {
+    this.movingPlayerIds.clear();
+
+    for (const player of snapshot.players) {
+      const previous = this.previousPlayerPositions.get(player.id);
+      const moved = previous ? Math.hypot(player.position.x - previous.x, player.position.y - previous.y) > 0.15 : false;
+      if (moved) this.movingPlayerIds.add(player.id);
+      this.previousPlayerPositions.set(player.id, { ...player.position });
+    }
+
     this.snapshot = snapshot;
     this.localPlayerId = localPlayerId;
   }
@@ -126,12 +137,13 @@ export class GameWorldScene {
     const localPlayer = this.snapshot?.players.find((player) => player.id === this.localPlayerId);
     const cameraX = localPlayer ? localPlayer.position.x - rect.width / 2 : 0;
     const cameraY = localPlayer ? localPlayer.position.y - rect.height / 2 : 0;
+    const now = performance.now();
 
     this.drawGrid(ctx, rect.width, rect.height, cameraX, cameraY);
     this.drawBuildings(ctx, cameraX, cameraY);
     this.drawResources(ctx, cameraX, cameraY);
     this.drawCreatures(ctx, cameraX, cameraY);
-    this.drawPlayers(ctx, cameraX, cameraY);
+    this.drawPlayers(ctx, cameraX, cameraY, now);
     this.drawInteractionHint(ctx, cameraX, cameraY);
   }
 
@@ -185,11 +197,12 @@ export class GameWorldScene {
     }
   }
 
-  private drawPlayers(ctx: CanvasRenderingContext2D, cameraX: number, cameraY: number) {
+  private drawPlayers(ctx: CanvasRenderingContext2D, cameraX: number, cameraY: number, now: number) {
     if (!this.snapshot) return;
     for (const player of this.snapshot.players) {
       const isLocal = player.id === this.localPlayerId;
-      this.renderer.drawPlayer(ctx, player, player.position.x - cameraX, player.position.y - cameraY, isLocal);
+      const isMoving = this.movingPlayerIds.has(player.id);
+      this.renderer.drawPlayer(ctx, player, player.position.x - cameraX, player.position.y - cameraY, isLocal, isMoving, now);
     }
   }
 
