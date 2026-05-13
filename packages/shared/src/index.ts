@@ -73,7 +73,7 @@ export type CreatureSpecies = {
   baseDefense: number;
   baseMoveSpeed: number;
   workSkills: Partial<Record<WorkSkill, number>>;
-  drops: LootEntry[];
+  drops: readonly LootEntry[];
 };
 
 export type CreatureSpawnDefinition = {
@@ -88,9 +88,9 @@ export type CreatureSpawnDefinition = {
 export type RegionDefinition = {
   id: RegionId;
   name: string;
-  recommendedLevel: [number, number];
-  resourceTypes: ResourceType[];
-  creatureSpeciesIds: string[];
+  recommendedLevel: readonly [number, number];
+  resourceTypes: readonly ResourceType[];
+  creatureSpeciesIds: readonly string[];
   description: string;
 };
 
@@ -100,15 +100,15 @@ export type ResourceDefinition = {
   baseAmount: number;
   respawnMs: number;
   harvestTool?: "axe" | "pickaxe" | "sickle";
-  drops: LootEntry[];
+  drops: readonly LootEntry[];
 };
 
 export type CraftingRecipe = {
   id: string;
   name: string;
   station: "hand" | "workbench" | "furnace" | "campfire";
-  inputs: ItemStack[];
-  outputs: ItemStack[];
+  inputs: readonly ItemStack[];
+  outputs: readonly ItemStack[];
   craftTimeMs: number;
 };
 
@@ -117,7 +117,7 @@ export type BuildingDefinition = {
   name: string;
   size: { width: number; height: number };
   maxHp: number;
-  requires: ItemStack[];
+  requires: readonly ItemStack[];
   unlockLevel: number;
   description: string;
 };
