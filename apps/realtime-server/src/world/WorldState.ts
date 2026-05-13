@@ -1,5 +1,6 @@
 import type { BuildingState, CreaturePublicState, PlayerPublicState, ResourceNodeState, WorldSnapshot } from "@palpalworld/shared";
 import { CREATURE_CATALOG, STARTER_CREATURE_SPAWNS, STARTER_RESOURCE_NODES, WORLD } from "@palpalworld/shared";
+import { getEntityTileById } from "../../../../packages/shared/src/worldTiles";
 
 export class WorldState {
   readonly players = new Map<string, PlayerPublicState>();
@@ -24,7 +25,11 @@ export class WorldState {
 
   private seedStarterIsland() {
     for (const resource of STARTER_RESOURCE_NODES) {
-      this.resources.set(resource.id, { ...resource, position: { ...resource.position } });
+      this.resources.set(resource.id, {
+        ...resource,
+        position: { ...resource.position },
+        currentTile: getEntityTileById(resource.id),
+      } as ResourceNodeState);
     }
 
     for (const spawn of STARTER_CREATURE_SPAWNS) {
@@ -39,11 +44,12 @@ export class WorldState {
         speciesId: spawn.speciesId,
         regionId: spawn.regionId,
         position: { ...spawn.position },
+        currentTile: getEntityTileById(spawn.id),
         level: spawn.level,
         hp: maxHp,
         maxHp,
         traitIds,
-      });
+      } as CreaturePublicState);
     }
   }
 }
