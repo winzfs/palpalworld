@@ -26,11 +26,18 @@ export class GameWorldScene {
   private localPlayerId: string | null = null;
   private onInputChange: (input: GameSceneInput) => void;
   private onInteract: () => void;
+  private onWorldClick: (position: Vector2) => void;
 
-  constructor(root: HTMLDivElement, onInputChange: (input: GameSceneInput) => void, onInteract: () => void) {
+  constructor(
+    root: HTMLDivElement,
+    onInputChange: (input: GameSceneInput) => void,
+    onInteract: () => void,
+    onWorldClick: (position: Vector2) => void,
+  ) {
     this.root = root;
     this.onInputChange = onInputChange;
     this.onInteract = onInteract;
+    this.onWorldClick = onWorldClick;
     this.canvas = document.createElement("canvas");
     this.canvas.style.width = "100%";
     this.canvas.style.height = "100%";
@@ -42,6 +49,7 @@ export class GameWorldScene {
     window.addEventListener("resize", this.resize);
     window.addEventListener("keydown", this.handleKeyDown);
     window.addEventListener("keyup", this.handleKeyUp);
+    this.canvas.addEventListener("pointerdown", this.handlePointerDown);
     this.resize();
     this.loop();
   }
@@ -51,6 +59,7 @@ export class GameWorldScene {
     window.removeEventListener("resize", this.resize);
     window.removeEventListener("keydown", this.handleKeyDown);
     window.removeEventListener("keyup", this.handleKeyUp);
+    this.canvas.removeEventListener("pointerdown", this.handlePointerDown);
     this.canvas.remove();
   }
 
@@ -89,6 +98,24 @@ export class GameWorldScene {
     return this.snapshot?.players.find((player) => player.id === this.localPlayerId)?.position ?? null;
   }
 
+  private getCameraOffset() {
+    const rect = this.root.getBoundingClientRect();
+    const localPlayer = this.snapshot?.players.find((player) => player.id === this.localPlayerId);
+    return {
+      x: localPlayer ? localPlayer.position.x - rect.width / 2 : 0,
+      y: localPlayer ? localPlayer.position.y - rect.height / 2 : 0,
+    };
+  }
+
+  private screenToWorld(clientX: number, clientY: number): Vector2 {
+    const rect = this.canvas.getBoundingClientRect();
+    const camera = this.getCameraOffset();
+    return {
+      x: clientX - rect.left + camera.x,
+      y: clientY - rect.top + camera.y,
+    };
+  }
+
   private resize = () => {
     const dpr = Math.max(1, Math.min(window.devicePixelRatio || 1, 2));
     const rect = this.root.getBoundingClientRect();
@@ -96,6 +123,11 @@ export class GameWorldScene {
     this.canvas.height = Math.floor(rect.height * dpr);
     this.context.setTransform(dpr, 0, 0, dpr, 0, 0);
     this.context.imageSmoothingEnabled = false;
+  };
+
+  private handlePointerDown = (event: PointerEvent) => {
+    if (event.button !== 0) return;
+    this.onWorldClick(this.screenToWorld(event.clientX, event.clientY));
   };
 
   private handleKeyDown = (event: KeyboardEvent) => {
@@ -136,17 +168,15 @@ export class GameWorldScene {
     const ctx = this.context;
     ctx.clearRect(0, 0, rect.width, rect.height);
 
-    const localPlayer = this.snapshot?.players.find((player) => player.id === this.localPlayerId);
-    const cameraX = localPlayer ? localPlayer.position.x - rect.width / 2 : 0;
-    const cameraY = localPlayer ? localPlayer.position.y - rect.height / 2 : 0;
+    const camera = this.getCameraOffset();
     const now = performance.now();
 
-    this.tileMapRenderer.draw(ctx, rect.width, rect.height, cameraX, cameraY);
-    this.drawBuildings(ctx, cameraX, cameraY);
-    this.drawResources(ctx, cameraX, cameraY);
-    this.drawCreatures(ctx, cameraX, cameraY);
-    this.drawPlayers(ctx, cameraX, cameraY, now);
-    this.drawInteractionHint(ctx, cameraX, cameraY);
+    this.tileMapRenderer.draw(ctx, rect.width, rect.height, camera.x, camera.y);
+    this.drawBuildings(ctx, camera.x, camera.y);
+    this.drawResources(ctx, camera.x, camera.y);
+    this.drawCreatures(ctx, camera.x, camera.y);
+    this.drawPlayers(ctx, camera.x, camera.y, now);
+    this.drawInteractionHint(ctx, camera.x, camera.y);
   }
 
   private drawBuildings(ctx: CanvasRenderingContext2D, cameraX: number, cameraY: number) {
@@ -207,19 +237,21 @@ export function GameScene({
   onReady,
   onInputChange,
   onInteract,
+  onWorldClick,
 }: {
   onReady: (scene: GameWorldScene) => void;
   onInputChange: (input: GameSceneInput) => void;
   onInteract: () => void;
+  onWorldClick: (position: Vector2) => void;
 }) {
   const rootRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     if (!rootRef.current) return;
-    const scene = new GameWorldScene(rootRef.current, onInputChange, onInteract);
+    const scene = new GameWorldScene(rootRef.current, onInputChange, onInteract, onWorldClick);
     onReady(scene);
     return () => scene.destroy();
-  }, [onInputChange, onInteract, onReady]);
+  }, [onInputChange, onInteract, onWorldClick, onReady]);
 
   return <div ref={rootRef} className="game-canvas-root" aria-label="Game canvas" />;
 }
