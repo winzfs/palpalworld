@@ -1,4 +1,5 @@
 import type { EquipmentSlot, EquipmentState, InventoryState, ItemInstanceId } from "@palpalworld/shared";
+import { getIconAsset } from "../assets/assetCatalog";
 import { getItemLabel } from "../items/itemLabels";
 import { ItemSlot } from "../ui/ItemSlot";
 
@@ -20,9 +21,9 @@ export function EquipmentPanel({
   onUnequip,
 }: {
   inventory: InventoryState | null;
-  equipment: EquipmentState | null;
-  onEquip: (itemInstanceId: ItemInstanceId) => void;
-  onUnequip: (slot: EquipmentSlot) => void;
+  equipment?: EquipmentState | null;
+  onEquip?: (itemInstanceId: ItemInstanceId) => void;
+  onUnequip?: (slot: EquipmentSlot) => void;
 }) {
   const instances = inventory?.itemInstances ?? [];
   const equippedInstanceIds = new Set(Object.values(equipment?.slots ?? {}).filter(Boolean));
@@ -35,13 +36,15 @@ export function EquipmentPanel({
         {equipmentSlots.map((slot) => {
           const equippedId = equipment?.slots[slot.id];
           const equippedItem = equippedId ? instances.find((item) => item.instanceId === equippedId) : null;
+          const icon = equippedItem ? getIconAsset(equippedItem.itemId) : null;
           return (
             <ItemSlot
               key={slot.id}
               label={slot.label}
               detail={equippedItem ? `${getItemLabel(equippedItem.itemId)} Lv.${equippedItem.level}` : "비어 있음"}
+              iconSrc={icon?.src}
               selected={Boolean(equippedItem)}
-              onClick={equippedItem ? () => onUnequip(slot.id) : undefined}
+              onClick={equippedItem && onUnequip ? () => onUnequip(slot.id) : undefined}
             />
           );
         })}
@@ -50,14 +53,18 @@ export function EquipmentPanel({
       <div className="feature-panel__section-title">착용 가능 장비</div>
       <div className="inventory-grid">
         {availableInstances.length > 0 ? (
-          availableInstances.map((item) => (
-            <ItemSlot
-              key={item.instanceId}
-              label={getItemLabel(item.itemId)}
-              detail={`Lv.${item.level}${item.traitIds.length > 0 ? ` · ${item.traitIds.join(", ")}` : ""}`}
-              onClick={() => onEquip(item.instanceId)}
-            />
-          ))
+          availableInstances.map((item) => {
+            const icon = getIconAsset(item.itemId);
+            return (
+              <ItemSlot
+                key={item.instanceId}
+                label={getItemLabel(item.itemId)}
+                detail={`Lv.${item.level}${item.traitIds.length > 0 ? ` · ${item.traitIds.join(", ")}` : ""}`}
+                iconSrc={icon?.src}
+                onClick={onEquip ? () => onEquip(item.instanceId) : undefined}
+              />
+            );
+          })
         ) : (
           <div className="feature-panel__empty">착용 가능한 장비가 없습니다.</div>
         )}
