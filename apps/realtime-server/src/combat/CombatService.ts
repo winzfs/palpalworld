@@ -42,7 +42,7 @@ export class CombatService {
     if (targetDistance > WORLD.attackRange) return { ok: false, reason: "out_of_range" };
 
     const species = this.creatures.getSpecies(target);
-    const defenderDefense = species?.baseDefense ?? 5;
+    const defenderDefense = this.creatures.calculateDefense(target);
     const damage = calculateDamage({
       attackerLevel: 1,
       attack: WORLD.playerAttackPower,
