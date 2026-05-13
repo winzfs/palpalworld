@@ -1,6 +1,7 @@
 import type {
   BuildingDefinition,
   CraftingRecipe,
+  CreatureSpawnDefinition,
   CreatureSpecies,
   ItemDefinition,
   RegionDefinition,
@@ -477,4 +478,13 @@ export const STARTER_RESOURCE_NODES: ResourceNodeState[] = [
   { id: "forest-hardwood-1", regionId: "moss_forest", resourceType: "hardwood", position: { x: 900, y: 260 }, remainingAmount: 140, maxAmount: 140 },
   { id: "hills-ore-1", regionId: "stone_hills", resourceType: "ore", position: { x: 1020, y: 520 }, remainingAmount: 120, maxAmount: 120 },
   { id: "hills-coal-1", regionId: "stone_hills", resourceType: "coal", position: { x: 1120, y: 440 }, remainingAmount: 100, maxAmount: 100 },
+];
+
+export const STARTER_CREATURE_SPAWNS: CreatureSpawnDefinition[] = [
+  { id: "spawn-leafbun-1", speciesId: "leafbun", regionId: "starter_meadow", position: { x: 380, y: 330 }, level: 2, respawnMs: 25_000 },
+  { id: "spawn-leafbun-2", speciesId: "leafbun", regionId: "starter_meadow", position: { x: 620, y: 250 }, level: 3, respawnMs: 25_000 },
+  { id: "spawn-droplet-1", speciesId: "droplet", regionId: "starter_meadow", position: { x: 760, y: 420 }, level: 3, respawnMs: 30_000 },
+  { id: "spawn-sparkit-1", speciesId: "sparkit", regionId: "starter_meadow", position: { x: 560, y: 520 }, level: 4, respawnMs: 35_000 },
+  { id: "spawn-mossboar-1", speciesId: "mossboar", regionId: "moss_forest", position: { x: 960, y: 310 }, level: 8, respawnMs: 45_000 },
+  { id: "spawn-rockturtle-1", speciesId: "rockturtle", regionId: "stone_hills", position: { x: 1080, y: 560 }, level: 10, respawnMs: 45_000 },
 ];
