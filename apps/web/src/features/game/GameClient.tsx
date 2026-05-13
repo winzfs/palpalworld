@@ -184,6 +184,7 @@ export function GameClient() {
   const [connectionState, setConnectionState] = useState("preparing");
   const [serverEndpoint, setServerEndpoint] = useState("");
   const [chatLines, setChatLines] = useState<string[]>([]);
+  const [selectedBuildingItemId, setSelectedBuildingItemId] = useState<string | null>(null);
   const socketRef = useRef<TypedSocket | null>(null);
   const sceneRef = useRef<GameWorldScene | null>(null);
   const inputRef = useRef<GameSceneInput>({ x: 0, y: 0, primary: false, secondary: false });
@@ -320,34 +321,49 @@ export function GameClient() {
         setChatLines((prev) => [...prev.slice(-5), `[demo] ${building.name} 설치 아이템 재료 부족: ${building.requires.map((i) => `${getItemLabel(i.itemId)} ${i.amount}`).join(" · ")}`]);
         return base;
       }
-      setChatLines((prev) => [...prev.slice(-5), `[demo] ${building.name} 설치 아이템 제작 완료. 인벤토리 건설 탭에서 설치하세요.`]);
+      setChatLines((prev) => [...prev.slice(-5), `[demo] ${building.name} 설치 아이템 제작 완료. 인벤토리 건설 탭에서 선택한 뒤 필드를 클릭하세요.`]);
       return addInventoryItem(consumed, itemId, 1);
     });
   }, []);
 
-  const handlePlaceBuildingItem = useCallback((itemId: string) => {
+  const handleSelectBuildingItem = useCallback((itemId: string) => {
     const building = getProgressionBuildingByItemId(itemId);
     if (!building) {
-      setChatLines((prev) => [...prev.slice(-5), `[demo] 설치할 수 없는 아이템: ${getItemLabel(itemId)}`]);
+      setChatLines((prev) => [...prev.slice(-5), `[info] 설치할 수 없는 아이템: ${getItemLabel(itemId)}`]);
       return;
     }
 
-    const position = sceneRef.current?.getLocalPlayerPosition() ?? demoPositionRef.current;
-    const targetPosition = { x: position.x + 64, y: position.y };
+    setSelectedBuildingItemId((current) => {
+      const next = current === itemId ? null : itemId;
+      setChatLines((prev) => [...prev.slice(-5), next ? `[build] ${building.name} 배치 모드: 설치할 필드 위치를 클릭하세요.` : `[build] ${building.name} 배치 취소`]);
+      return next;
+    });
+  }, []);
+
+  const handleWorldClick = useCallback((position: Vector2) => {
+    if (!selectedBuildingItemId) return;
+
+    const building = getProgressionBuildingByItemId(selectedBuildingItemId);
+    if (!building) {
+      setSelectedBuildingItemId(null);
+      return;
+    }
 
     if (socketRef.current?.connected) {
       socketRef.current.emit("client:place_building", {
         buildingType: building.type as BuildingType,
-        position: targetPosition,
+        position,
       });
+      setSelectedBuildingItemId(null);
       return;
     }
 
     setInventory((current) => {
       const base = current ?? createDemoInventory();
-      const consumed = consumeInventoryItems(base, [{ itemId, amount: 1 }]);
+      const consumed = consumeInventoryItems(base, [{ itemId: selectedBuildingItemId, amount: 1 }]);
       if (!consumed) {
         setChatLines((prev) => [...prev.slice(-5), `[demo] ${building.name} 설치 아이템이 없습니다.`]);
+        setSelectedBuildingItemId(null);
         return base;
       }
 
@@ -357,16 +373,17 @@ export function GameClient() {
           id: `demo-building-${building.type}-${Date.now()}`,
           type: building.type as BuildingType,
           ownerPlayerId: demoPlayerId,
-          position: targetPosition,
+          position,
           hp: building.maxHp,
           maxHp: building.maxHp,
         },
       ];
       setChatLines((prev) => [...prev.slice(-5), `[demo] ${building.name} 설치 완료`]);
+      setSelectedBuildingItemId(null);
       applyDemoSnapshot();
       return consumed;
     });
-  }, [applyDemoSnapshot]);
+  }, [applyDemoSnapshot, selectedBuildingItemId]);
 
   useEffect(() => {
     if (nickname === "..." || !serverEndpoint) return;
@@ -402,15 +419,15 @@ export function GameClient() {
 
   const handleSceneReady = useCallback((scene: GameWorldScene) => { sceneRef.current = scene; }, []);
   const handleInputChange = useCallback((input: GameSceneInput) => { inputRef.current = input; }, []);
-  const objectiveText = useMemo(() => "건설물은 먼저 설치 아이템으로 제작한 뒤, 인벤토리의 건설 탭에서 눌러 필드에 설치하세요.", []);
+  const objectiveText = useMemo(() => selectedBuildingItemId ? "배치 모드입니다. 설치할 필드 위치를 클릭하세요." : "건설물은 먼저 설치 아이템으로 제작한 뒤, 인벤토리의 건설 탭에서 선택하고 필드를 클릭해 설치하세요.", [selectedBuildingItemId]);
 
   return (
-    <main className="game-shell">
-      <GameScene onReady={handleSceneReady} onInputChange={handleInputChange} onInteract={handleInteract} />
+    <main className={`game-shell ${selectedBuildingItemId ? "game-shell--placing" : ""}`}>
+      <GameScene onReady={handleSceneReady} onInputChange={handleInputChange} onInteract={handleInteract} onWorldClick={handleWorldClick} />
       <section className="game-hud" aria-label="Game HUD">
         <DraggablePanel id="status" title="캐릭터"><CharacterPanel nickname={nickname} connectionState={connectionState} serverEndpoint={serverEndpoint} snapshot={snapshot} /></DraggablePanel>
         <DraggablePanel id="objective" title="목표"><p>{objectiveText}</p></DraggablePanel>
-        <DraggablePanel id="inventory" title="인벤토리"><InventoryPanel inventory={inventory} onPlaceBuildingItem={handlePlaceBuildingItem} /></DraggablePanel>
+        <DraggablePanel id="inventory" title="인벤토리"><InventoryPanel inventory={inventory} selectedBuildingItemId={selectedBuildingItemId} onSelectBuildingItem={handleSelectBuildingItem} /></DraggablePanel>
         <DraggablePanel id="equipment" title="장비"><EquipmentPanel inventory={inventory} /></DraggablePanel>
         <DraggablePanel id="build" title="제작 / 건설"><CraftingPanel onCraft={handleCraft} onCraftBuildingItem={handleCraftBuildingItem} /></DraggablePanel>
         <DraggablePanel id="chat" title="로그"><LogPanel lines={chatLines} /></DraggablePanel>
