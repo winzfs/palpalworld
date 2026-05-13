@@ -17,10 +17,26 @@ import { StatService } from "./stats/StatService";
 import { WorldState } from "./world/WorldState";
 
 const port = Number(process.env.PORT ?? 4000);
-const clientOrigin = process.env.CLIENT_ORIGIN ?? "http://localhost:3000";
+const configuredClientOrigin = process.env.CLIENT_ORIGIN;
+
+function isAllowedOrigin(origin: string | undefined) {
+  if (!origin) return true;
+  if (configuredClientOrigin && origin === configuredClientOrigin) return true;
+  if (origin.startsWith("http://localhost:")) return true;
+  if (origin.startsWith("http://127.0.0.1:")) return true;
+  if (origin.includes(".app.github.dev")) return true;
+  if (origin.includes(".githubpreview.dev")) return true;
+  return false;
+}
+
+const corsOptions = {
+  origin(origin: string | undefined, callback: (error: Error | null, allow?: boolean) => void) {
+    callback(null, isAllowedOrigin(origin));
+  },
+};
 
 const app = express();
-app.use(cors({ origin: clientOrigin }));
+app.use(cors(corsOptions));
 
 app.get("/health", (_req, res) => {
   res.json({ ok: true, service: "palpalworld-realtime-server" });
@@ -30,7 +46,9 @@ const httpServer = createServer(app);
 
 const io = new Server<ClientToServerEvents, ServerToClientEvents>(httpServer, {
   cors: {
-    origin: clientOrigin,
+    origin(origin, callback) {
+      callback(null, isAllowedOrigin(origin));
+    },
     methods: ["GET", "POST"],
   },
 });
@@ -58,13 +76,6 @@ function createPlayer(socketId: string, nickname: string): PlayerPublicState {
     hp: profile.stats.maxHp,
     maxHp: profile.stats.maxHp,
   };
-}
-
-function emitProfile(playerId: string) {
-  const socket = io.sockets.sockets.get(playerId);
-  if (!socket) return;
-  socket.emit("server:equipment_updated", equipment.getEquipment(playerId));
-  socket.emit("server:player_profile_updated", players.getPlayerProfile(playerId));
 }
 
 function handleAttack(playerId: string) {
@@ -269,6 +280,6 @@ setInterval(() => {
   io.emit("server:world_snapshot", world.createSnapshot());
 }, WORLD.snapshotRateMs);
 
-httpServer.listen(port, () => {
-  console.log(`PalPalWorld realtime server listening on http://localhost:${port}`);
+httpServer.listen(port, "0.0.0.0", () => {
+  console.log(`PalPalWorld realtime server listening on http://0.0.0.0:${port}`);
 });
