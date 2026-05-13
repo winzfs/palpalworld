@@ -1,4 +1,4 @@
-import type { RegionId } from "./index";
+import type { RegionId, Vector2 } from "./index";
 
 export type MapDirection = "north" | "south" | "west" | "east";
 
@@ -79,6 +79,39 @@ export function getAllStarterTiles() {
     }
   }
   return result;
+}
+
+export function clampPositionToTile(position: Vector2): Vector2 {
+  return {
+    x: Math.max(0, Math.min(MAP_TILE_SIZE.width, position.x)),
+    y: Math.max(0, Math.min(MAP_TILE_SIZE.height, position.y)),
+  };
+}
+
+export function getPortalPosition(direction: MapDirection): Vector2 {
+  if (direction === "north") return { x: MAP_TILE_SIZE.width / 2, y: MAP_TILE_SIZE.portalMargin };
+  if (direction === "south") return { x: MAP_TILE_SIZE.width / 2, y: MAP_TILE_SIZE.height - MAP_TILE_SIZE.portalMargin };
+  if (direction === "west") return { x: MAP_TILE_SIZE.portalMargin, y: MAP_TILE_SIZE.height / 2 };
+  return { x: MAP_TILE_SIZE.width - MAP_TILE_SIZE.portalMargin, y: MAP_TILE_SIZE.height / 2 };
+}
+
+export function getPortalDirectionAtPosition(position: Vector2, currentTile: MapTileRef): MapDirection | null {
+  const tile = getMapTile(currentTile);
+  if (!tile) return null;
+  const directions: MapDirection[] = ["north", "south", "west", "east"];
+  for (const direction of directions) {
+    if (!tile.exits[direction]) continue;
+    const portal = getPortalPosition(direction);
+    if (Math.hypot(position.x - portal.x, position.y - portal.y) <= MAP_TILE_SIZE.portalRadius) return direction;
+  }
+  return null;
+}
+
+export function getSpawnPositionAfterTravel(direction: MapDirection): Vector2 {
+  if (direction === "east") return { x: MAP_TILE_SIZE.portalMargin + 96, y: MAP_TILE_SIZE.height / 2 };
+  if (direction === "west") return { x: MAP_TILE_SIZE.width - MAP_TILE_SIZE.portalMargin - 96, y: MAP_TILE_SIZE.height / 2 };
+  if (direction === "south") return { x: MAP_TILE_SIZE.width / 2, y: MAP_TILE_SIZE.portalMargin + 96 };
+  return { x: MAP_TILE_SIZE.width / 2, y: MAP_TILE_SIZE.height - MAP_TILE_SIZE.portalMargin - 96 };
 }
 
 export function getEntityTileById(entityId: string): MapTileRef {
