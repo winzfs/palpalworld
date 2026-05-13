@@ -5,6 +5,8 @@ import { Server } from "socket.io";
 import { normalizeVector } from "@palpalworld/game-core";
 import type { ClientToServerEvents, PlayerInputPayload, PlayerPublicState, ServerToClientEvents } from "@palpalworld/shared";
 import { WORLD } from "@palpalworld/shared";
+import { BuildingService } from "./buildings/BuildingService";
+import { CraftingService } from "./crafting/CraftingService";
 import { InventoryStore } from "./inventory/InventoryStore";
 import { ResourceService } from "./resources/ResourceService";
 import { WorldState } from "./world/WorldState";
@@ -31,6 +33,8 @@ const io = new Server<ClientToServerEvents, ServerToClientEvents>(httpServer, {
 const world = new WorldState();
 const inventories = new InventoryStore();
 const resources = new ResourceService(world);
+const crafting = new CraftingService(inventories);
+const buildings = new BuildingService(world, inventories);
 const lastInputs = new Map<string, PlayerInputPayload["movement"]>();
 
 function createPlayer(socketId: string, nickname: string): PlayerPublicState {
@@ -78,12 +82,46 @@ io.on("connection", (socket) => {
       return;
     }
 
-    socket.emit("server:inventory_updated", inventories.addItem(socket.id, result.itemId, result.amount));
+    socket.emit("server:inventory_updated", inventories.addItems(socket.id, result.drops));
     socket.emit("server:toast", {
       type: "success",
-      message: `${result.itemId} ${result.amount}개를 획득했습니다.`,
+      message: result.drops.map((drop) => `${drop.itemId} ${drop.amount}개`).join(", ") + " 획득",
     });
     io.emit("server:entity_updated", result.resource);
+  });
+
+  socket.on("client:craft_item", ({ recipeId }) => {
+    const result = crafting.craft(socket.id, recipeId);
+    if (!result.ok) {
+      const reasonMessage = {
+        missing_recipe: "알 수 없는 제작법입니다.",
+        missing_materials: "재료가 부족합니다.",
+      }[result.reason];
+      socket.emit("server:toast", { type: "warning", message: reasonMessage });
+      return;
+    }
+
+    socket.emit("server:inventory_updated", result.inventory);
+    socket.emit("server:toast", { type: "success", message: result.message });
+  });
+
+  socket.on("client:place_building", ({ buildingType, position }) => {
+    const result = buildings.place(socket.id, buildingType, position);
+    if (!result.ok) {
+      const reasonMessage = {
+        missing_player: "플레이어 정보를 찾을 수 없습니다.",
+        missing_building: "알 수 없는 건물입니다.",
+        out_of_range: "너무 멀리 지을 수 없습니다.",
+        missing_materials: "건설 재료가 부족합니다.",
+        blocked: "이미 다른 건물이 있는 위치입니다.",
+      }[result.reason];
+      socket.emit("server:toast", { type: "warning", message: reasonMessage });
+      return;
+    }
+
+    socket.emit("server:inventory_updated", inventories.getInventory(socket.id));
+    socket.emit("server:toast", { type: "success", message: result.message });
+    io.emit("server:entity_spawned", result.building);
   });
 
   socket.on("client:chat_message", ({ message }) => {
