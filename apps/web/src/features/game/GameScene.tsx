@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { WORLD, type EntityId, type ResourceNodeState, type WorldSnapshot } from "@palpalworld/shared";
+import { SpriteRenderer } from "../rendering/SpriteRenderer";
 
 export type GameSceneInput = {
   x: number;
@@ -14,6 +15,7 @@ export class GameWorldScene {
   private root: HTMLDivElement;
   private canvas: HTMLCanvasElement;
   private context: CanvasRenderingContext2D;
+  private renderer = new SpriteRenderer();
   private keys = new Set<string>();
   private animationFrame = 0;
   private snapshot: WorldSnapshot | null = null;
@@ -30,6 +32,7 @@ export class GameWorldScene {
     this.canvas.style.height = "100%";
     this.canvas.style.display = "block";
     this.context = this.canvas.getContext("2d") as CanvasRenderingContext2D;
+    this.context.imageSmoothingEnabled = false;
     this.root.appendChild(this.canvas);
 
     window.addEventListener("resize", this.resize);
@@ -79,6 +82,7 @@ export class GameWorldScene {
     this.canvas.width = Math.floor(rect.width * dpr);
     this.canvas.height = Math.floor(rect.height * dpr);
     this.context.setTransform(dpr, 0, 0, dpr, 0, 0);
+    this.context.imageSmoothingEnabled = false;
   };
 
   private handleKeyDown = (event: KeyboardEvent) => {
@@ -163,90 +167,29 @@ export class GameWorldScene {
   private drawBuildings(ctx: CanvasRenderingContext2D, cameraX: number, cameraY: number) {
     if (!this.snapshot) return;
     for (const building of this.snapshot.buildings) {
-      const x = building.position.x - cameraX;
-      const y = building.position.y - cameraY;
-
-      ctx.fillStyle = "#92400e";
-      ctx.strokeStyle = "#facc15";
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.roundRect(x - 24, y - 24, 48, 48, 8);
-      ctx.fill();
-      ctx.stroke();
-
-      ctx.fillStyle = "rgba(0,0,0,0.55)";
-      ctx.fillRect(x - 24, y + 30, 48, 5);
-      ctx.fillStyle = "#22c55e";
-      ctx.fillRect(x - 24, y + 30, 48 * (building.hp / building.maxHp), 5);
-
-      ctx.fillStyle = "#ffffff";
-      ctx.font = "12px system-ui";
-      ctx.textAlign = "center";
-      ctx.fillText(building.type, x, y - 32);
+      this.renderer.drawBuilding(ctx, building, building.position.x - cameraX, building.position.y - cameraY);
     }
   }
 
   private drawResources(ctx: CanvasRenderingContext2D, cameraX: number, cameraY: number) {
     if (!this.snapshot) return;
     for (const resource of this.snapshot.resources) {
-      const x = resource.position.x - cameraX;
-      const y = resource.position.y - cameraY;
-      const ratio = resource.remainingAmount / resource.maxAmount;
-
-      ctx.fillStyle = this.resourceColor(resource.resourceType);
-      ctx.beginPath();
-      ctx.roundRect(x - 16, y - 16, 32, 32, 9);
-      ctx.fill();
-
-      ctx.fillStyle = "rgba(0,0,0,0.55)";
-      ctx.fillRect(x - 22, y + 22, 44, 5);
-      ctx.fillStyle = "#facc15";
-      ctx.fillRect(x - 22, y + 22, 44 * ratio, 5);
-
-      ctx.fillStyle = "#ffffff";
-      ctx.font = "12px system-ui";
-      ctx.textAlign = "center";
-      ctx.fillText(`${resource.resourceType} ${resource.remainingAmount}`, x, y - 22);
+      this.renderer.drawResource(ctx, resource, resource.position.x - cameraX, resource.position.y - cameraY);
     }
   }
 
   private drawCreatures(ctx: CanvasRenderingContext2D, cameraX: number, cameraY: number) {
     if (!this.snapshot) return;
     for (const creature of this.snapshot.creatures) {
-      const x = creature.position.x - cameraX;
-      const y = creature.position.y - cameraY;
-      ctx.fillStyle = "#f97316";
-      ctx.beginPath();
-      ctx.arc(x, y, 14, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = "#ffffff";
-      ctx.font = "12px system-ui";
-      ctx.textAlign = "center";
-      ctx.fillText(creature.speciesId, x, y - 20);
+      this.renderer.drawCreature(ctx, creature, creature.position.x - cameraX, creature.position.y - cameraY);
     }
   }
 
   private drawPlayers(ctx: CanvasRenderingContext2D, cameraX: number, cameraY: number) {
     if (!this.snapshot) return;
     for (const player of this.snapshot.players) {
-      const x = player.position.x - cameraX;
-      const y = player.position.y - cameraY;
       const isLocal = player.id === this.localPlayerId;
-
-      ctx.fillStyle = isLocal ? "#38bdf8" : "#a78bfa";
-      ctx.beginPath();
-      ctx.arc(x, y, isLocal ? 17 : 15, 0, Math.PI * 2);
-      ctx.fill();
-
-      ctx.fillStyle = "#ffffff";
-      ctx.font = "13px system-ui";
-      ctx.textAlign = "center";
-      ctx.fillText(player.nickname, x, y - 24);
-
-      ctx.fillStyle = "rgba(0,0,0,0.45)";
-      ctx.fillRect(x - 22, y + 22, 44, 5);
-      ctx.fillStyle = "#22c55e";
-      ctx.fillRect(x - 22, y + 22, 44 * (player.hp / player.maxHp), 5);
+      this.renderer.drawPlayer(ctx, player, player.position.x - cameraX, player.position.y - cameraY, isLocal);
     }
   }
 
@@ -269,17 +212,8 @@ export class GameWorldScene {
     ctx.fill();
     ctx.fillStyle = "#ffffff";
     ctx.font = "12px system-ui";
+    ctx.textAlign = "center";
     ctx.fillText("E / 상호작용", x, y - 39);
-  }
-
-  private resourceColor(resourceType: ResourceNodeState["resourceType"]) {
-    if (resourceType === "wood" || resourceType === "hardwood") return "#854d0e";
-    if (resourceType === "stone" || resourceType === "ore" || resourceType === "coal") return "#64748b";
-    if (resourceType === "fiber" || resourceType === "herb") return "#22c55e";
-    if (resourceType === "berry") return "#dc2626";
-    if (resourceType === "ice_crystal") return "#67e8f9";
-    if (resourceType === "ember_shard") return "#f97316";
-    return "#94a3b8";
   }
 }
 
