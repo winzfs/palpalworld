@@ -3,6 +3,7 @@
 import { useEffect, useRef } from "react";
 import { WORLD, type EntityId, type ResourceNodeState, type Vector2, type WorldSnapshot } from "@palpalworld/shared";
 import { SpriteRenderer } from "../rendering/SpriteRenderer";
+import { TileMapRenderer } from "../rendering/TileMapRenderer";
 
 export type GameSceneInput = {
   x: number;
@@ -16,6 +17,7 @@ export class GameWorldScene {
   private canvas: HTMLCanvasElement;
   private context: CanvasRenderingContext2D;
   private renderer = new SpriteRenderer();
+  private tileMapRenderer = new TileMapRenderer();
   private keys = new Set<string>();
   private animationFrame = 0;
   private snapshot: WorldSnapshot | null = null;
@@ -139,41 +141,12 @@ export class GameWorldScene {
     const cameraY = localPlayer ? localPlayer.position.y - rect.height / 2 : 0;
     const now = performance.now();
 
-    this.drawGrid(ctx, rect.width, rect.height, cameraX, cameraY);
+    this.tileMapRenderer.draw(ctx, rect.width, rect.height, cameraX, cameraY);
     this.drawBuildings(ctx, cameraX, cameraY);
     this.drawResources(ctx, cameraX, cameraY);
     this.drawCreatures(ctx, cameraX, cameraY);
     this.drawPlayers(ctx, cameraX, cameraY, now);
     this.drawInteractionHint(ctx, cameraX, cameraY);
-  }
-
-  private drawGrid(ctx: CanvasRenderingContext2D, width: number, height: number, cameraX: number, cameraY: number) {
-    const gradient = ctx.createLinearGradient(0, 0, width, height);
-    gradient.addColorStop(0, "#166534");
-    gradient.addColorStop(0.55, "#14532d");
-    gradient.addColorStop(1, "#064e3b");
-    ctx.fillStyle = gradient;
-    ctx.fillRect(0, 0, width, height);
-
-    ctx.strokeStyle = "rgba(255,255,255,0.06)";
-    ctx.lineWidth = 1;
-    const tileSize = 32;
-    const startX = -((cameraX % tileSize) + tileSize);
-    const startY = -((cameraY % tileSize) + tileSize);
-
-    for (let x = startX; x < width + tileSize; x += tileSize) {
-      ctx.beginPath();
-      ctx.moveTo(x, 0);
-      ctx.lineTo(x, height);
-      ctx.stroke();
-    }
-
-    for (let y = startY; y < height + tileSize; y += tileSize) {
-      ctx.beginPath();
-      ctx.moveTo(0, y);
-      ctx.lineTo(width, y);
-      ctx.stroke();
-    }
   }
 
   private drawBuildings(ctx: CanvasRenderingContext2D, cameraX: number, cameraY: number) {
