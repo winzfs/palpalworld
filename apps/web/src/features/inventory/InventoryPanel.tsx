@@ -4,6 +4,14 @@ import { getProgressionBuildingByItemId, isBuildingItemId } from "../crafting/pr
 import { getItemLabel } from "../items/itemLabels";
 import { ItemSlot } from "../ui/ItemSlot";
 
+function getBuildingInventoryLabel(itemId: string) {
+  const label = getItemLabel(itemId);
+  if (label !== itemId) return label;
+
+  const building = getProgressionBuildingByItemId(itemId);
+  return building ? `${building.name} 설치 아이템` : itemId;
+}
+
 export function InventoryPanel({
   inventory,
   selectedBuildingItemId,
@@ -37,13 +45,12 @@ export function InventoryPanel({
       <div className="inventory-grid">
         {buildingItems.length > 0 ? (
           buildingItems.map((item) => {
-            const building = getProgressionBuildingByItemId(item.itemId);
             const icon = getIconAsset(item.itemId);
             const selected = selectedBuildingItemId === item.itemId;
             return (
               <ItemSlot
                 key={item.itemId}
-                label={building ? `${building.name} 설치` : getItemLabel(item.itemId)}
+                label={getBuildingInventoryLabel(item.itemId)}
                 amount={item.amount}
                 detail={selected ? "선택됨 · 필드 클릭" : "선택 후 필드 클릭"}
                 iconSrc={icon?.src}
