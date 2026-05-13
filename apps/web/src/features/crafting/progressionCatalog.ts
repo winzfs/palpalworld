@@ -64,6 +64,19 @@ export const PROGRESSION_BUILDINGS: ProgressionBuilding[] = [
   { type: "cold_storage", name: "냉장 보관함", tier: "중후반", category: "storage", requires: [{ itemId: "refined_ingot", amount: 6 }, { itemId: "ice_crystal", amount: 8 }, { itemId: "wood", amount: 20 }], maxHp: 620, unlockLevel: 18, description: "음식 보관 시스템용 상위 보관함." },
 ];
 
+export function getBuildingItemId(buildingType: string) {
+  return `building_${buildingType}`;
+}
+
+export function isBuildingItemId(itemId: string) {
+  return itemId.startsWith("building_") && Boolean(getProgressionBuilding(itemId.replace(/^building_/, "")));
+}
+
+export function getProgressionBuildingByItemId(itemId: string) {
+  if (!itemId.startsWith("building_")) return null;
+  return getProgressionBuilding(itemId.replace(/^building_/, ""));
+}
+
 export function getProgressionRecipe(recipeId: string) {
   return PROGRESSION_RECIPES.find((recipe) => recipe.id === recipeId) ?? null;
 }
