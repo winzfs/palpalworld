@@ -8,6 +8,7 @@ import type {
   ClientToServerEvents,
   CreaturePublicState,
   InventoryState,
+  PlayerDirection,
   PlayerInputPayload,
   ResourceNodeState,
   ServerToClientEvents,
@@ -59,6 +60,12 @@ function createClientNickname() {
   const nextNickname = `Pal-${Math.floor(1000 + Math.random() * 9000)}`;
   window.localStorage.setItem("palpalworld.nickname", nextNickname);
   return nextNickname;
+}
+
+function directionFromMovement(input: Vector2, fallback: PlayerDirection): PlayerDirection {
+  if (Math.abs(input.x) < 0.08 && Math.abs(input.y) < 0.08) return fallback;
+  if (Math.abs(input.x) >= Math.abs(input.y)) return input.x >= 0 ? "right" : "left";
+  return input.y >= 0 ? "down" : "up";
 }
 
 function createDemoInventory(): InventoryState {
@@ -127,6 +134,7 @@ function consumeInventoryItems(inventory: InventoryState, requirements: { itemId
 function createDemoSnapshot(
   nickname: string,
   position: Vector2,
+  direction: PlayerDirection,
   resources: ResourceNodeState[],
   creatures: CreaturePublicState[],
   buildings: BuildingState[],
@@ -139,7 +147,7 @@ function createDemoSnapshot(
         id: demoPlayerId,
         nickname: nickname === "..." ? "Demo" : nickname,
         position,
-        direction: "down",
+        direction,
         hp: 100,
         maxHp: 100,
       },
@@ -195,13 +203,21 @@ export function GameClient() {
   const inputSequenceRef = useRef(0);
   const hasServerSnapshotRef = useRef(false);
   const demoPositionRef = useRef<Vector2>({ x: 250, y: 320 });
+  const demoDirectionRef = useRef<PlayerDirection>("down");
   const demoResourcesRef = useRef<ResourceNodeState[]>(createDemoResources());
   const demoCreaturesRef = useRef<CreaturePublicState[]>(createDemoCreatures());
   const demoBuildingsRef = useRef<BuildingState[]>(createDemoBuildings());
   const lastDemoAttackAtRef = useRef(0);
 
   const applyDemoSnapshot = useCallback(() => {
-    const nextSnapshot = createDemoSnapshot(nickname, demoPositionRef.current, demoResourcesRef.current, demoCreaturesRef.current, demoBuildingsRef.current);
+    const nextSnapshot = createDemoSnapshot(
+      nickname,
+      demoPositionRef.current,
+      demoDirectionRef.current,
+      demoResourcesRef.current,
+      demoCreaturesRef.current,
+      demoBuildingsRef.current,
+    );
     setSnapshot(nextSnapshot);
     sceneRef.current?.applySnapshot(nextSnapshot, demoPlayerId);
   }, [nickname]);
@@ -229,6 +245,7 @@ export function GameClient() {
         const input = inputRef.current;
         const length = Math.hypot(input.x, input.y) || 1;
         const normalized = length > 1 ? { x: input.x / length, y: input.y / length } : input;
+        demoDirectionRef.current = directionFromMovement(normalized, demoDirectionRef.current);
         demoPositionRef.current = {
           x: demoPositionRef.current.x + normalized.x * 180 * deltaSeconds,
           y: demoPositionRef.current.y + normalized.y * 180 * deltaSeconds,
