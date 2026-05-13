@@ -16,10 +16,10 @@ export type MapTileDefinition = MapTileRef & {
 };
 
 export const MAP_TILE_SIZE = {
-  width: 1200,
-  height: 800,
-  portalMargin: 36,
-  portalRadius: 56,
+  width: 3000,
+  height: 3000,
+  portalMargin: 72,
+  portalRadius: 72,
 } as const;
 
 export const STARTER_TILE_COLUMNS = 3;
@@ -61,7 +61,7 @@ export function getMapTile(tile: MapTileRef | null | undefined): MapTileDefiniti
     ...tile,
     id: `${tile.regionId}_${tile.tileX}_${tile.tileY}`,
     name: getStarterTileName(tile.tileX, tile.tileY),
-    description: "초록빛 초원을 이루는 하나의 맵 타일입니다.",
+    description: "초록빛 초원을 이루는 하나의 3000×3000 맵 타일입니다.",
     exits,
   };
 }
