@@ -159,6 +159,42 @@ button {
   padding: 10px;
 }
 
+.feature-panel {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.feature-panel__section-title {
+  margin-top: 4px;
+  padding: 5px 7px;
+  border-left: 3px solid var(--jrpg-gold);
+  background: rgb(0 0 0 / 0.22);
+  color: var(--jrpg-gold);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.feature-panel__empty,
+.feature-panel__hint {
+  color: var(--jrpg-muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.feature-panel--logs {
+  gap: 4px;
+  color: var(--jrpg-muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.equipment-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+}
+
 .pixel-button,
 .control-grid button {
   min-height: 42px;
