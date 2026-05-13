@@ -27,7 +27,7 @@ import { EquipmentPanel } from "../equipment/EquipmentPanel";
 import { InventoryPanel } from "../inventory/InventoryPanel";
 import { getItemLabel } from "../items/itemLabels";
 import { LogPanel } from "../logs/LogPanel";
-import { GameScene, type GameSceneInput, type GameWorldScene } from "./GameScene";
+import { GameScene, type GameSceneInput, type GameWorldScene, type PlacementValidity } from "./GameScene";
 
 type TypedSocket = Socket<ServerToClientEvents, ClientToServerEvents>;
 type PanelId = "status" | "objective" | "inventory" | "equipment" | "build" | "chat";
@@ -346,12 +346,17 @@ export function GameClient() {
     });
   }, []);
 
-  const handleWorldClick = useCallback((position: Vector2) => {
+  const handleWorldClick = useCallback((position: Vector2, validity: PlacementValidity) => {
     if (!selectedBuildingItemId) return;
 
     const building = getProgressionBuildingByItemId(selectedBuildingItemId);
     if (!building) {
       setSelectedBuildingItemId(null);
+      return;
+    }
+
+    if (!validity.ok) {
+      setChatLines((prev) => [...prev.slice(-5), `[build] ${validity.reason}`]);
       return;
     }
 
@@ -426,7 +431,7 @@ export function GameClient() {
 
   const handleSceneReady = useCallback((scene: GameWorldScene) => { sceneRef.current = scene; }, []);
   const handleInputChange = useCallback((input: GameSceneInput) => { inputRef.current = input; }, []);
-  const objectiveText = useMemo(() => selectedBuildingItemId ? "배치 모드입니다. 반투명 건설물을 원하는 위치에 맞춘 뒤 클릭하세요." : "건설물은 먼저 설치 아이템으로 제작한 뒤, 인벤토리의 건설 탭에서 선택하고 필드를 클릭해 설치하세요.", [selectedBuildingItemId]);
+  const objectiveText = useMemo(() => selectedBuildingItemId ? "배치 모드입니다. 초록색 위치에만 설치할 수 있습니다." : "건설물은 먼저 설치 아이템으로 제작한 뒤, 인벤토리의 건설 탭에서 선택하고 필드를 클릭해 설치하세요.", [selectedBuildingItemId]);
 
   return (
     <main className={`game-shell ${selectedBuildingItemId ? "game-shell--placing" : ""}`}>
