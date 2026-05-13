@@ -306,6 +306,13 @@ export function GameClient() {
       setChatLines((prev) => [...prev.slice(-5), `[demo] 알 수 없는 건설물: ${buildingType}`]);
       return;
     }
+
+    const itemId = getBuildingItemId(building.type);
+    if (socketRef.current?.connected) {
+      socketRef.current.emit("client:craft_item", { recipeId: itemId });
+      return;
+    }
+
     setInventory((current) => {
       const base = current ?? createDemoInventory();
       const consumed = consumeInventoryItems(base, building.requires);
@@ -313,7 +320,6 @@ export function GameClient() {
         setChatLines((prev) => [...prev.slice(-5), `[demo] ${building.name} 설치 아이템 재료 부족: ${building.requires.map((i) => `${getItemLabel(i.itemId)} ${i.amount}`).join(" · ")}`]);
         return base;
       }
-      const itemId = getBuildingItemId(building.type);
       setChatLines((prev) => [...prev.slice(-5), `[demo] ${building.name} 설치 아이템 제작 완료. 인벤토리 건설 탭에서 설치하세요.`]);
       return addInventoryItem(consumed, itemId, 1);
     });
@@ -327,6 +333,16 @@ export function GameClient() {
     }
 
     const position = sceneRef.current?.getLocalPlayerPosition() ?? demoPositionRef.current;
+    const targetPosition = { x: position.x + 64, y: position.y };
+
+    if (socketRef.current?.connected) {
+      socketRef.current.emit("client:place_building", {
+        buildingType: building.type as BuildingType,
+        position: targetPosition,
+      });
+      return;
+    }
+
     setInventory((current) => {
       const base = current ?? createDemoInventory();
       const consumed = consumeInventoryItems(base, [{ itemId, amount: 1 }]);
@@ -341,7 +357,7 @@ export function GameClient() {
           id: `demo-building-${building.type}-${Date.now()}`,
           type: building.type as BuildingType,
           ownerPlayerId: demoPlayerId,
-          position: { x: position.x + 64, y: position.y },
+          position: targetPosition,
           hp: building.maxHp,
           maxHp: building.maxHp,
         },
