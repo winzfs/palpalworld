@@ -25,6 +25,10 @@ export type PlacementValidity = {
   reason: string;
 };
 
+export type WorldClickTarget =
+  | { kind: "field"; position: Vector2; validity: PlacementValidity }
+  | { kind: "building"; building: BuildingState };
+
 function distance(a: Vector2, b: Vector2) {
   return Math.hypot(a.x - b.x, a.y - b.y);
 }
@@ -42,16 +46,17 @@ export class GameWorldScene {
   private movingPlayerIds = new Set<string>();
   private localPlayerId: string | null = null;
   private pointerWorldPosition: Vector2 | null = null;
+  private hoverBuildingId: string | null = null;
   private placementPreviewBuildingType: BuildingType | null = null;
   private onInputChange: (input: GameSceneInput) => void;
   private onInteract: () => void;
-  private onWorldClick: (position: Vector2, validity: PlacementValidity) => void;
+  private onWorldClick: (target: WorldClickTarget) => void;
 
   constructor(
     root: HTMLDivElement,
     onInputChange: (input: GameSceneInput) => void,
     onInteract: () => void,
-    onWorldClick: (position: Vector2, validity: PlacementValidity) => void,
+    onWorldClick: (target: WorldClickTarget) => void,
   ) {
     this.root = root;
     this.onInputChange = onInputChange;
@@ -145,6 +150,22 @@ export class GameWorldScene {
     return { ok: true, reason: "설치 가능" };
   }
 
+  private getBuildingAt(position: Vector2) {
+    if (!this.snapshot) return null;
+    let nearest: BuildingState | null = null;
+    let nearestDistance = Number.POSITIVE_INFINITY;
+
+    for (const building of this.snapshot.buildings) {
+      const hitDistance = distance(building.position, position);
+      if (hitDistance <= 42 && hitDistance < nearestDistance) {
+        nearest = building;
+        nearestDistance = hitDistance;
+      }
+    }
+
+    return nearest;
+  }
+
   private getCameraOffset() {
     const rect = this.root.getBoundingClientRect();
     const localPlayer = this.snapshot?.players.find((player) => player.id === this.localPlayerId);
@@ -176,15 +197,29 @@ export class GameWorldScene {
     if (event.button !== 0) return;
     const position = this.screenToWorld(event.clientX, event.clientY);
     this.pointerWorldPosition = position;
-    this.onWorldClick(position, this.getPlacementValidity(position));
+
+    if (!this.placementPreviewBuildingType) {
+      const building = this.getBuildingAt(position);
+      if (building) {
+        this.onWorldClick({ kind: "building", building });
+        return;
+      }
+    }
+
+    this.onWorldClick({ kind: "field", position, validity: this.getPlacementValidity(position) });
   };
 
   private handlePointerMove = (event: PointerEvent) => {
-    this.pointerWorldPosition = this.screenToWorld(event.clientX, event.clientY);
+    const position = this.screenToWorld(event.clientX, event.clientY);
+    this.pointerWorldPosition = position;
+    this.hoverBuildingId = this.placementPreviewBuildingType ? null : this.getBuildingAt(position)?.id ?? null;
+    if (!this.placementPreviewBuildingType) this.canvas.style.cursor = this.hoverBuildingId ? "pointer" : "default";
   };
 
   private handlePointerLeave = () => {
     this.pointerWorldPosition = null;
+    this.hoverBuildingId = null;
+    if (!this.placementPreviewBuildingType) this.canvas.style.cursor = "default";
   };
 
   private handleKeyDown = (event: KeyboardEvent) => {
@@ -240,7 +275,18 @@ export class GameWorldScene {
   private drawBuildings(ctx: CanvasRenderingContext2D, cameraX: number, cameraY: number) {
     if (!this.snapshot) return;
     for (const building of this.snapshot.buildings) {
-      this.renderer.drawBuilding(ctx, building, building.position.x - cameraX, building.position.y - cameraY);
+      const x = building.position.x - cameraX;
+      const y = building.position.y - cameraY;
+      this.renderer.drawBuilding(ctx, building, x, y);
+      if (building.id === this.hoverBuildingId) {
+        ctx.save();
+        ctx.strokeStyle = "rgba(250, 204, 21, 0.9)";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.ellipse(x, y + 24, 32, 12, 0, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+      }
     }
   }
 
@@ -350,7 +396,7 @@ export function GameScene({
   onReady: (scene: GameWorldScene) => void;
   onInputChange: (input: GameSceneInput) => void;
   onInteract: () => void;
-  onWorldClick: (position: Vector2, validity: PlacementValidity) => void;
+  onWorldClick: (target: WorldClickTarget) => void;
   placementBuildingType?: BuildingType | null;
 }) {
   const rootRef = useRef<HTMLDivElement | null>(null);
