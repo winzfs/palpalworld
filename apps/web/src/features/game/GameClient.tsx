@@ -2,22 +2,49 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { io, type Socket } from "socket.io-client";
-import type { ClientToServerEvents, PlayerInputPayload, ServerToClientEvents, WorldSnapshot } from "@palpalworld/shared";
+import type {
+  ClientToServerEvents,
+  InventoryState,
+  PlayerInputPayload,
+  ServerToClientEvents,
+  WorldSnapshot,
+} from "@palpalworld/shared";
 import { GameScene, type GameSceneInput, type GameWorldScene } from "./GameScene";
 
 type TypedSocket = Socket<ServerToClientEvents, ClientToServerEvents>;
 
 const serverUrl = process.env.NEXT_PUBLIC_REALTIME_SERVER_URL ?? "http://localhost:4000";
 
+const itemLabels: Record<string, string> = {
+  wood: "나무",
+  stone: "돌",
+  fiber: "섬유",
+  ore: "광석",
+  berry: "열매",
+  capture_orb: "포획구",
+  basic_axe: "기본 도끼",
+  basic_pickaxe: "기본 곡괭이",
+};
+
 export function GameClient() {
   const [nickname] = useState(() => `Pal-${Math.floor(Math.random() * 9999)}`);
   const [snapshot, setSnapshot] = useState<WorldSnapshot | null>(null);
+  const [inventory, setInventory] = useState<InventoryState | null>(null);
   const [connectionState, setConnectionState] = useState("connecting");
   const [chatLines, setChatLines] = useState<string[]>([]);
   const socketRef = useRef<TypedSocket | null>(null);
   const sceneRef = useRef<GameWorldScene | null>(null);
   const inputRef = useRef<GameSceneInput>({ x: 0, y: 0, primary: false, secondary: false });
   const inputSequenceRef = useRef(0);
+
+  const handleInteract = useCallback(() => {
+    const entityId = sceneRef.current?.getNearestInteractableId();
+    if (!entityId) {
+      setChatLines((prev) => [...prev.slice(-5), "[info] 가까운 상호작용 대상이 없습니다."]);
+      return;
+    }
+    socketRef.current?.emit("client:interact_entity", { entityId });
+  }, []);
 
   useEffect(() => {
     const socket: TypedSocket = io(serverUrl, {
@@ -39,6 +66,10 @@ export function GameClient() {
     socket.on("server:world_snapshot", (nextSnapshot) => {
       setSnapshot(nextSnapshot);
       sceneRef.current?.applySnapshot(nextSnapshot, socket.id ?? null);
+    });
+
+    socket.on("server:inventory_updated", (nextInventory) => {
+      setInventory(nextInventory);
     });
 
     socket.on("server:chat_message", (line) => {
@@ -88,12 +119,12 @@ export function GameClient() {
 
   const playerCount = snapshot?.players.length ?? 0;
   const objectiveText = useMemo(() => {
-    return "나무와 돌을 모으고 첫 번째 몬스터 포획을 준비하세요.";
+    return "자원에 가까이 간 뒤 E 또는 상호 버튼으로 채집하세요.";
   }, []);
 
   return (
     <main className="game-shell">
-      <GameScene onReady={handleSceneReady} onInputChange={handleInputChange} />
+      <GameScene onReady={handleSceneReady} onInputChange={handleInputChange} onInteract={handleInteract} />
 
       <section className="game-hud" aria-label="Game HUD">
         <div className="hud-panel top-left-panel">
@@ -115,13 +146,31 @@ export function GameClient() {
           ))}
         </div>
 
-        <MobileControls onInputChange={handleInputChange} />
+        <div className="hud-panel inventory-panel">
+          <strong>인벤토리</strong>
+          <div className="inventory-grid">
+            {(inventory?.items ?? []).map((item) => (
+              <div className="inventory-slot" key={item.itemId}>
+                <span>{itemLabels[item.itemId] ?? item.itemId}</span>
+                <b>{item.amount}</b>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <MobileControls onInputChange={handleInputChange} onInteract={handleInteract} />
       </section>
     </main>
   );
 }
 
-function MobileControls({ onInputChange }: { onInputChange: (input: GameSceneInput) => void }) {
+function MobileControls({
+  onInputChange,
+  onInteract,
+}: {
+  onInputChange: (input: GameSceneInput) => void;
+  onInteract: () => void;
+}) {
   const [stick, setStick] = useState({ x: 0, y: 0 });
   const touchIdRef = useRef<number | null>(null);
 
@@ -171,7 +220,14 @@ function MobileControls({ onInputChange }: { onInputChange: (input: GameSceneInp
         <button className="action-button" onTouchStart={() => updateInput(stick, true, false)} onTouchEnd={() => updateInput(stick)}>
           공격
         </button>
-        <button className="action-button" onTouchStart={() => updateInput(stick, false, true)} onTouchEnd={() => updateInput(stick)}>
+        <button
+          className="action-button"
+          onTouchStart={() => {
+            updateInput(stick, false, true);
+            onInteract();
+          }}
+          onTouchEnd={() => updateInput(stick)}
+        >
           상호
         </button>
       </div>
