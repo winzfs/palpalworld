@@ -3,8 +3,11 @@ import express from "express";
 import { createServer } from "node:http";
 import { Server } from "socket.io";
 import { normalizeVector } from "@palpalworld/game-core";
-import type { ClientToServerEvents, PlayerPublicState, ServerToClientEvents, WorldSnapshot } from "@palpalworld/shared";
+import type { ClientToServerEvents, PlayerInputPayload, PlayerPublicState, ServerToClientEvents } from "@palpalworld/shared";
 import { WORLD } from "@palpalworld/shared";
+import { InventoryStore } from "./inventory/InventoryStore";
+import { ResourceService } from "./resources/ResourceService";
+import { WorldState } from "./world/WorldState";
 
 const port = Number(process.env.PORT ?? 4000);
 const clientOrigin = process.env.CLIENT_ORIGIN ?? "http://localhost:3000";
@@ -25,39 +28,34 @@ const io = new Server<ClientToServerEvents, ServerToClientEvents>(httpServer, {
   },
 });
 
-const players = new Map<string, PlayerPublicState>();
-const lastInputs = new Map<string, { x: number; y: number }>();
+const world = new WorldState();
+const inventories = new InventoryStore();
+const resources = new ResourceService(world);
+const lastInputs = new Map<string, PlayerInputPayload["movement"]>();
 
-function createSnapshot(): WorldSnapshot {
+function createPlayer(socketId: string, nickname: string): PlayerPublicState {
+  const safeNickname = nickname.trim().slice(0, 16) || `Player-${socketId.slice(0, 4)}`;
   return {
-    worldId: WORLD.defaultWorldId,
-    serverTime: Date.now(),
-    players: [...players.values()],
-    creatures: [],
-    resources: [
-      { id: "tree-1", resourceType: "wood", position: { x: 320, y: 240 }, remainingAmount: 100 },
-      { id: "stone-1", resourceType: "stone", position: { x: 520, y: 360 }, remainingAmount: 100 },
-    ],
+    id: socketId,
+    nickname: safeNickname,
+    position: { x: 160 + Math.random() * 120, y: 160 + Math.random() * 120 },
+    direction: "down",
+    hp: 100,
+    maxHp: 100,
   };
 }
 
 io.on("connection", (socket) => {
   socket.on("client:join_world", ({ nickname }) => {
-    const safeNickname = nickname.trim().slice(0, 16) || `Player-${socket.id.slice(0, 4)}`;
-    players.set(socket.id, {
-      id: socket.id,
-      nickname: safeNickname,
-      position: { x: 160 + Math.random() * 120, y: 160 + Math.random() * 120 },
-      direction: "down",
-      hp: 100,
-      maxHp: 100,
-    });
+    const player = createPlayer(socket.id, nickname);
+    world.players.set(socket.id, player);
+    socket.emit("server:inventory_updated", inventories.createStarterInventory(socket.id));
 
     socket.emit("server:toast", { type: "success", message: "스타터 섬에 접속했습니다." });
     io.emit("server:chat_message", {
       playerId: socket.id,
       nickname: "System",
-      message: `${safeNickname} 님이 접속했습니다.`,
+      message: `${player.nickname} 님이 접속했습니다.`,
       sentAt: Date.now(),
     });
   });
@@ -66,8 +64,30 @@ io.on("connection", (socket) => {
     lastInputs.set(socket.id, payload.movement);
   });
 
+  socket.on("client:interact_entity", ({ entityId }) => {
+    const result = resources.harvest(socket.id, entityId);
+
+    if (!result.ok) {
+      const reasonMessage = {
+        missing_player: "플레이어 정보를 찾을 수 없습니다.",
+        missing_resource: "대상을 찾을 수 없습니다.",
+        out_of_range: "대상과 너무 멀리 떨어져 있습니다.",
+        depleted: "이미 고갈된 자원입니다.",
+      }[result.reason];
+      socket.emit("server:toast", { type: "warning", message: reasonMessage });
+      return;
+    }
+
+    socket.emit("server:inventory_updated", inventories.addItem(socket.id, result.itemId, result.amount));
+    socket.emit("server:toast", {
+      type: "success",
+      message: `${result.itemId} ${result.amount}개를 획득했습니다.`,
+    });
+    io.emit("server:entity_updated", result.resource);
+  });
+
   socket.on("client:chat_message", ({ message }) => {
-    const player = players.get(socket.id);
+    const player = world.players.get(socket.id);
     if (!player) return;
     const safeMessage = message.trim().slice(0, 200);
     if (!safeMessage) return;
@@ -81,8 +101,9 @@ io.on("connection", (socket) => {
   });
 
   socket.on("disconnect", () => {
-    const player = players.get(socket.id);
-    players.delete(socket.id);
+    const player = world.players.get(socket.id);
+    world.players.delete(socket.id);
+    inventories.deleteInventory(socket.id);
     lastInputs.delete(socket.id);
 
     if (player) {
@@ -102,7 +123,9 @@ setInterval(() => {
   const deltaSeconds = (now - lastTick) / 1000;
   lastTick = now;
 
-  for (const [playerId, player] of players.entries()) {
+  resources.tickRespawns(now);
+
+  for (const [playerId, player] of world.players.entries()) {
     const input = lastInputs.get(playerId) ?? { x: 0, y: 0 };
     const movement = normalizeVector(input);
     player.position = {
@@ -119,7 +142,7 @@ setInterval(() => {
 }, 1000 / 30);
 
 setInterval(() => {
-  io.emit("server:world_snapshot", createSnapshot());
+  io.emit("server:world_snapshot", world.createSnapshot());
 }, WORLD.snapshotRateMs);
 
 httpServer.listen(port, () => {
