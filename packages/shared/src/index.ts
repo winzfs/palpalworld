@@ -32,6 +32,18 @@ export type WorkSkill =
   | "healing";
 
 export type CreatureRarity = "common" | "uncommon" | "rare" | "epic" | "legendary";
+export type ResourceType = "wood" | "stone" | "fiber" | "ore" | "berry";
+export type ItemId = ResourceType | "capture_orb" | "basic_axe" | "basic_pickaxe";
+
+export type ItemStack = {
+  itemId: ItemId;
+  amount: number;
+};
+
+export type InventoryState = {
+  ownerPlayerId: PlayerId;
+  items: ItemStack[];
+};
 
 export type CreatureSpecies = {
   id: string;
@@ -65,9 +77,11 @@ export type CreaturePublicState = {
 
 export type ResourceNodeState = {
   id: EntityId;
-  resourceType: "wood" | "stone" | "fiber" | "ore" | "berry";
+  resourceType: ResourceType;
   position: Vector2;
   remainingAmount: number;
+  maxAmount: number;
+  respawnAt?: number;
 };
 
 export type WorldSnapshot = {
@@ -97,6 +111,7 @@ export type ClientToServerEvents = {
 
 export type ServerToClientEvents = {
   "server:world_snapshot": (payload: WorldSnapshot) => void;
+  "server:inventory_updated": (payload: InventoryState) => void;
   "server:entity_spawned": (payload: CreaturePublicState | ResourceNodeState) => void;
   "server:entity_updated": (payload: Partial<CreaturePublicState | ResourceNodeState> & { id: EntityId }) => void;
   "server:entity_removed": (payload: { id: EntityId }) => void;
@@ -109,4 +124,6 @@ export const WORLD = {
   defaultWorldId: "starter-island",
   snapshotRateMs: 100,
   playerMoveSpeed: 180,
+  interactRange: 72,
+  resourceRespawnMs: 30_000,
 } as const;
