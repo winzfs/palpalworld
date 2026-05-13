@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { io, type Socket } from "socket.io-client";
 import type { ClientToServerEvents, PlayerInputPayload, ServerToClientEvents, WorldSnapshot } from "@palpalworld/shared";
-import { GameScene, type GameSceneInput } from "./GameScene";
+import { GameScene, type GameSceneInput, type GameWorldScene } from "./GameScene";
 
 type TypedSocket = Socket<ServerToClientEvents, ClientToServerEvents>;
 
@@ -15,7 +15,7 @@ export function GameClient() {
   const [connectionState, setConnectionState] = useState("connecting");
   const [chatLines, setChatLines] = useState<string[]>([]);
   const socketRef = useRef<TypedSocket | null>(null);
-  const sceneRef = useRef<GameScene | null>(null);
+  const sceneRef = useRef<GameWorldScene | null>(null);
   const inputRef = useRef<GameSceneInput>({ x: 0, y: 0, primary: false, secondary: false });
   const inputSequenceRef = useRef(0);
 
@@ -78,7 +78,7 @@ export function GameClient() {
     return () => cancelAnimationFrame(animationFrame);
   }, []);
 
-  const handleSceneReady = useCallback((scene: GameScene) => {
+  const handleSceneReady = useCallback((scene: GameWorldScene) => {
     sceneRef.current = scene;
   }, []);
 
