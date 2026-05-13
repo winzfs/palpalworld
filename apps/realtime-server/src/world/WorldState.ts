@@ -31,14 +31,18 @@ export class WorldState {
       const species = CREATURE_CATALOG[spawn.speciesId as keyof typeof CREATURE_CATALOG];
       if (!species) continue;
 
+      const traitIds = [...(spawn.traitIds ?? [])];
+      const maxHp = species.baseHp + spawn.level * 8;
+
       this.creatures.set(spawn.id, {
         id: spawn.id,
         speciesId: spawn.speciesId,
         regionId: spawn.regionId,
         position: { ...spawn.position },
         level: spawn.level,
-        hp: species.baseHp + spawn.level * 8,
-        maxHp: species.baseHp + spawn.level * 8,
+        hp: maxHp,
+        maxHp,
+        traitIds,
       });
     }
   }
