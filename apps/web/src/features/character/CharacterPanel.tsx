@@ -7,13 +7,13 @@ export function CharacterPanel({
   connectionState,
   serverEndpoint,
   snapshot,
-  profile,
+  profile = null,
 }: {
   nickname: string;
   connectionState: string;
   serverEndpoint: string;
   snapshot: WorldSnapshot | null;
-  profile: PlayerProfileState | null;
+  profile?: PlayerProfileState | null;
 }) {
   const player = snapshot?.players[0] ?? null;
   const playerCount = snapshot?.players.length ?? 0;
@@ -21,6 +21,10 @@ export function CharacterPanel({
 
   return (
     <div className="feature-panel feature-panel--character">
+      <div className="feature-panel__section-title">미니맵</div>
+      <MiniMapPanel snapshot={snapshot} localPlayerId={player?.id ?? null} />
+
+      <div className="feature-panel__section-title">캐릭터</div>
       <StatRow label="상태" value={connectionState} />
       <StatRow label="닉네임" value={nickname} />
       <StatRow label="레벨" value={profile?.progress.level ?? 1} />
@@ -34,8 +38,6 @@ export function CharacterPanel({
       <StatRow label="접속자" value={playerCount} />
       <StatRow label="건물" value={buildingCount} />
       <div className="feature-panel__hint">서버: {serverEndpoint || "확인 중"}</div>
-      <div className="feature-panel__section-title">미니맵</div>
-      <MiniMapPanel snapshot={snapshot} localPlayerId={player?.id ?? null} />
     </div>
   );
 }
