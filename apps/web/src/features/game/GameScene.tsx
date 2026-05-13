@@ -1,7 +1,15 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { WORLD, type EntityId, type ResourceNodeState, type Vector2, type WorldSnapshot } from "@palpalworld/shared";
+import {
+  WORLD,
+  type BuildingState,
+  type BuildingType,
+  type EntityId,
+  type ResourceNodeState,
+  type Vector2,
+  type WorldSnapshot,
+} from "@palpalworld/shared";
 import { SpriteRenderer } from "../rendering/SpriteRenderer";
 import { TileMapRenderer } from "../rendering/TileMapRenderer";
 
@@ -24,6 +32,8 @@ export class GameWorldScene {
   private previousPlayerPositions = new Map<string, Vector2>();
   private movingPlayerIds = new Set<string>();
   private localPlayerId: string | null = null;
+  private pointerWorldPosition: Vector2 | null = null;
+  private placementPreviewBuildingType: BuildingType | null = null;
   private onInputChange: (input: GameSceneInput) => void;
   private onInteract: () => void;
   private onWorldClick: (position: Vector2) => void;
@@ -50,6 +60,8 @@ export class GameWorldScene {
     window.addEventListener("keydown", this.handleKeyDown);
     window.addEventListener("keyup", this.handleKeyUp);
     this.canvas.addEventListener("pointerdown", this.handlePointerDown);
+    this.canvas.addEventListener("pointermove", this.handlePointerMove);
+    this.canvas.addEventListener("pointerleave", this.handlePointerLeave);
     this.resize();
     this.loop();
   }
@@ -60,6 +72,8 @@ export class GameWorldScene {
     window.removeEventListener("keydown", this.handleKeyDown);
     window.removeEventListener("keyup", this.handleKeyUp);
     this.canvas.removeEventListener("pointerdown", this.handlePointerDown);
+    this.canvas.removeEventListener("pointermove", this.handlePointerMove);
+    this.canvas.removeEventListener("pointerleave", this.handlePointerLeave);
     this.canvas.remove();
   }
 
@@ -75,6 +89,11 @@ export class GameWorldScene {
 
     this.snapshot = snapshot;
     this.localPlayerId = localPlayerId;
+  }
+
+  setPlacementPreviewBuildingType(buildingType: BuildingType | null) {
+    this.placementPreviewBuildingType = buildingType;
+    this.canvas.style.cursor = buildingType ? "none" : "default";
   }
 
   getNearestInteractableId(): EntityId | null {
@@ -127,7 +146,17 @@ export class GameWorldScene {
 
   private handlePointerDown = (event: PointerEvent) => {
     if (event.button !== 0) return;
-    this.onWorldClick(this.screenToWorld(event.clientX, event.clientY));
+    const position = this.screenToWorld(event.clientX, event.clientY);
+    this.pointerWorldPosition = position;
+    this.onWorldClick(position);
+  };
+
+  private handlePointerMove = (event: PointerEvent) => {
+    this.pointerWorldPosition = this.screenToWorld(event.clientX, event.clientY);
+  };
+
+  private handlePointerLeave = () => {
+    this.pointerWorldPosition = null;
   };
 
   private handleKeyDown = (event: KeyboardEvent) => {
@@ -177,6 +206,7 @@ export class GameWorldScene {
     this.drawCreatures(ctx, camera.x, camera.y);
     this.drawPlayers(ctx, camera.x, camera.y, now);
     this.drawInteractionHint(ctx, camera.x, camera.y);
+    this.drawPlacementPreview(ctx, camera.x, camera.y);
   }
 
   private drawBuildings(ctx: CanvasRenderingContext2D, cameraX: number, cameraY: number) {
@@ -209,6 +239,36 @@ export class GameWorldScene {
     }
   }
 
+  private drawPlacementPreview(ctx: CanvasRenderingContext2D, cameraX: number, cameraY: number) {
+    if (!this.placementPreviewBuildingType || !this.pointerWorldPosition) return;
+
+    const previewBuilding: BuildingState = {
+      id: "placement-preview",
+      type: this.placementPreviewBuildingType,
+      ownerPlayerId: this.localPlayerId ?? "preview",
+      position: this.pointerWorldPosition,
+      hp: 1,
+      maxHp: 1,
+    };
+
+    const x = this.pointerWorldPosition.x - cameraX;
+    const y = this.pointerWorldPosition.y - cameraY;
+
+    ctx.save();
+    ctx.globalAlpha = 0.48;
+    this.renderer.drawBuilding(ctx, previewBuilding, x, y);
+    ctx.restore();
+
+    ctx.save();
+    ctx.strokeStyle = "rgba(250, 204, 21, 0.82)";
+    ctx.lineWidth = 2;
+    ctx.setLineDash([6, 4]);
+    ctx.beginPath();
+    ctx.ellipse(x, y + 24, 30, 11, 0, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+  }
+
   private drawInteractionHint(ctx: CanvasRenderingContext2D, cameraX: number, cameraY: number) {
     const nearestId = this.getNearestInteractableId();
     const target = this.snapshot?.resources.find((resource) => resource.id === nearestId);
@@ -238,20 +298,31 @@ export function GameScene({
   onInputChange,
   onInteract,
   onWorldClick,
+  placementBuildingType,
 }: {
   onReady: (scene: GameWorldScene) => void;
   onInputChange: (input: GameSceneInput) => void;
   onInteract: () => void;
   onWorldClick: (position: Vector2) => void;
+  placementBuildingType?: BuildingType | null;
 }) {
   const rootRef = useRef<HTMLDivElement | null>(null);
+  const sceneRef = useRef<GameWorldScene | null>(null);
 
   useEffect(() => {
     if (!rootRef.current) return;
     const scene = new GameWorldScene(rootRef.current, onInputChange, onInteract, onWorldClick);
+    sceneRef.current = scene;
     onReady(scene);
-    return () => scene.destroy();
+    return () => {
+      scene.destroy();
+      sceneRef.current = null;
+    };
   }, [onInputChange, onInteract, onWorldClick, onReady]);
+
+  useEffect(() => {
+    sceneRef.current?.setPlacementPreviewBuildingType(placementBuildingType ?? null);
+  }, [placementBuildingType]);
 
   return <div ref={rootRef} className="game-canvas-root" aria-label="Game canvas" />;
 }
