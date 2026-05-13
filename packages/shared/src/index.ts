@@ -1,6 +1,7 @@
 export type EntityId = string;
 export type PlayerId = string;
 export type WorldId = string;
+export type RegionId = "starter_meadow" | "moss_forest" | "stone_hills" | "ember_desert" | "frost_peaks";
 
 export type Vector2 = {
   x: number;
@@ -32,8 +33,18 @@ export type WorkSkill =
   | "healing";
 
 export type CreatureRarity = "common" | "uncommon" | "rare" | "epic" | "legendary";
-export type ResourceType = "wood" | "stone" | "fiber" | "ore" | "berry";
-export type ItemId = ResourceType | "capture_orb" | "basic_axe" | "basic_pickaxe";
+export type ResourceType = "wood" | "hardwood" | "stone" | "fiber" | "ore" | "berry" | "herb" | "coal" | "ice_crystal" | "ember_shard";
+export type ItemCategory = "resource" | "tool" | "consumable" | "capture" | "material" | "building" | "equipment";
+export type ItemId = string;
+export type BuildingType = "base_core" | "storage_box" | "workbench" | "pal_bed" | "farm_plot" | "furnace" | "campfire" | "wood_wall" | "wood_floor";
+
+export type ItemDefinition = {
+  id: ItemId;
+  name: string;
+  category: ItemCategory;
+  maxStack: number;
+  description?: string;
+};
 
 export type ItemStack = {
   itemId: ItemId;
@@ -43,6 +54,13 @@ export type ItemStack = {
 export type InventoryState = {
   ownerPlayerId: PlayerId;
   items: ItemStack[];
+};
+
+export type LootEntry = {
+  itemId: ItemId;
+  min: number;
+  max: number;
+  chance: number;
 };
 
 export type CreatureSpecies = {
@@ -55,6 +73,44 @@ export type CreatureSpecies = {
   baseDefense: number;
   baseMoveSpeed: number;
   workSkills: Partial<Record<WorkSkill, number>>;
+  drops: LootEntry[];
+};
+
+export type RegionDefinition = {
+  id: RegionId;
+  name: string;
+  recommendedLevel: [number, number];
+  resourceTypes: ResourceType[];
+  creatureSpeciesIds: string[];
+  description: string;
+};
+
+export type ResourceDefinition = {
+  type: ResourceType;
+  name: string;
+  baseAmount: number;
+  respawnMs: number;
+  harvestTool?: "axe" | "pickaxe" | "sickle";
+  drops: LootEntry[];
+};
+
+export type CraftingRecipe = {
+  id: string;
+  name: string;
+  station: "hand" | "workbench" | "furnace" | "campfire";
+  inputs: ItemStack[];
+  outputs: ItemStack[];
+  craftTimeMs: number;
+};
+
+export type BuildingDefinition = {
+  type: BuildingType;
+  name: string;
+  size: { width: number; height: number };
+  maxHp: number;
+  requires: ItemStack[];
+  unlockLevel: number;
+  description: string;
 };
 
 export type PlayerPublicState = {
@@ -78,10 +134,20 @@ export type CreaturePublicState = {
 export type ResourceNodeState = {
   id: EntityId;
   resourceType: ResourceType;
+  regionId: RegionId;
   position: Vector2;
   remainingAmount: number;
   maxAmount: number;
   respawnAt?: number;
+};
+
+export type BuildingState = {
+  id: EntityId;
+  type: BuildingType;
+  ownerPlayerId: PlayerId;
+  position: Vector2;
+  hp: number;
+  maxHp: number;
 };
 
 export type WorldSnapshot = {
@@ -90,6 +156,7 @@ export type WorldSnapshot = {
   players: PlayerPublicState[];
   creatures: CreaturePublicState[];
   resources: ResourceNodeState[];
+  buildings: BuildingState[];
 };
 
 export type PlayerInputPayload = {
@@ -105,15 +172,16 @@ export type ClientToServerEvents = {
   "client:player_input": (payload: PlayerInputPayload) => void;
   "client:chat_message": (payload: { message: string }) => void;
   "client:interact_entity": (payload: { entityId: EntityId }) => void;
+  "client:craft_item": (payload: { recipeId: string }) => void;
   "client:use_item": (payload: { itemId: string; targetEntityId?: EntityId; targetPosition?: Vector2 }) => void;
-  "client:place_building": (payload: { buildingType: string; position: Vector2 }) => void;
+  "client:place_building": (payload: { buildingType: BuildingType; position: Vector2 }) => void;
 };
 
 export type ServerToClientEvents = {
   "server:world_snapshot": (payload: WorldSnapshot) => void;
   "server:inventory_updated": (payload: InventoryState) => void;
-  "server:entity_spawned": (payload: CreaturePublicState | ResourceNodeState) => void;
-  "server:entity_updated": (payload: Partial<CreaturePublicState | ResourceNodeState> & { id: EntityId }) => void;
+  "server:entity_spawned": (payload: CreaturePublicState | ResourceNodeState | BuildingState) => void;
+  "server:entity_updated": (payload: Partial<CreaturePublicState | ResourceNodeState | BuildingState> & { id: EntityId }) => void;
   "server:entity_removed": (payload: { id: EntityId }) => void;
   "server:chat_message": (payload: { playerId: PlayerId; nickname: string; message: string; sentAt: number }) => void;
   "server:toast": (payload: { type: "info" | "success" | "warning" | "error"; message: string }) => void;
@@ -125,5 +193,8 @@ export const WORLD = {
   snapshotRateMs: 100,
   playerMoveSpeed: 180,
   interactRange: 72,
-  resourceRespawnMs: 30_000,
+  buildRange: 160,
+  defaultResourceRespawnMs: 30_000,
 } as const;
+
+export * from "./catalog";
