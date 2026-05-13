@@ -14,10 +14,16 @@ import type {
   Vector2,
   WorldSnapshot,
 } from "@palpalworld/shared";
+import { CharacterPanel } from "../character/CharacterPanel";
+import { CraftingPanel } from "../crafting/CraftingPanel";
+import { EquipmentPanel } from "../equipment/EquipmentPanel";
+import { InventoryPanel } from "../inventory/InventoryPanel";
+import { getItemLabel } from "../items/itemLabels";
+import { LogPanel } from "../logs/LogPanel";
 import { GameScene, type GameSceneInput, type GameWorldScene } from "./GameScene";
 
 type TypedSocket = Socket<ServerToClientEvents, ClientToServerEvents>;
-type PanelId = "status" | "objective" | "inventory" | "build" | "chat";
+type PanelId = "status" | "objective" | "inventory" | "equipment" | "build" | "chat";
 
 const configuredServerUrl = process.env.NEXT_PUBLIC_REALTIME_SERVER_URL;
 const demoPlayerId = "demo-player";
@@ -26,33 +32,10 @@ const joystickRadius = 56;
 const panelDefaults: Record<PanelId, { x: number; y: number; width: number; collapsed?: boolean }> = {
   status: { x: 8, y: 8, width: 320 },
   objective: { x: 8, y: 60, width: 270, collapsed: true },
-  inventory: { x: 8, y: 108, width: 270, collapsed: true },
-  build: { x: 8, y: 156, width: 270, collapsed: true },
-  chat: { x: 8, y: 204, width: 300, collapsed: true },
-};
-
-const itemLabels: Record<string, string> = {
-  wood: "나무",
-  hardwood: "단단한 나무",
-  stone: "돌",
-  fiber: "섬유",
-  ore: "광석",
-  berry: "열매",
-  herb: "약초",
-  coal: "석탄",
-  ice_crystal: "얼음 결정",
-  ember_shard: "불씨 조각",
-  pal_essence: "펄 정수",
-  leaf_pelt: "잎사귀 털가죽",
-  flame_tail: "불꽃 꼬리털",
-  water_jelly: "물방울 젤리",
-  spark_core: "전기 코어",
-  capture_orb: "포획구",
-  basic_axe: "기본 도끼",
-  basic_pickaxe: "기본 곡괭이",
-  basic_sickle: "기본 낫",
-  workbench_kit: "작업대 키트",
-  base_core_kit: "거점 코어 키트",
+  inventory: { x: 8, y: 108, width: 300, collapsed: true },
+  equipment: { x: 8, y: 156, width: 300, collapsed: true },
+  build: { x: 8, y: 204, width: 300, collapsed: true },
+  chat: { x: 8, y: 252, width: 320, collapsed: true },
 };
 
 function resolveRealtimeServerUrl() {
@@ -87,7 +70,11 @@ function createDemoInventory(): InventoryState {
       { itemId: "fiber", amount: 10 },
       { itemId: "capture_orb", amount: 5 },
     ],
-    itemInstances: [],
+    itemInstances: [
+      { instanceId: "demo-training-sword", itemId: "training_sword", ownerPlayerId: demoPlayerId, level: 1, durability: 100, traitIds: ["sharp"], locked: false },
+      { instanceId: "demo-explorer-jacket", itemId: "explorer_jacket", ownerPlayerId: demoPlayerId, level: 1, durability: 100, traitIds: [], locked: false },
+      { instanceId: "demo-leather-boots", itemId: "leather_boots", ownerPlayerId: demoPlayerId, level: 1, durability: 100, traitIds: [], locked: false },
+    ],
   };
 }
 
@@ -267,7 +254,7 @@ export function GameClient() {
     const gainAmount = resource.resourceType === "berry" ? 4 : resource.resourceType === "fiber" ? 5 : resource.resourceType === "ore" ? 4 : 8;
     resource.remainingAmount = Math.max(0, resource.remainingAmount - 25);
     setInventory((current) => addInventoryItem(current ?? createDemoInventory(), resource.resourceType, gainAmount));
-    setChatLines((prev) => [...prev.slice(-5), `[demo] ${itemLabels[resource.resourceType] ?? resource.resourceType} ${gainAmount}개 획득`]);
+    setChatLines((prev) => [...prev.slice(-5), `[demo] ${getItemLabel(resource.resourceType)} ${gainAmount}개 획득`]);
     applyDemoSnapshot();
   }, [applyDemoSnapshot]);
 
@@ -335,7 +322,7 @@ export function GameClient() {
         setChatLines((prev) => [...prev.slice(-5), `[demo] ${recipeId} 재료 부족`]);
         return base;
       }
-      setChatLines((prev) => [...prev.slice(-5), `[demo] ${itemLabels[recipeId] ?? recipeId} 제작 완료`]);
+      setChatLines((prev) => [...prev.slice(-5), `[demo] ${getItemLabel(recipeId)} 제작 완료`]);
       return addInventoryItem(consumed, recipeId, outputAmount);
     });
   }, []);
@@ -456,21 +443,18 @@ export function GameClient() {
     inputRef.current = input;
   }, []);
 
-  const playerCount = snapshot?.players.length ?? 0;
-  const buildingCount = snapshot?.buildings.length ?? 0;
-  const objectiveText = useMemo(() => "제목바를 드래그해 패널을 옮기고, 접기/펼치기로 화면을 정리하세요. 자원 근처에서 상호, 몬스터 근처에서 공격을 누르세요.", []);
+  const objectiveText = useMemo(
+    () => "제목바를 드래그해 패널을 옮기고, 접기/펼치기로 화면을 정리하세요. 자원 근처에서 상호, 몬스터 근처에서 공격을 누르세요.",
+    [],
+  );
 
   return (
     <main className="game-shell">
       <GameScene onReady={handleSceneReady} onInputChange={handleInputChange} onInteract={handleInteract} />
 
       <section className="game-hud" aria-label="Game HUD">
-        <DraggablePanel id="status" title="PalPalWorld">
-          <div>상태: {connectionState}</div>
-          <div>닉네임: {nickname}</div>
-          <div>접속자: {playerCount}</div>
-          <div>건물: {buildingCount}</div>
-          <small>서버: {serverEndpoint || "확인 중"}</small>
+        <DraggablePanel id="status" title="캐릭터">
+          <CharacterPanel nickname={nickname} connectionState={connectionState} serverEndpoint={serverEndpoint} snapshot={snapshot} />
         </DraggablePanel>
 
         <DraggablePanel id="objective" title="목표">
@@ -478,31 +462,19 @@ export function GameClient() {
         </DraggablePanel>
 
         <DraggablePanel id="inventory" title="인벤토리">
-          <div className="inventory-grid">
-            {(inventory?.items ?? []).map((item) => (
-              <div className="inventory-slot" key={item.itemId}>
-                <span>{itemLabels[item.itemId] ?? item.itemId}</span>
-                <b>{item.amount}</b>
-              </div>
-            ))}
-          </div>
+          <InventoryPanel inventory={inventory} />
+        </DraggablePanel>
+
+        <DraggablePanel id="equipment" title="장비">
+          <EquipmentPanel inventory={inventory} />
         </DraggablePanel>
 
         <DraggablePanel id="build" title="제작 / 건설">
-          <div className="control-grid">
-            <button onClick={() => handleCraft("workbench_kit")}>작업대 키트 제작</button>
-            <button onClick={() => handleCraft("base_core_kit")}>거점 코어 키트 제작</button>
-            <button onClick={() => handleCraft("capture_orb")}>포획구 제작</button>
-            <button onClick={() => handlePlaceBuilding("workbench")}>작업대 설치</button>
-            <button onClick={() => handlePlaceBuilding("base_core")}>거점 코어 설치</button>
-            <button onClick={() => handlePlaceBuilding("storage_box")}>보관함 설치</button>
-          </div>
+          <CraftingPanel onCraft={handleCraft} onPlaceBuilding={handlePlaceBuilding} />
         </DraggablePanel>
 
         <DraggablePanel id="chat" title="로그">
-          {chatLines.map((line, index) => (
-            <div key={`${line}-${index}`}>{line}</div>
-          ))}
+          <LogPanel lines={chatLines} />
         </DraggablePanel>
 
         <MobileControls onInputChange={handleInputChange} onInteract={handleInteract} />
