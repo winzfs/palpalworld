@@ -34,9 +34,46 @@ export type WorkSkill =
 
 export type CreatureRarity = "common" | "uncommon" | "rare" | "epic" | "legendary";
 export type ResourceType = "wood" | "hardwood" | "stone" | "fiber" | "ore" | "berry" | "herb" | "coal" | "ice_crystal" | "ember_shard";
-export type ItemCategory = "resource" | "tool" | "consumable" | "capture" | "material" | "building" | "equipment";
+export type ItemCategory = "resource" | "tool" | "consumable" | "capture" | "material" | "building" | "equipment" | "mount_gear";
 export type ItemId = string;
 export type BuildingType = "base_core" | "storage_box" | "workbench" | "pal_bed" | "farm_plot" | "furnace" | "campfire" | "wood_wall" | "wood_floor";
+export type MountType = "ground" | "flying" | "swimming";
+export type TraitRarity = "common" | "uncommon" | "rare" | "epic" | "legendary";
+export type TraitTarget = "creature" | "weapon" | "player" | "base";
+export type TraitEffectType =
+  | "attack_multiplier"
+  | "defense_multiplier"
+  | "max_hp_multiplier"
+  | "move_speed_multiplier"
+  | "work_speed_multiplier"
+  | "capture_bonus"
+  | "stamina_multiplier"
+  | "element_damage_bonus";
+
+export type TraitEffect = {
+  type: TraitEffectType;
+  value: number;
+  element?: ElementType;
+  workSkill?: WorkSkill;
+};
+
+export type TraitDefinition = {
+  id: string;
+  name: string;
+  target: TraitTarget;
+  rarity: TraitRarity;
+  effects: readonly TraitEffect[];
+  description: string;
+};
+
+export type MountDefinition = {
+  speciesId: string;
+  mountType: MountType;
+  requiredGearItemId?: ItemId;
+  moveSpeedMultiplier: number;
+  staminaSeconds: number;
+  unlockLevel: number;
+};
 
 export type ItemDefinition = {
   id: ItemId;
@@ -73,6 +110,8 @@ export type CreatureSpecies = {
   baseDefense: number;
   baseMoveSpeed: number;
   workSkills: Partial<Record<WorkSkill, number>>;
+  traitPool: readonly string[];
+  mount?: MountDefinition;
   drops: readonly LootEntry[];
 };
 
@@ -83,6 +122,7 @@ export type CreatureSpawnDefinition = {
   position: Vector2;
   level: number;
   respawnMs: number;
+  traitIds?: readonly string[];
 };
 
 export type RegionDefinition = {
@@ -129,6 +169,21 @@ export type PlayerPublicState = {
   direction: Direction;
   hp: number;
   maxHp: number;
+  mountedCreatureId?: EntityId;
+};
+
+export type OwnedCreatureState = {
+  id: EntityId;
+  speciesId: string;
+  ownerPlayerId: PlayerId;
+  nickname?: string;
+  level: number;
+  traitIds: string[];
+  hp: number;
+  maxHp: number;
+  stamina: number;
+  maxStamina: number;
+  isMounted: boolean;
 };
 
 export type CreaturePublicState = {
@@ -139,6 +194,7 @@ export type CreaturePublicState = {
   level: number;
   hp: number;
   maxHp: number;
+  traitIds: string[];
   ownerPlayerId?: PlayerId;
   respawnAt?: number;
 };
@@ -187,13 +243,17 @@ export type ClientToServerEvents = {
   "client:craft_item": (payload: { recipeId: string }) => void;
   "client:use_item": (payload: { itemId: string; targetEntityId?: EntityId; targetPosition?: Vector2 }) => void;
   "client:place_building": (payload: { buildingType: BuildingType; position: Vector2 }) => void;
+  "client:try_capture": (payload: { creatureId: EntityId; orbItemId: ItemId }) => void;
+  "client:mount_creature": (payload: { ownedCreatureId: EntityId }) => void;
+  "client:dismount_creature": () => void;
 };
 
 export type ServerToClientEvents = {
   "server:world_snapshot": (payload: WorldSnapshot) => void;
   "server:inventory_updated": (payload: InventoryState) => void;
+  "server:owned_creatures_updated": (payload: { ownerPlayerId: PlayerId; creatures: OwnedCreatureState[] }) => void;
   "server:entity_spawned": (payload: CreaturePublicState | ResourceNodeState | BuildingState) => void;
-  "server:entity_updated": (payload: Partial<CreaturePublicState | ResourceNodeState | BuildingState> & { id: EntityId }) => void;
+  "server:entity_updated": (payload: Partial<CreaturePublicState | ResourceNodeState | BuildingState | PlayerPublicState> & { id: EntityId }) => void;
   "server:entity_removed": (payload: { id: EntityId }) => void;
   "server:chat_message": (payload: { playerId: PlayerId; nickname: string; message: string; sentAt: number }) => void;
   "server:toast": (payload: { type: "info" | "success" | "warning" | "error"; message: string }) => void;
