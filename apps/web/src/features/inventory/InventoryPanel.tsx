@@ -25,6 +25,7 @@ export function InventoryPanel({
   const buildingItems = stackItems.filter((item) => isBuildingItemId(item.itemId));
   const normalStackItems = stackItems.filter((item) => !isBuildingItemId(item.itemId));
   const instances = inventory?.itemInstances ?? [];
+  const selectedBuilding = selectedBuildingItemId ? getProgressionBuildingByItemId(selectedBuildingItemId) : null;
 
   return (
     <div className="feature-panel feature-panel--inventory">
@@ -41,7 +42,9 @@ export function InventoryPanel({
       </div>
 
       <div className="feature-panel__section-title">건설</div>
-      <div className="feature-panel__hint">건설 아이템을 선택한 뒤, 원하는 필드 위치를 클릭하면 설치됩니다.</div>
+      <div className="feature-panel__hint">
+        {selectedBuilding ? `${selectedBuilding.name} 배치 중: 반투명 건설물을 원하는 위치에 맞춘 뒤 클릭하세요.` : "건설 아이템을 선택한 뒤, 원하는 필드 위치를 클릭하면 설치됩니다."}
+      </div>
       <div className="inventory-grid">
         {buildingItems.length > 0 ? (
           buildingItems.map((item) => {
@@ -52,7 +55,6 @@ export function InventoryPanel({
                 key={item.itemId}
                 label={getBuildingInventoryLabel(item.itemId)}
                 amount={item.amount}
-                detail={selected ? "선택됨 · 필드 클릭" : "선택 후 필드 클릭"}
                 iconSrc={icon?.src}
                 selected={selected}
                 onClick={onSelectBuildingItem ? () => onSelectBuildingItem(item.itemId) : undefined}
