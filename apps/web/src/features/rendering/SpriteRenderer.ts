@@ -108,12 +108,6 @@ function drawMountedFlyingBreezewing(ctx: CanvasRenderingContext2D, x: number, y
   ctx.ellipse(x, y + 30, 42, 9, 0, 0, Math.PI * 2);
   ctx.fill();
 
-  ctx.strokeStyle = "rgba(147, 197, 253, 0.38)";
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.arc(x, bodyY + 2, 39 + Math.abs(flap) * 4, 0, Math.PI * 2);
-  ctx.stroke();
-
   ctx.strokeStyle = "rgba(0,0,0,0.72)";
   ctx.lineWidth = 3;
   ctx.fillStyle = "#bfdbfe";
@@ -457,12 +451,11 @@ export class SpriteRenderer {
     }
 
     drawEquippedWeapon(ctx, x, playerDrawY, direction, equippedWeaponItemId);
-    if (isLocal) {
-      ctx.strokeStyle = isFlyingMount ? "rgba(147, 197, 253, 0.9)" : mountedPetSpeciesId ? "rgba(125, 211, 252, 0.85)" : "rgba(250, 204, 21, 0.8)";
+    if (isLocal && !isFlyingMount) {
+      ctx.strokeStyle = mountedPetSpeciesId ? "rgba(125, 211, 252, 0.85)" : "rgba(250, 204, 21, 0.8)";
       ctx.lineWidth = 2;
       ctx.beginPath();
-      if (isFlyingMount) ctx.ellipse(x, y + 30, 43, 9, 0, 0, Math.PI * 2);
-      else ctx.ellipse(x, y + 17, mountedPetSpeciesId ? 32 : 18, mountedPetSpeciesId ? 10 : 7, 0, 0, Math.PI * 2);
+      ctx.ellipse(x, y + 17, mountedPetSpeciesId ? 32 : 18, mountedPetSpeciesId ? 10 : 7, 0, 0, Math.PI * 2);
       ctx.stroke();
     }
     const nameY = isFlyingMount ? playerDrawY - 54 : playerDrawY - 48;
