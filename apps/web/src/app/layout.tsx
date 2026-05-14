@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import "./hud-menu.css";
+import "./equipment-panel.css";
 
 export const metadata: Metadata = {
   title: "PalPalWorld",
