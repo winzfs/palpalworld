@@ -52,6 +52,7 @@ type EquipmentChangedEvent = CustomEvent<{ weaponItemId?: string | null }>;
 
 const fallbackPlayerTiles = new Map<string, MapTileRef>();
 const cullPadding = 96;
+const equippedWeaponStorageKey = "palpalworld.demo.equippedWeaponItemId";
 
 function distance(a: Vector2, b: Vector2) {
   return Math.hypot(a.x - b.x, a.y - b.y);
@@ -64,12 +65,15 @@ function getTileRef(entity: unknown) {
 
 function readStoredWeaponItemId() {
   if (typeof window === "undefined") return null;
+  const directWeaponItemId = window.localStorage.getItem(equippedWeaponStorageKey);
+  if (directWeaponItemId) return directWeaponItemId;
   try {
     const raw = window.localStorage.getItem("palpalworld.demo.equipment");
     if (!raw) return null;
     const parsed = JSON.parse(raw) as { slots?: { weapon?: string } };
     const weaponInstanceId = parsed.slots?.weapon;
     if (!weaponInstanceId) return null;
+    if (weaponInstanceId.startsWith("quick-")) return weaponInstanceId.replace(/^quick-/, "");
     const inventoryRaw = window.localStorage.getItem("palpalworld.demo.inventory");
     if (!inventoryRaw) return null;
     const inventory = JSON.parse(inventoryRaw) as { itemInstances?: { instanceId: string; itemId: string }[] };
@@ -197,6 +201,7 @@ export class GameWorldScene {
 
     this.snapshot = normalizedSnapshot;
     this.localPlayerId = localPlayerId;
+    this.localEquippedWeaponItemId = readStoredWeaponItemId();
     window.dispatchEvent(new CustomEvent("palpalworld:world_snapshot", { detail: { snapshot: normalizedSnapshot, localPlayerId } }));
   }
 
@@ -208,47 +213,28 @@ export class GameWorldScene {
   getNearestInteractableId(): EntityId | null {
     const localPlayer = this.getLocalPlayerPosition();
     if (!localPlayer || !this.snapshot) return null;
-
     let nearest: ResourceNodeState | null = null;
     let nearestDistance = Number.POSITIVE_INFINITY;
-
     for (const resource of this.getSceneResources()) {
       const hitDistance = Math.hypot(resource.position.x - localPlayer.x, resource.position.y - localPlayer.y);
       if (hitDistance > WORLD.interactRange || hitDistance >= nearestDistance) continue;
       nearest = resource;
       nearestDistance = hitDistance;
     }
-
     return nearest?.id ?? null;
   }
 
-  getLocalPlayerPosition() {
-    return this.getLocalPlayer()?.position ?? null;
-  }
+  getLocalPlayerPosition() { return this.getLocalPlayer()?.position ?? null; }
 
   private handleEquipmentChanged = (event: EquipmentChangedEvent) => {
-    this.localEquippedWeaponItemId = event.detail?.weaponItemId ?? null;
+    this.localEquippedWeaponItemId = event.detail?.weaponItemId ?? readStoredWeaponItemId();
   };
 
-  private getLocalPlayer() {
-    return this.snapshot?.players.find((player) => player.id === this.localPlayerId) ?? this.snapshot?.players[0] ?? null;
-  }
-
-  private getCurrentTile() {
-    return getTileRef(this.getLocalPlayer());
-  }
-
-  private getSceneResources() {
-    return this.snapshot?.resources ?? [];
-  }
-
-  private getSceneCreatures() {
-    return this.snapshot?.creatures ?? [];
-  }
-
-  private getSceneBuildings() {
-    return this.snapshot?.buildings ?? [];
-  }
+  private getLocalPlayer() { return this.snapshot?.players.find((player) => player.id === this.localPlayerId) ?? this.snapshot?.players[0] ?? null; }
+  private getCurrentTile() { return getTileRef(this.getLocalPlayer()); }
+  private getSceneResources() { return this.snapshot?.resources ?? []; }
+  private getSceneCreatures() { return this.snapshot?.creatures ?? []; }
+  private getSceneBuildings() { return this.snapshot?.buildings ?? []; }
 
   getPlacementValidity(position: Vector2): PlacementValidity {
     if (!this.placementPreviewBuildingType) return { ok: true, reason: "설치 모드가 아닙니다." };
@@ -256,9 +242,7 @@ export class GameWorldScene {
     if (!localPlayer) return { ok: false, reason: "플레이어 위치를 찾을 수 없습니다." };
     if (position.x < 0 || position.x > MAP_TILE_SIZE.width || position.y < 0 || position.y > MAP_TILE_SIZE.height) return { ok: false, reason: "타일 밖에는 설치할 수 없습니다." };
     if (distance(localPlayer, position) > WORLD.buildRange) return { ok: false, reason: "너무 멀리 설치할 수 없습니다." };
-    for (const building of this.getSceneBuildings()) {
-      if (distance(building.position, position) < WORLD.tileSize) return { ok: false, reason: "이미 다른 건물이 있는 위치입니다." };
-    }
+    for (const building of this.getSceneBuildings()) if (distance(building.position, position) < WORLD.tileSize) return { ok: false, reason: "이미 다른 건물이 있는 위치입니다." };
     return { ok: true, reason: "설치 가능" };
   }
 
@@ -267,10 +251,7 @@ export class GameWorldScene {
     let nearestDistance = Number.POSITIVE_INFINITY;
     for (const building of this.getSceneBuildings()) {
       const hitDistance = distance(building.position, position);
-      if (hitDistance <= 42 && hitDistance < nearestDistance) {
-        nearest = building;
-        nearestDistance = hitDistance;
-      }
+      if (hitDistance <= 42 && hitDistance < nearestDistance) { nearest = building; nearestDistance = hitDistance; }
     }
     return nearest;
   }
@@ -279,10 +260,7 @@ export class GameWorldScene {
     const rect = this.root.getBoundingClientRect();
     const localPlayer = this.getLocalPlayer();
     const target = localPlayer?.position ?? { x: rect.width / 2, y: rect.height / 2 };
-    return {
-      x: Math.max(0, Math.min(Math.max(0, MAP_TILE_SIZE.width - rect.width), target.x - rect.width / 2)),
-      y: Math.max(0, Math.min(Math.max(0, MAP_TILE_SIZE.height - rect.height), target.y - rect.height / 2)),
-    };
+    return { x: Math.max(0, Math.min(Math.max(0, MAP_TILE_SIZE.width - rect.width), target.x - rect.width / 2)), y: Math.max(0, Math.min(Math.max(0, MAP_TILE_SIZE.height - rect.height), target.y - rect.height / 2)) };
   }
 
   private getViewportBounds(cameraX: number, cameraY: number): ViewportBounds {
@@ -311,10 +289,7 @@ export class GameWorldScene {
     this.pointerWorldPosition = position;
     if (!this.placementPreviewBuildingType) {
       const building = this.getBuildingAt(position);
-      if (building) {
-        this.onWorldClick({ kind: "building", building });
-        return;
-      }
+      if (building) { this.onWorldClick({ kind: "building", building }); return; }
     }
     this.onWorldClick({ kind: "field", position, validity: this.getPlacementValidity(position) });
   };
@@ -326,11 +301,7 @@ export class GameWorldScene {
     if (!this.placementPreviewBuildingType) this.canvas.style.cursor = this.hoverBuildingId ? "pointer" : "default";
   };
 
-  private handlePointerLeave = () => {
-    this.pointerWorldPosition = null;
-    this.hoverBuildingId = null;
-    if (!this.placementPreviewBuildingType) this.canvas.style.cursor = "default";
-  };
+  private handlePointerLeave = () => { this.pointerWorldPosition = null; this.hoverBuildingId = null; if (!this.placementPreviewBuildingType) this.canvas.style.cursor = "default"; };
 
   private handleKeyDown = (event: KeyboardEvent) => {
     const key = event.key.toLowerCase();
@@ -339,10 +310,7 @@ export class GameWorldScene {
     this.emitKeyboardInput();
   };
 
-  private handleKeyUp = (event: KeyboardEvent) => {
-    this.keys.delete(event.key.toLowerCase());
-    this.emitKeyboardInput();
-  };
+  private handleKeyUp = (event: KeyboardEvent) => { this.keys.delete(event.key.toLowerCase()); this.emitKeyboardInput(); };
 
   private emitKeyboardInput() {
     const left = this.keys.has("a") || this.keys.has("arrowleft");
@@ -352,10 +320,7 @@ export class GameWorldScene {
     this.onInputChange({ x: Number(right) - Number(left), y: Number(down) - Number(up), primary: this.keys.has(" "), secondary: this.keys.has("e") });
   }
 
-  private loop = () => {
-    this.draw();
-    this.animationFrame = requestAnimationFrame(this.loop);
-  };
+  private loop = () => { this.draw(); this.animationFrame = requestAnimationFrame(this.loop); };
 
   private draw() {
     const rect = this.root.getBoundingClientRect();
@@ -409,24 +374,13 @@ export class GameWorldScene {
       const y = building.position.y - cameraY;
       this.renderer.drawBuilding(ctx, building, x, y);
       if (building.id === this.hoverBuildingId) {
-        ctx.save();
-        ctx.strokeStyle = "rgba(250, 204, 21, 0.9)";
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.ellipse(x, y + 24, 32, 12, 0, 0, Math.PI * 2);
-        ctx.stroke();
-        ctx.restore();
+        ctx.save(); ctx.strokeStyle = "rgba(250, 204, 21, 0.9)"; ctx.lineWidth = 2; ctx.beginPath(); ctx.ellipse(x, y + 24, 32, 12, 0, 0, Math.PI * 2); ctx.stroke(); ctx.restore();
       }
     }
   }
 
-  private drawResources(ctx: CanvasRenderingContext2D, cameraX: number, cameraY: number, viewport: ViewportBounds) {
-    for (const resource of this.getSceneResources()) if (isPositionInViewport(resource.position, viewport)) this.renderer.drawResource(ctx, resource, resource.position.x - cameraX, resource.position.y - cameraY);
-  }
-
-  private drawCreatures(ctx: CanvasRenderingContext2D, cameraX: number, cameraY: number, viewport: ViewportBounds) {
-    for (const creature of this.getSceneCreatures()) if (isPositionInViewport(creature.position, viewport)) this.renderer.drawCreature(ctx, creature, creature.position.x - cameraX, creature.position.y - cameraY);
-  }
+  private drawResources(ctx: CanvasRenderingContext2D, cameraX: number, cameraY: number, viewport: ViewportBounds) { for (const resource of this.getSceneResources()) if (isPositionInViewport(resource.position, viewport)) this.renderer.drawResource(ctx, resource, resource.position.x - cameraX, resource.position.y - cameraY); }
+  private drawCreatures(ctx: CanvasRenderingContext2D, cameraX: number, cameraY: number, viewport: ViewportBounds) { for (const creature of this.getSceneCreatures()) if (isPositionInViewport(creature.position, viewport)) this.renderer.drawCreature(ctx, creature, creature.position.x - cameraX, creature.position.y - cameraY); }
 
   private drawPlayers(ctx: CanvasRenderingContext2D, cameraX: number, cameraY: number, now: number, viewport: ViewportBounds) {
     if (!this.snapshot) return;
@@ -447,33 +401,9 @@ export class GameWorldScene {
     const x = this.pointerWorldPosition.x - cameraX;
     const y = this.pointerWorldPosition.y - cameraY;
     const accent = validity.ok ? "34, 197, 94" : "239, 68, 68";
-    ctx.save();
-    ctx.globalAlpha = validity.ok ? 0.5 : 0.34;
-    this.renderer.drawBuilding(ctx, previewBuilding, x, y);
-    ctx.restore();
-    ctx.save();
-    ctx.strokeStyle = `rgba(${accent}, 0.9)`;
-    ctx.fillStyle = `rgba(${accent}, 0.16)`;
-    ctx.lineWidth = 2;
-    ctx.setLineDash([6, 4]);
-    ctx.beginPath();
-    ctx.ellipse(x, y + 24, 30, 11, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.stroke();
-    ctx.restore();
-    ctx.save();
-    ctx.fillStyle = "rgba(15, 23, 42, 0.86)";
-    ctx.strokeStyle = `rgba(${accent}, 0.82)`;
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.roundRect(x - 82, y - 64, 164, 26, 8);
-    ctx.fill();
-    ctx.stroke();
-    ctx.fillStyle = validity.ok ? "#bbf7d0" : "#fecaca";
-    ctx.font = "12px system-ui";
-    ctx.textAlign = "center";
-    ctx.fillText(validity.reason, x, y - 46);
-    ctx.restore();
+    ctx.save(); ctx.globalAlpha = validity.ok ? 0.5 : 0.34; this.renderer.drawBuilding(ctx, previewBuilding, x, y); ctx.restore();
+    ctx.save(); ctx.strokeStyle = `rgba(${accent}, 0.9)`; ctx.fillStyle = `rgba(${accent}, 0.16)`; ctx.lineWidth = 2; ctx.setLineDash([6, 4]); ctx.beginPath(); ctx.ellipse(x, y + 24, 30, 11, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke(); ctx.restore();
+    ctx.save(); ctx.fillStyle = "rgba(15, 23, 42, 0.86)"; ctx.strokeStyle = `rgba(${accent}, 0.82)`; ctx.lineWidth = 1; ctx.beginPath(); ctx.roundRect(x - 82, y - 64, 164, 26, 8); ctx.fill(); ctx.stroke(); ctx.fillStyle = validity.ok ? "#bbf7d0" : "#fecaca"; ctx.font = "12px system-ui"; ctx.textAlign = "center"; ctx.fillText(validity.reason, x, y - 46); ctx.restore();
   }
 
   private drawInteractionHint(ctx: CanvasRenderingContext2D, cameraX: number, cameraY: number) {
@@ -483,19 +413,7 @@ export class GameWorldScene {
     if (!target) return;
     const x = target.position.x - cameraX;
     const y = target.position.y - cameraY;
-    ctx.strokeStyle = "#facc15";
-    ctx.lineWidth = 3;
-    ctx.beginPath();
-    ctx.roundRect(x - 23, y - 23, 46, 46, 12);
-    ctx.stroke();
-    ctx.fillStyle = "rgba(15, 23, 42, 0.82)";
-    ctx.beginPath();
-    ctx.roundRect(x - 55, y - 56, 110, 24, 8);
-    ctx.fill();
-    ctx.fillStyle = "#ffffff";
-    ctx.font = "12px system-ui";
-    ctx.textAlign = "center";
-    ctx.fillText("E / 상호작용", x, y - 39);
+    ctx.strokeStyle = "#facc15"; ctx.lineWidth = 3; ctx.beginPath(); ctx.roundRect(x - 23, y - 23, 46, 46, 12); ctx.stroke(); ctx.fillStyle = "rgba(15, 23, 42, 0.82)"; ctx.beginPath(); ctx.roundRect(x - 55, y - 56, 110, 24, 8); ctx.fill(); ctx.fillStyle = "#ffffff"; ctx.font = "12px system-ui"; ctx.textAlign = "center"; ctx.fillText("E / 상호작용", x, y - 39);
   }
 }
 
@@ -508,15 +426,10 @@ export function GameScene({ onReady, onInputChange, onInteract, onWorldClick, pl
     const scene = new GameWorldScene(rootRef.current, onInputChange, onInteract, onWorldClick);
     sceneRef.current = scene;
     onReady(scene);
-    return () => {
-      scene.destroy();
-      sceneRef.current = null;
-    };
+    return () => { scene.destroy(); sceneRef.current = null; };
   }, [onInputChange, onInteract, onWorldClick, onReady]);
 
-  useEffect(() => {
-    sceneRef.current?.setPlacementPreviewBuildingType(placementBuildingType ?? null);
-  }, [placementBuildingType]);
+  useEffect(() => { sceneRef.current?.setPlacementPreviewBuildingType(placementBuildingType ?? null); }, [placementBuildingType]);
 
   return <div ref={rootRef} className="game-canvas-root" aria-label="Game canvas" />;
 }
