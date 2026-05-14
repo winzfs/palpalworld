@@ -189,18 +189,16 @@ export class GameWorldScene {
 
   getNearestInteractableId(): EntityId | null {
     const localPlayer = this.getLocalPlayerPosition();
-    const currentTile = this.getCurrentTile();
     if (!localPlayer || !this.snapshot) return null;
 
     let nearest: ResourceNodeState | null = null;
     let nearestDistance = Number.POSITIVE_INFINITY;
 
-    for (const resource of this.snapshot.resources) {
-      if (!this.isEntityOnCurrentTile(resource, currentTile)) continue;
-      const distance = Math.hypot(resource.position.x - localPlayer.x, resource.position.y - localPlayer.y);
-      if (distance > WORLD.interactRange || distance >= nearestDistance) continue;
+    for (const resource of this.getSceneResources()) {
+      const hitDistance = Math.hypot(resource.position.x - localPlayer.x, resource.position.y - localPlayer.y);
+      if (hitDistance > WORLD.interactRange || hitDistance >= nearestDistance) continue;
       nearest = resource;
-      nearestDistance = distance;
+      nearestDistance = hitDistance;
     }
 
     return nearest?.id ?? null;
@@ -218,27 +216,16 @@ export class GameWorldScene {
     return getTileRef(this.getLocalPlayer());
   }
 
-  private isEntityOnCurrentTile(entity: unknown, currentTile = this.getCurrentTile()) {
-    const entityTile = (entity as { currentTile?: MapTileRef })?.currentTile;
-    return !entityTile || isSameTile(entityTile, currentTile);
+  private getSceneResources() {
+    return this.snapshot?.resources ?? [];
   }
 
-  private getCurrentTileResources() {
-    if (!this.snapshot) return [];
-    const currentTile = this.getCurrentTile();
-    return this.snapshot.resources.filter((resource) => this.isEntityOnCurrentTile(resource, currentTile));
+  private getSceneCreatures() {
+    return this.snapshot?.creatures ?? [];
   }
 
-  private getCurrentTileCreatures() {
-    if (!this.snapshot) return [];
-    const currentTile = this.getCurrentTile();
-    return this.snapshot.creatures.filter((creature) => this.isEntityOnCurrentTile(creature, currentTile));
-  }
-
-  private getCurrentTileBuildings() {
-    if (!this.snapshot) return [];
-    const currentTile = this.getCurrentTile();
-    return this.snapshot.buildings.filter((building) => this.isEntityOnCurrentTile(building, currentTile));
+  private getSceneBuildings() {
+    return this.snapshot?.buildings ?? [];
   }
 
   getPlacementValidity(position: Vector2): PlacementValidity {
@@ -255,7 +242,7 @@ export class GameWorldScene {
       return { ok: false, reason: "너무 멀리 설치할 수 없습니다." };
     }
 
-    for (const building of this.getCurrentTileBuildings()) {
+    for (const building of this.getSceneBuildings()) {
       if (distance(building.position, position) < WORLD.tileSize) {
         return { ok: false, reason: "이미 다른 건물이 있는 위치입니다." };
       }
@@ -268,7 +255,7 @@ export class GameWorldScene {
     let nearest: BuildingState | null = null;
     let nearestDistance = Number.POSITIVE_INFINITY;
 
-    for (const building of this.getCurrentTileBuildings()) {
+    for (const building of this.getSceneBuildings()) {
       const hitDistance = distance(building.position, position);
       if (hitDistance <= 42 && hitDistance < nearestDistance) {
         nearest = building;
@@ -456,7 +443,7 @@ export class GameWorldScene {
   }
 
   private drawBuildings(ctx: CanvasRenderingContext2D, cameraX: number, cameraY: number, viewport: ViewportBounds) {
-    for (const building of this.getCurrentTileBuildings()) {
+    for (const building of this.getSceneBuildings()) {
       if (!isPositionInViewport(building.position, viewport)) continue;
       const x = building.position.x - cameraX;
       const y = building.position.y - cameraY;
@@ -474,14 +461,14 @@ export class GameWorldScene {
   }
 
   private drawResources(ctx: CanvasRenderingContext2D, cameraX: number, cameraY: number, viewport: ViewportBounds) {
-    for (const resource of this.getCurrentTileResources()) {
+    for (const resource of this.getSceneResources()) {
       if (!isPositionInViewport(resource.position, viewport)) continue;
       this.renderer.drawResource(ctx, resource, resource.position.x - cameraX, resource.position.y - cameraY);
     }
   }
 
   private drawCreatures(ctx: CanvasRenderingContext2D, cameraX: number, cameraY: number, viewport: ViewportBounds) {
-    for (const creature of this.getCurrentTileCreatures()) {
+    for (const creature of this.getSceneCreatures()) {
       if (!isPositionInViewport(creature.position, viewport)) continue;
       this.renderer.drawCreature(ctx, creature, creature.position.x - cameraX, creature.position.y - cameraY);
     }
@@ -549,7 +536,7 @@ export class GameWorldScene {
   private drawInteractionHint(ctx: CanvasRenderingContext2D, cameraX: number, cameraY: number) {
     if (this.placementPreviewBuildingType) return;
     const nearestId = this.getNearestInteractableId();
-    const target = this.getCurrentTileResources().find((resource) => resource.id === nearestId);
+    const target = this.getSceneResources().find((resource) => resource.id === nearestId);
     if (!target) return;
 
     const x = target.position.x - cameraX;
