@@ -1,3 +1,78 @@
+.hud-menu-panel:has(.storage-box-panel) {
+  left: 50%;
+  top: 50%;
+  z-index: 24;
+  width: min(760px, calc(100vw - 24px));
+  max-height: min(680px, calc(100vh - 40px));
+  transform: translate(-50%, -50%);
+  display: block;
+  overflow: hidden;
+  padding: 10px;
+  border: 2px solid rgb(242 209 107 / 0.45);
+  border-radius: 16px;
+  background: rgb(13 12 24 / 0.82);
+  box-shadow: 0 24px 70px rgb(0 0 0 / 0.5), inset 0 0 0 1px rgb(255 255 255 / 0.08);
+  backdrop-filter: blur(12px);
+}
+
+.hud-menu-panel:has(.storage-box-panel) > .hud-menu-panel__header,
+.hud-menu-panel:has(.storage-box-panel) > .hud-menu-tabs {
+  display: none;
+}
+
+.hud-menu-panel:has(.storage-box-panel) > .hud-menu-panel__body {
+  padding: 0;
+  overflow: visible;
+}
+
+.feature-panel--building-interaction:has(.storage-box-panel) {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.feature-panel--building-interaction:has(.storage-box-panel) > .feature-panel__section-title,
+.feature-panel--building-interaction:has(.storage-box-panel) > .feature-panel__hint,
+.feature-panel--building-interaction:has(.storage-box-panel) > .building-interaction__stats {
+  display: none;
+}
+
+.feature-panel--building-interaction:has(.storage-box-panel) > .building-interaction__header {
+  position: absolute;
+  right: 8px;
+  top: 8px;
+  z-index: 5;
+  display: block;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.feature-panel--building-interaction:has(.storage-box-panel) > .building-interaction__header strong {
+  display: none;
+}
+
+.feature-panel--building-interaction:has(.storage-box-panel) > .building-interaction__header button {
+  width: 26px;
+  height: 26px;
+  min-height: 0;
+  padding: 0;
+  border: 1px solid rgb(255 255 255 / 0.22);
+  border-radius: 999px;
+  background: rgb(0 0 0 / 0.34);
+  color: var(--jrpg-text);
+  font-size: 0;
+  font-weight: 950;
+  cursor: pointer;
+}
+
+.feature-panel--building-interaction:has(.storage-box-panel) > .building-interaction__header button::before {
+  content: "×";
+  font-size: 14px;
+}
+
 .storage-overlay-panel {
   pointer-events: auto;
   position: absolute;
@@ -180,6 +255,7 @@
 }
 
 @media (max-width: 720px) {
+  .hud-menu-panel:has(.storage-box-panel),
   .storage-overlay-panel {
     width: calc(100vw - 14px);
     max-height: calc(100vh - 120px - var(--safe-bottom));
