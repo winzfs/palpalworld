@@ -246,7 +246,7 @@
 
 .inventory-grid-panel__tabs {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 6px;
   padding-right: 34px;
 }
@@ -579,12 +579,13 @@
   }
 
   .inventory-grid-panel__tabs {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
     gap: 4px;
   }
 
   .inventory-grid-panel__tab {
     min-height: 26px;
-    font-size: 10px;
+    font-size: 9px;
   }
 
   .inventory-grid-panel__content {
@@ -640,6 +641,15 @@
 
   .hud-menu-panel {
     max-height: calc(100vh - 160px - var(--safe-top) - var(--safe-bottom));
+  }
+
+  .inventory-grid-panel__tabs {
+    gap: 3px;
+  }
+
+  .inventory-grid-panel__tab {
+    padding: 0 2px;
+    font-size: 8px;
   }
 
   .inventory-grid-panel__slots {
