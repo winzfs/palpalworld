@@ -2,6 +2,7 @@ import type { InventoryState } from "@palpalworld/shared";
 import { useMemo, useState } from "react";
 import {
   buildInventoryEntries,
+  findInventoryEntryByKey,
   inventoryCategoryLabels,
   type InventoryCategory,
   type InventoryEntry,
@@ -95,18 +96,30 @@ export function InventoryGridPanel({
                   <button onClick={() => handleUseOrBuild(selectedEntry)}>{selectedBuildingItemId === selectedEntry.itemId ? "배치 취소/전환" : "배치하기"}</button>
                 ) : null}
                 {selectedEntry.quickSlotEligible ? (
-                  <div className="inventory-quick-assign">
+                  <div className="inventory-quick-assign inventory-quick-assign--icons">
                     <span>퀵슬롯 등록</span>
                     <div>
-                      {quickSlots.map((slotKey, index) => (
-                        <button
-                          key={index}
-                          className={slotKey === selectedEntry.key ? "inventory-quick-assign__slot inventory-quick-assign__slot--active" : "inventory-quick-assign__slot"}
-                          onClick={() => onAssignQuickSlot(index, slotKey === selectedEntry.key ? null : selectedEntry.key)}
-                        >
-                          {slotKey === selectedEntry.key ? `✓ ${index + 1}` : index + 1}
-                        </button>
-                      ))}
+                      {quickSlots.map((slotKey, index) => {
+                        const assignedEntry = findInventoryEntryByKey(inventory, slotKey);
+                        const isCurrent = slotKey === selectedEntry.key;
+                        return (
+                          <button
+                            key={index}
+                            className={isCurrent ? "inventory-quick-assign__slot inventory-quick-assign__slot--active" : "inventory-quick-assign__slot"}
+                            onClick={() => onAssignQuickSlot(index, isCurrent ? null : selectedEntry.key)}
+                            title={isCurrent ? `${index + 1}번 퀵슬롯 해제` : `${index + 1}번 퀵슬롯에 등록`}
+                          >
+                            <em>{index + 1}</em>
+                            {isCurrent && selectedEntry.iconSrc ? (
+                              <img src={selectedEntry.iconSrc} alt="" />
+                            ) : assignedEntry?.iconSrc ? (
+                              <img src={assignedEntry.iconSrc} alt="" />
+                            ) : (
+                              <span>{isCurrent ? "✓" : "+"}</span>
+                            )}
+                          </button>
+                        );
+                      })}
                     </div>
                   </div>
                 ) : (
