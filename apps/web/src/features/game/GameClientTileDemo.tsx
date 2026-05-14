@@ -18,6 +18,7 @@ import { addBuildingToTileIndex, createDemoTileIndex, getAliveTileCreatures, get
 
 type MenuTab = "status" | "objective" | "inventory" | "equipment" | "crafting" | "building" | "logs";
 type MiniMapSize = "small" | "medium" | "large";
+type QuickButtonId = "inventory" | "crafting";
 
 const demoPlayerId = "demo-player";
 const joystickRadius = 56;
@@ -36,6 +37,10 @@ const minimapSizeLabels: Record<MiniMapSize, string> = {
   small: "작게",
   medium: "보통",
   large: "크게",
+};
+const quickButtonDefaults: Record<QuickButtonId, { x: number; y: number; icon: string; label: string; tab: MenuTab }> = {
+  inventory: { x: 12, y: 112, icon: "🎒", label: "가방", tab: "inventory" },
+  crafting: { x: 12, y: 164, icon: "🛠", label: "제작", tab: "crafting" },
 };
 
 function createClientNickname() {
@@ -72,6 +77,14 @@ function clampCreaturePosition(position: Vector2): Vector2 {
   return {
     x: Math.max(140, Math.min(2860, position.x)),
     y: Math.max(140, Math.min(2860, position.y)),
+  };
+}
+
+function clampHudButtonPosition(position: { x: number; y: number }) {
+  if (typeof window === "undefined") return position;
+  return {
+    x: Math.max(4, Math.min(window.innerWidth - 48, position.x)),
+    y: Math.max(4, Math.min(window.innerHeight - 48, position.y)),
   };
 }
 
@@ -413,6 +426,11 @@ export function GameClientTileDemo() {
     });
   }, []);
 
+  const openMenuTab = useCallback((tab: MenuTab) => {
+    setActiveMenuTab(tab);
+    setMenuOpen(true);
+  }, []);
+
   const activeMenuContent = useMemo<ReactNode>(() => {
     switch (activeMenuTab) {
       case "status":
@@ -453,6 +471,9 @@ export function GameClientTileDemo() {
           ☰ 메뉴
         </button>
 
+        <FloatingQuickButton id="inventory" onOpen={openMenuTab} />
+        <FloatingQuickButton id="crafting" onOpen={openMenuTab} />
+
         <section className={`hud-minimap hud-minimap--${minimapSize}`} aria-label="미니맵">
           <div className="hud-minimap__header">
             <b>미니맵</b>
@@ -485,6 +506,58 @@ export function GameClientTileDemo() {
         <MobileControls onInputChange={handleInputChange} onInteract={handleDemoInteract} />
       </section>
     </main>
+  );
+}
+
+function FloatingQuickButton({ id, onOpen }: { id: QuickButtonId; onOpen: (tab: MenuTab) => void }) {
+  const config = quickButtonDefaults[id];
+  const [position, setPosition] = useState({ x: config.x, y: config.y });
+  const dragRef = useRef<{ pointerId: number; startX: number; startY: number; buttonX: number; buttonY: number; moved: boolean } | null>(null);
+
+  useEffect(() => {
+    setPosition((current) => clampHudButtonPosition(current));
+  }, []);
+
+  return (
+    <button
+      className={`hud-quick-button hud-quick-button--${id}`}
+      style={{ left: position.x, top: position.y }}
+      aria-label={config.label}
+      title={config.label}
+      onPointerDown={(event) => {
+        event.preventDefault();
+        dragRef.current = {
+          pointerId: event.pointerId,
+          startX: event.clientX,
+          startY: event.clientY,
+          buttonX: position.x,
+          buttonY: position.y,
+          moved: false,
+        };
+        event.currentTarget.setPointerCapture(event.pointerId);
+      }}
+      onPointerMove={(event) => {
+        const drag = dragRef.current;
+        if (!drag || drag.pointerId !== event.pointerId) return;
+        const dx = event.clientX - drag.startX;
+        const dy = event.clientY - drag.startY;
+        if (Math.hypot(dx, dy) > 4) drag.moved = true;
+        setPosition(clampHudButtonPosition({ x: drag.buttonX + dx, y: drag.buttonY + dy }));
+      }}
+      onPointerUp={(event) => {
+        const drag = dragRef.current;
+        if (!drag || drag.pointerId !== event.pointerId) return;
+        dragRef.current = null;
+        event.currentTarget.releasePointerCapture(event.pointerId);
+        if (!drag.moved) onOpen(config.tab);
+      }}
+      onPointerCancel={() => {
+        dragRef.current = null;
+      }}
+    >
+      <span>{config.icon}</span>
+      <small>{config.label}</small>
+    </button>
   );
 }
 
