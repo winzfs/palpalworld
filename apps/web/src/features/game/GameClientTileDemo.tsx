@@ -426,8 +426,13 @@ export function GameClientTileDemo() {
     });
   }, []);
 
-  const openMenuTab = useCallback((tab: MenuTab) => {
-    setActiveMenuTab(tab);
+  const openInventoryMenu = useCallback(() => {
+    setActiveMenuTab("inventory");
+    setMenuOpen(true);
+  }, []);
+
+  const openCraftingMenu = useCallback(() => {
+    setActiveMenuTab("crafting");
     setMenuOpen(true);
   }, []);
 
@@ -471,8 +476,8 @@ export function GameClientTileDemo() {
           ☰ 메뉴
         </button>
 
-        <FloatingQuickButton id="inventory" onOpen={openMenuTab} />
-        <FloatingQuickButton id="crafting" onOpen={openMenuTab} />
+        <FloatingQuickButton id="inventory" onOpen={openInventoryMenu} />
+        <FloatingQuickButton id="crafting" onOpen={openCraftingMenu} />
 
         <section className={`hud-minimap hud-minimap--${minimapSize}`} aria-label="미니맵">
           <button className="hud-minimap__size-button" onClick={cycleMinimapSize} aria-label="미니맵 크기 변경">
@@ -508,7 +513,7 @@ export function GameClientTileDemo() {
   );
 }
 
-function FloatingQuickButton({ id, onOpen }: { id: QuickButtonId; onOpen: (tab: MenuTab) => void }) {
+function FloatingQuickButton({ id, onOpen }: { id: QuickButtonId; onOpen: () => void }) {
   const config = quickButtonDefaults[id];
   const [position, setPosition] = useState({ x: config.x, y: config.y });
   const dragRef = useRef<{ pointerId: number; startX: number; startY: number; buttonX: number; buttonY: number; moved: boolean } | null>(null);
@@ -548,7 +553,7 @@ function FloatingQuickButton({ id, onOpen }: { id: QuickButtonId; onOpen: (tab: 
         if (!drag || drag.pointerId !== event.pointerId) return;
         dragRef.current = null;
         event.currentTarget.releasePointerCapture(event.pointerId);
-        if (!drag.moved) onOpen(config.tab);
+        if (!drag.moved) onOpen();
       }}
       onPointerCancel={() => {
         dragRef.current = null;
