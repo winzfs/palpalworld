@@ -10,10 +10,10 @@ import { InventoryPanel } from "../inventory/InventoryPanel";
 import { getItemLabel } from "../items/itemLabels";
 import { LogPanel } from "../logs/LogPanel";
 import { BuildingInteractionPanel } from "../buildings/BuildingInteractionPanel";
-import { DEFAULT_PLAYER_TILE, clampPositionToTile, isSameTile, type MapTileRef } from "../../../../../packages/shared/src/worldTiles";
+import { DEFAULT_PLAYER_TILE, clampPositionToTile, type MapTileRef } from "../../../../../packages/shared/src/worldTiles";
 import { createTileBasedDemoBuildings, createTileBasedDemoCreatures, createTileBasedDemoResources } from "./demoWorldSpawns";
 import { GameScene, type GameSceneInput, type GameWorldScene, type WorldClickTarget } from "./GameScene";
-import { addBuildingToTileIndex, createDemoTileIndex, entityTile, getAliveTileCreatures, getAliveTileResources, getTileBuildings } from "./demoTileIndex";
+import { addBuildingToTileIndex, createDemoTileIndex, getAliveTileCreatures, getAliveTileResources, getTileBuildings } from "./demoTileIndex";
 
 type PanelId = "status" | "objective" | "inventory" | "equipment" | "build" | "buildingInteraction" | "chat";
 
@@ -398,8 +398,8 @@ export function GameClientTileDemo() {
         <DraggablePanel id="objective" title="목표"><p>{objectiveText}</p></DraggablePanel>
         <DraggablePanel id="inventory" title="인벤토리"><InventoryPanel inventory={inventory} selectedBuildingItemId={selectedBuildingItemId} onSelectBuildingItem={handleSelectBuildingItem} /></DraggablePanel>
         <DraggablePanel id="equipment" title="장비"><EquipmentPanel inventory={inventory} /></DraggablePanel>
-        <DraggablePanel id="build" title="제작 / 건설"><CraftingPanel onCraft={handleCraft} onCraftBuildingItem={handleCraftBuildingItem} /></DraggablePanel>
-        {selectedBuilding ? <DraggablePanel id="buildingInteraction" title="건설물"><BuildingInteractionPanel building={selectedBuilding} onClose={() => setSelectedBuilding(null)} onOpenCrafting={() => setChatLines((prev) => [...prev.slice(-5), "[build] 제작 패널을 열어 작업을 진행하세요."])} /></DraggablePanel> : null}
+        <DraggablePanel id="build" title="제작 / 건설"><CraftingPanel inventory={inventory} onCraft={handleCraft} onCraftBuildingItem={handleCraftBuildingItem} /></DraggablePanel>
+        {selectedBuilding ? <DraggablePanel id="buildingInteraction" title="건설물"><BuildingInteractionPanel building={selectedBuilding} onClose={() => setSelectedBuilding(null)} onOpenCrafting={() => setChatLines((prev) => [...prev.slice(-5), "[build] 제작 패널에서 해당 제작소 목록을 확인하세요."])} /></DraggablePanel> : null}
         <DraggablePanel id="chat" title="로그"><LogPanel lines={chatLines} /></DraggablePanel>
         <MobileControls onInputChange={handleInputChange} onInteract={handleDemoInteract} />
       </section>
