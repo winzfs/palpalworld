@@ -5,7 +5,15 @@ import { Server } from "socket.io";
 import { normalizeVector } from "@palpalworld/game-core";
 import type { ClientToServerEvents, PlayerInputPayload, PlayerPublicState, ServerToClientEvents } from "@palpalworld/shared";
 import { WORLD } from "@palpalworld/shared";
-import { DEFAULT_PLAYER_TILE, MAP_TILE_SIZE, clampPositionToTile } from "../../../packages/shared/src/worldTiles";
+import {
+  DEFAULT_PLAYER_TILE,
+  MAP_TILE_SIZE,
+  clampPositionToTile,
+  getNeighborTile,
+  getPortalDirectionAtPosition,
+  getSpawnPositionAfterTravel,
+  type MapDirection,
+} from "../../../packages/shared/src/worldTiles";
 import { BuildingService } from "./buildings/BuildingService";
 import { CombatService } from "./combat/CombatService";
 import { CraftingService } from "./crafting/CraftingService";
@@ -65,6 +73,7 @@ const combat = new CombatService(world, creatures);
 const crafting = new CraftingService(inventories);
 const buildings = new BuildingService(world, inventories);
 const lastInputs = new Map<string, PlayerInputPayload["movement"]>();
+const lastTravelAt = new Map<string, number>();
 
 function createPlayer(socketId: string, nickname: string): PlayerPublicState {
   const safeNickname = nickname.trim().slice(0, 16) || `Player-${socketId.slice(0, 4)}`;
@@ -78,6 +87,24 @@ function createPlayer(socketId: string, nickname: string): PlayerPublicState {
     hp: profile.stats.maxHp,
     maxHp: profile.stats.maxHp,
   } as PlayerPublicState;
+}
+
+function travelPlayerIfAtPortal(player: PlayerPublicState, forcedDirection?: MapDirection) {
+  const now = Date.now();
+  const previousTravel = lastTravelAt.get(player.id) ?? 0;
+  if (now - previousTravel < 900) return false;
+
+  const currentTile = (player as any).currentTile ?? DEFAULT_PLAYER_TILE;
+  const direction = forcedDirection ?? getPortalDirectionAtPosition(player.position, currentTile);
+  if (!direction) return false;
+
+  const nextTile = getNeighborTile(currentTile, direction);
+  if (!nextTile) return false;
+
+  (player as any).currentTile = { ...nextTile };
+  player.position = getSpawnPositionAfterTravel(direction);
+  lastTravelAt.set(player.id, now);
+  return true;
 }
 
 function handleAttack(playerId: string) {
@@ -122,6 +149,22 @@ io.on("connection", (socket) => {
     if (payload.primaryAction) {
       handleAttack(socket.id);
     }
+    if (payload.secondaryAction) {
+      const player = world.players.get(socket.id);
+      if (player && travelPlayerIfAtPortal(player)) {
+        socket.emit("server:toast", { type: "success", message: "다른 맵 타일로 이동했습니다." });
+      }
+    }
+  });
+
+  (socket as any).on("client:travel_tile", ({ direction }: { direction?: MapDirection }) => {
+    const player = world.players.get(socket.id);
+    if (!player) return;
+    const moved = travelPlayerIfAtPortal(player, direction);
+    socket.emit("server:toast", {
+      type: moved ? "success" : "warning",
+      message: moved ? "다른 맵 타일로 이동했습니다." : "포탈 가까이에서만 이동할 수 있습니다.",
+    });
   });
 
   socket.on("client:interact_entity", ({ entityId }) => {
@@ -240,6 +283,7 @@ io.on("connection", (socket) => {
     inventories.deleteInventory(socket.id);
     players.deletePlayerProfile(socket.id);
     lastInputs.delete(socket.id);
+    lastTravelAt.delete(socket.id);
 
     if (player) {
       io.emit("server:chat_message", {
