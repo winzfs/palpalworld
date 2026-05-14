@@ -10,7 +10,7 @@ import {
   type Vector2,
   type WorldSnapshot,
 } from "@palpalworld/shared";
-import { MAP_TILE_SIZE, getMapTile, getPortalPosition, type MapDirection } from "../../../../../packages/shared/src/worldTiles";
+import { MAP_TILE_SIZE, clampPositionToTile, getMapTile, getPortalPosition, type MapDirection } from "../../../../../packages/shared/src/worldTiles";
 import { SpriteRenderer } from "../rendering/SpriteRenderer";
 import { TileMapRenderer } from "../rendering/TileMapRenderer";
 
@@ -32,6 +32,16 @@ export type WorldClickTarget =
 
 function distance(a: Vector2, b: Vector2) {
   return Math.hypot(a.x - b.x, a.y - b.y);
+}
+
+function normalizeSnapshotToCurrentTile(snapshot: WorldSnapshot): WorldSnapshot {
+  return {
+    ...snapshot,
+    players: snapshot.players.map((player) => ({ ...player, position: clampPositionToTile(player.position) })),
+    resources: snapshot.resources.map((resource) => ({ ...resource, position: clampPositionToTile(resource.position) })),
+    creatures: snapshot.creatures.map((creature) => ({ ...creature, position: clampPositionToTile(creature.position) })),
+    buildings: snapshot.buildings.map((building) => ({ ...building, position: clampPositionToTile(building.position) })),
+  };
 }
 
 const portalLabels: Record<MapDirection, string> = {
@@ -100,16 +110,17 @@ export class GameWorldScene {
   }
 
   applySnapshot(snapshot: WorldSnapshot, localPlayerId: string | null) {
+    const normalizedSnapshot = normalizeSnapshotToCurrentTile(snapshot);
     this.movingPlayerIds.clear();
 
-    for (const player of snapshot.players) {
+    for (const player of normalizedSnapshot.players) {
       const previous = this.previousPlayerPositions.get(player.id);
       const moved = previous ? Math.hypot(player.position.x - previous.x, player.position.y - previous.y) > 0.15 : false;
       if (moved) this.movingPlayerIds.add(player.id);
       this.previousPlayerPositions.set(player.id, { ...player.position });
     }
 
-    this.snapshot = snapshot;
+    this.snapshot = normalizedSnapshot;
     this.localPlayerId = localPlayerId;
   }
 
@@ -149,6 +160,10 @@ export class GameWorldScene {
     const localPlayer = this.getLocalPlayerPosition();
     if (!localPlayer) return { ok: false, reason: "플레이어 위치를 찾을 수 없습니다." };
 
+    if (position.x < 0 || position.x > MAP_TILE_SIZE.width || position.y < 0 || position.y > MAP_TILE_SIZE.height) {
+      return { ok: false, reason: "타일 밖에는 설치할 수 없습니다." };
+    }
+
     if (distance(localPlayer, position) > WORLD.buildRange) {
       return { ok: false, reason: "너무 멀리 설치할 수 없습니다." };
     }
@@ -181,19 +196,20 @@ export class GameWorldScene {
   private getCameraOffset() {
     const rect = this.root.getBoundingClientRect();
     const localPlayer = this.getLocalPlayer();
+    const target = localPlayer?.position ?? { x: rect.width / 2, y: rect.height / 2 };
     return {
-      x: localPlayer ? localPlayer.position.x - rect.width / 2 : 0,
-      y: localPlayer ? localPlayer.position.y - rect.height / 2 : 0,
+      x: Math.max(0, Math.min(MAP_TILE_SIZE.width - rect.width, target.x - rect.width / 2)),
+      y: Math.max(0, Math.min(MAP_TILE_SIZE.height - rect.height, target.y - rect.height / 2)),
     };
   }
 
   private screenToWorld(clientX: number, clientY: number): Vector2 {
     const rect = this.canvas.getBoundingClientRect();
     const camera = this.getCameraOffset();
-    return {
+    return clampPositionToTile({
       x: clientX - rect.left + camera.x,
       y: clientY - rect.top + camera.y,
-    };
+    });
   }
 
   private resize = () => {
