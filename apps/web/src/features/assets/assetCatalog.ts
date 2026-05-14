@@ -55,4 +55,4 @@ export function getCreatureSpriteSet(speciesId: string) { return assetCatalog.cr
 export function getResourceSpriteSet(resourceType: string) { return assetCatalog.resources[resourceType] ?? null; }
 export function getBuildingSpriteSet(buildingType: string) { return assetCatalog.buildings[buildingType] ?? null; }
 export function getTileSet(key = "meadow") { return assetCatalog.tilesets[key] ?? assetCatalog.tilesets.meadow; }
-export function getIconAsset(iconKey: string) { return assetCatalog.icons[iconKey] ?? null; }
+export function getIconAsset(iconKey: string) { return assetCatalog.icons[iconKey] ?? assetCatalog.buildings[iconKey]?.idle ?? null; }
