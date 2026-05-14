@@ -88,6 +88,116 @@ function drawMountedPet(ctx: CanvasRenderingContext2D, x: number, y: number, spe
   ctx.restore();
 }
 
+function drawMountedFlyingBreezewing(ctx: CanvasRenderingContext2D, x: number, y: number, direction: SpriteDirection, isMoving: boolean, now: number) {
+  const flap = Math.sin(now / 86);
+  const hover = Math.sin(now / 180) * 6;
+  const bodyY = y - 34 + hover;
+  const facingLeft = direction === "left";
+  const facingRight = direction === "right";
+  const headX = x + (facingLeft ? -9 : facingRight ? 9 : 0);
+  const beakSide = facingLeft ? -1 : 1;
+  const tailSide = facingLeft ? 1 : -1;
+
+  ctx.save();
+  ctx.lineWidth = 2;
+  ctx.lineJoin = "round";
+  ctx.lineCap = "round";
+
+  ctx.fillStyle = "rgba(0,0,0,0.18)";
+  ctx.beginPath();
+  ctx.ellipse(x, y + 30, 42, 9, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.strokeStyle = "rgba(147, 197, 253, 0.38)";
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.arc(x, bodyY + 2, 39 + Math.abs(flap) * 4, 0, Math.PI * 2);
+  ctx.stroke();
+
+  ctx.strokeStyle = "rgba(0,0,0,0.72)";
+  ctx.lineWidth = 3;
+  ctx.fillStyle = "#bfdbfe";
+  ctx.beginPath();
+  ctx.ellipse(x - 28, bodyY - 1 + flap * 7, 30, 9, -0.72, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.ellipse(x + 28, bodyY - 1 - flap * 7, 30, 9, 0.72, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.fillStyle = "#7dd3fc";
+  ctx.beginPath();
+  ctx.ellipse(x, bodyY, 18, 22, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.fillStyle = "#dbeafe";
+  ctx.beginPath();
+  ctx.ellipse(x, bodyY + 7, 10, 9, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.fillStyle = "#38bdf8";
+  ctx.beginPath();
+  ctx.arc(headX, bodyY - 18, 9, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.fillStyle = "#0ea5e9";
+  ctx.beginPath();
+  ctx.moveTo(headX - 7, bodyY - 25);
+  ctx.lineTo(headX, bodyY - 38 - Math.abs(flap) * 2);
+  ctx.lineTo(headX + 7, bodyY - 25);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.fillStyle = "#fef3c7";
+  ctx.beginPath();
+  if (direction === "up") {
+    ctx.moveTo(headX, bodyY - 30);
+    ctx.lineTo(headX - 5, bodyY - 20);
+    ctx.lineTo(headX + 5, bodyY - 20);
+  } else {
+    ctx.moveTo(headX + beakSide * 13, bodyY - 18);
+    ctx.lineTo(headX + beakSide * 3, bodyY - 23);
+    ctx.lineTo(headX + beakSide * 3, bodyY - 13);
+  }
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.fillStyle = "#111827";
+  if (direction === "up") {
+    ctx.fillRect(headX - 4, bodyY - 20, 2, 2);
+    ctx.fillRect(headX + 2, bodyY - 20, 2, 2);
+  } else if (facingLeft) {
+    ctx.fillRect(headX - 4, bodyY - 20, 2, 2);
+  } else {
+    ctx.fillRect(headX + 2, bodyY - 20, 2, 2);
+  }
+
+  ctx.fillStyle = "#93c5fd";
+  ctx.beginPath();
+  ctx.moveTo(x + tailSide * 13, bodyY + 4);
+  ctx.lineTo(x + tailSide * 34, bodyY - 8);
+  ctx.lineTo(x + tailSide * 26, bodyY + 11);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.strokeStyle = "#92400e";
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(x - 5, bodyY + 18);
+  ctx.lineTo(x - 5, bodyY + 25);
+  ctx.moveTo(x + 5, bodyY + 18);
+  ctx.lineTo(x + 5, bodyY + 25);
+  ctx.stroke();
+
+  ctx.restore();
+}
+
 function drawAnimatedFallbackPlayer(
   ctx: CanvasRenderingContext2D,
   player: PlayerPublicState,
@@ -97,6 +207,7 @@ function drawAnimatedFallbackPlayer(
   direction: SpriteDirection,
   isMoving: boolean,
   now: number,
+  hideGroundShadow = false,
 ) {
   const fill = isLocal ? "#38bdf8" : "#a78bfa";
   const outline = "#0f172a";
@@ -115,10 +226,12 @@ function drawAnimatedFallbackPlayer(
   ctx.lineCap = "round";
   ctx.lineJoin = "round";
 
-  ctx.fillStyle = "rgba(0,0,0,0.28)";
-  ctx.beginPath();
-  ctx.ellipse(x, y + 17, isMoving ? 17 : 14, isMoving ? 6 : 8, 0, 0, Math.PI * 2);
-  ctx.fill();
+  if (!hideGroundShadow) {
+    ctx.fillStyle = "rgba(0,0,0,0.28)";
+    ctx.beginPath();
+    ctx.ellipse(x, y + 17, isMoving ? 17 : 14, isMoving ? 6 : 8, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
 
   const leftLegSwing = isSide ? run * 7 * side : run * 5;
   const rightLegSwing = isSide ? runOpp * 7 * side : runOpp * 5;
@@ -198,9 +311,8 @@ function drawAnimatedFallbackPlayer(
 
   if (!isBack) {
     ctx.fillStyle = hair;
-    if (isSide) {
-      ctx.fillRect(headX + side * 3, headY - 2, 3, 3);
-    } else {
+    if (isSide) ctx.fillRect(headX + side * 3, headY - 2, 3, 3);
+    else {
       ctx.fillRect(headX - 5, headY - 2, 3, 3);
       ctx.fillRect(headX + 3, headY - 2, 3, 3);
     }
@@ -321,12 +433,16 @@ export class SpriteRenderer {
     const image = this.loader.getImage(sheet ?? null);
     const direction = toSpriteDirection(player.direction);
     const mountedPetSpeciesId = isLocal ? getMountedPetSpeciesId(readMountedPetItemId()) : null;
-    const playerDrawY = mountedPetSpeciesId ? y - 18 : y;
+    const isFlyingMount = mountedPetSpeciesId === "breezewing";
+    const playerDrawY = isFlyingMount ? y - 58 : mountedPetSpeciesId ? y - 18 : y;
 
-    if (mountedPetSpeciesId) drawMountedPet(ctx, x, y, mountedPetSpeciesId, direction, isMoving, now);
+    if (mountedPetSpeciesId) {
+      if (isFlyingMount) drawMountedFlyingBreezewing(ctx, x, y, direction, isMoving, now);
+      else drawMountedPet(ctx, x, y, mountedPetSpeciesId, direction, isMoving, now);
+    }
 
     if (!sheet || !isDrawableImage(image)) {
-      drawAnimatedFallbackPlayer(ctx, player, x, playerDrawY, isLocal, direction, isMoving, now);
+      drawAnimatedFallbackPlayer(ctx, player, x, playerDrawY, isLocal, direction, isMoving, now, isFlyingMount);
       drawEquippedWeapon(ctx, x, playerDrawY, direction, equippedWeaponItemId);
       return;
     }
@@ -335,26 +451,28 @@ export class SpriteRenderer {
       const frameIndex = sheet.frameCount <= 1 ? 0 : Math.floor(now / sheet.frameDurationMs) % sheet.frameCount;
       drawSpriteSheetFrame(ctx, image, sheet, direction, frameIndex, x, playerDrawY, 1);
     } catch {
-      drawAnimatedFallbackPlayer(ctx, player, x, playerDrawY, isLocal, direction, isMoving, now);
+      drawAnimatedFallbackPlayer(ctx, player, x, playerDrawY, isLocal, direction, isMoving, now, isFlyingMount);
       drawEquippedWeapon(ctx, x, playerDrawY, direction, equippedWeaponItemId);
       return;
     }
 
     drawEquippedWeapon(ctx, x, playerDrawY, direction, equippedWeaponItemId);
     if (isLocal) {
-      ctx.strokeStyle = mountedPetSpeciesId ? "rgba(125, 211, 252, 0.85)" : "rgba(250, 204, 21, 0.8)";
+      ctx.strokeStyle = isFlyingMount ? "rgba(147, 197, 253, 0.9)" : mountedPetSpeciesId ? "rgba(125, 211, 252, 0.85)" : "rgba(250, 204, 21, 0.8)";
       ctx.lineWidth = 2;
       ctx.beginPath();
-      ctx.ellipse(x, y + 17, mountedPetSpeciesId ? 32 : 18, mountedPetSpeciesId ? 10 : 7, 0, 0, Math.PI * 2);
+      if (isFlyingMount) ctx.ellipse(x, y + 30, 43, 9, 0, 0, Math.PI * 2);
+      else ctx.ellipse(x, y + 17, mountedPetSpeciesId ? 32 : 18, mountedPetSpeciesId ? 10 : 7, 0, 0, Math.PI * 2);
       ctx.stroke();
     }
+    const nameY = isFlyingMount ? playerDrawY - 54 : playerDrawY - 48;
     ctx.font = "13px system-ui";
     ctx.textAlign = "center";
     ctx.lineWidth = 3;
     ctx.strokeStyle = "rgba(0,0,0,0.75)";
-    ctx.strokeText(player.nickname, x, playerDrawY - 48);
+    ctx.strokeText(player.nickname, x, nameY);
     ctx.fillStyle = "#ffffff";
-    ctx.fillText(player.nickname, x, playerDrawY - 48);
+    ctx.fillText(player.nickname, x, nameY);
     ctx.fillStyle = "rgba(0,0,0,0.45)";
     ctx.fillRect(x - 22, y + 24, 44, 5);
     ctx.fillStyle = "#22c55e";
