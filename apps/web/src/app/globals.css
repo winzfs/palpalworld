@@ -50,6 +50,12 @@ button {
   border: 0;
 }
 
+button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  filter: grayscale(0.35);
+}
+
 .game-shell {
   position: fixed;
   inset: 0;
@@ -259,6 +265,122 @@ button {
   cursor: pointer;
   text-align: left;
   box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.08);
+}
+
+.crafting-station-section,
+.crafting-tier,
+.crafting-queue {
+  display: grid;
+  gap: 8px;
+}
+
+.crafting-station-section {
+  padding-bottom: 10px;
+  border-bottom: 1px solid rgb(242 209 107 / 0.14);
+}
+
+.crafting-station-section:last-child {
+  border-bottom: 0;
+}
+
+.crafting-card {
+  display: grid;
+  gap: 5px;
+  align-content: start;
+}
+
+.crafting-card b {
+  color: var(--jrpg-text);
+}
+
+.crafting-card span,
+.crafting-card small {
+  color: var(--jrpg-muted);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.crafting-card__requirements {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 2px;
+}
+
+.crafting-card__requirement {
+  padding: 2px 5px;
+  border-radius: 999px;
+  border: 1px solid rgb(255 255 255 / 0.12);
+  background: rgb(0 0 0 / 0.22);
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.crafting-card__requirement--enough {
+  color: #bbf7d0;
+  border-color: rgb(34 197 94 / 0.35);
+}
+
+.crafting-card__requirement--missing {
+  color: #fecaca;
+  border-color: rgb(239 68 68 / 0.42);
+}
+
+.crafting-card--queue {
+  padding: 9px 12px;
+  border: 1px solid rgb(56 189 248 / 0.35);
+  border-radius: 8px;
+  background: rgb(8 47 73 / 0.45);
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.06);
+}
+
+.crafting-queue__bar {
+  position: relative;
+  height: 8px;
+  overflow: hidden;
+  border: 1px solid rgb(125 211 252 / 0.28);
+  border-radius: 999px;
+  background: rgb(0 0 0 / 0.36);
+}
+
+.crafting-queue__bar span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--jrpg-blue), var(--jrpg-gold));
+  transition: width 0.2s linear;
+}
+
+.building-interaction__header,
+.building-interaction__stats {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.building-interaction__stats {
+  padding: 7px 8px;
+  border: 1px solid rgb(242 209 107 / 0.22);
+  border-radius: 8px;
+  background: rgb(0 0 0 / 0.22);
+  color: var(--jrpg-muted);
+  font-size: 12px;
+}
+
+.building-interaction__stats b {
+  color: var(--jrpg-text);
+}
+
+.building-interaction__action {
+  min-height: 36px;
+  padding: 8px 10px;
+  border: 1px solid rgb(242 209 107 / 0.46);
+  border-radius: 8px;
+  background: linear-gradient(#4f3d1f, #241b14);
+  color: var(--jrpg-text);
+  font-weight: 900;
+  cursor: pointer;
 }
 
 .mobile-control-hint {
