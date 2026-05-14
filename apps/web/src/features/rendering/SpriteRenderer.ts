@@ -33,6 +33,78 @@ function drawSpriteSheetFrame(
   ctx.drawImage(image, sx, sy, sheet.frameWidth, sheet.frameHeight, Math.round(x - width / 2), Math.round(y - height + 18), width, height);
 }
 
+function getWeaponStyle(weaponItemId: string | null | undefined) {
+  if (!weaponItemId) return null;
+  if (weaponItemId.includes("pickaxe")) return { length: 30, handle: "#92400e", blade: "#cbd5e1", kind: "pickaxe" as const };
+  if (weaponItemId.includes("axe")) return { length: 28, handle: "#92400e", blade: "#e5e7eb", kind: "axe" as const };
+  if (weaponItemId.includes("sickle")) return { length: 25, handle: "#166534", blade: "#ecfccb", kind: "sickle" as const };
+  if (weaponItemId.includes("iron")) return { length: 34, handle: "#475569", blade: "#f8fafc", kind: "sword" as const };
+  return { length: 31, handle: "#92400e", blade: "#fde68a", kind: "sword" as const };
+}
+
+function drawEquippedWeapon(ctx: CanvasRenderingContext2D, x: number, y: number, direction: SpriteDirection, weaponItemId?: string | null) {
+  const style = getWeaponStyle(weaponItemId);
+  if (!style) return;
+
+  const facingLeft = direction === "left";
+  const facingUp = direction === "up";
+  const facingDown = direction === "down";
+  const handX = x + (facingLeft ? -13 : 13);
+  const handY = y - (facingUp ? 31 : facingDown ? 18 : 22);
+  const angle = facingUp ? -1.15 : facingLeft ? -0.68 : 0.68;
+  const flip = facingLeft ? -1 : 1;
+
+  ctx.save();
+  ctx.translate(handX, handY);
+  ctx.scale(flip, 1);
+  ctx.rotate(angle * flip);
+  ctx.lineCap = "round";
+
+  ctx.strokeStyle = "rgba(0,0,0,0.72)";
+  ctx.lineWidth = 5;
+  ctx.beginPath();
+  ctx.moveTo(0, 0);
+  ctx.lineTo(style.length, 0);
+  ctx.stroke();
+
+  ctx.strokeStyle = style.handle;
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.moveTo(0, 0);
+  ctx.lineTo(style.length, 0);
+  ctx.stroke();
+
+  ctx.fillStyle = style.blade;
+  ctx.strokeStyle = "rgba(0,0,0,0.72)";
+  ctx.lineWidth = 1.5;
+  if (style.kind === "axe") {
+    ctx.beginPath();
+    ctx.ellipse(style.length + 2, -4, 6, 9, 0.5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+  } else if (style.kind === "pickaxe") {
+    ctx.beginPath();
+    ctx.moveTo(style.length - 7, -7);
+    ctx.lineTo(style.length + 10, -2);
+    ctx.lineTo(style.length - 7, 6);
+    ctx.stroke();
+  } else if (style.kind === "sickle") {
+    ctx.beginPath();
+    ctx.arc(style.length, -4, 9, -1.6, 1.0);
+    ctx.stroke();
+  } else {
+    ctx.beginPath();
+    ctx.moveTo(style.length + 10, 0);
+    ctx.lineTo(style.length - 2, -5);
+    ctx.lineTo(style.length, 5);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+  }
+
+  ctx.restore();
+}
+
 export class SpriteRenderer {
   private readonly loader = new AssetLoader();
   private readonly fallback = new PrimitiveRenderer();
@@ -71,24 +143,28 @@ export class SpriteRenderer {
     ctx.drawImage(image, x - spriteSet.idle.width / 2, y - spriteSet.idle.height / 2, spriteSet.idle.width, spriteSet.idle.height);
   }
 
-  drawPlayer(ctx: CanvasRenderingContext2D, player: PlayerPublicState, x: number, y: number, isLocal: boolean, isMoving = false, now = performance.now()) {
+  drawPlayer(ctx: CanvasRenderingContext2D, player: PlayerPublicState, x: number, y: number, isLocal: boolean, isMoving = false, now = performance.now(), equippedWeaponItemId?: string | null) {
     const spriteSet = getPlayerSpriteSet();
     const sheet = isMoving ? spriteSet.walk ?? spriteSet.idle : spriteSet.idle;
     const image = this.loader.getImage(sheet ?? null);
+    const direction = toSpriteDirection(player.direction);
 
     if (!sheet || !isDrawableImage(image)) {
       this.fallback.drawPlayer(ctx, player, x, y, isLocal);
+      drawEquippedWeapon(ctx, x, y, direction, equippedWeaponItemId);
       return;
     }
 
     try {
       const frameIndex = sheet.frameCount <= 1 ? 0 : Math.floor(now / sheet.frameDurationMs) % sheet.frameCount;
-      const direction = toSpriteDirection(player.direction);
       drawSpriteSheetFrame(ctx, image, sheet, direction, frameIndex, x, y, 1);
     } catch {
       this.fallback.drawPlayer(ctx, player, x, y, isLocal);
+      drawEquippedWeapon(ctx, x, y, direction, equippedWeaponItemId);
       return;
     }
+
+    drawEquippedWeapon(ctx, x, y, direction, equippedWeaponItemId);
 
     if (isLocal) {
       ctx.strokeStyle = "rgba(250, 204, 21, 0.8)";
