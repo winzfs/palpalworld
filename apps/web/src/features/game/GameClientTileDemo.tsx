@@ -13,6 +13,7 @@ import { BuildingInteractionPanel } from "../buildings/BuildingInteractionPanel"
 import { DEFAULT_PLAYER_TILE, clampPositionToTile, isSameTile, type MapTileRef } from "../../../../../packages/shared/src/worldTiles";
 import { createTileBasedDemoBuildings, createTileBasedDemoCreatures, createTileBasedDemoResources } from "./demoWorldSpawns";
 import { GameScene, type GameSceneInput, type GameWorldScene, type WorldClickTarget } from "./GameScene";
+import { addBuildingToTileIndex, createDemoTileIndex, entityTile, getAliveTileCreatures, getAliveTileResources, getTileBuildings } from "./demoTileIndex";
 
 type PanelId = "status" | "objective" | "inventory" | "equipment" | "build" | "buildingInteraction" | "chat";
 
@@ -66,27 +67,7 @@ function clampCreaturePosition(position: Vector2): Vector2 {
   };
 }
 
-function entityTile(entity: { currentTile?: MapTileRef }) {
-  return entity.currentTile ?? DEFAULT_PLAYER_TILE;
-}
-
-function isOnTile(entity: { currentTile?: MapTileRef }, tile: MapTileRef) {
-  return isSameTile(entityTile(entity), tile);
-}
-
-function getCurrentTileResources(resources: ResourceNodeState[], tile: MapTileRef) {
-  return resources.filter((resource) => resource.remainingAmount > 0 && isOnTile(resource as any, tile));
-}
-
-function getCurrentTileCreatures(creatures: CreaturePublicState[], tile: MapTileRef) {
-  return creatures.filter((creature) => creature.hp > 0 && isOnTile(creature as any, tile));
-}
-
-function getCurrentTileBuildings(buildings: BuildingState[], tile: MapTileRef) {
-  return buildings.filter((building) => isOnTile(building as any, tile));
-}
-
-function moveDemoCreatures(creatures: CreaturePublicState[], deltaSeconds: number, now: number, playerPosition: Vector2, playerTile: MapTileRef) {
+function moveDemoCreatures(creatures: CreaturePublicState[], deltaSeconds: number, now: number, playerPosition: Vector2) {
   for (const creature of creatures) {
     if (creature.hp <= 0) continue;
 
@@ -158,11 +139,11 @@ function consumeInventoryItems(inventory: InventoryState, requirements: { itemId
   return { ...inventory, items: items.filter((item) => item.amount > 0) };
 }
 
-function findNearestResource(resources: ResourceNodeState[], position: Vector2, currentTile: MapTileRef, maxRange = 180) {
+function findNearestResource(resources: ResourceNodeState[], position: Vector2, maxRange = 180) {
   let nearest: ResourceNodeState | null = null;
   let nearestDistance = Number.POSITIVE_INFINITY;
   for (const resource of resources) {
-    if (resource.remainingAmount <= 0 || !isSameTile(entityTile(resource as any), currentTile)) continue;
+    if (resource.remainingAmount <= 0) continue;
     const distance = Math.hypot(resource.position.x - position.x, resource.position.y - position.y);
     if (distance < nearestDistance) {
       nearest = resource;
@@ -172,11 +153,11 @@ function findNearestResource(resources: ResourceNodeState[], position: Vector2, 
   return nearest && nearestDistance <= maxRange ? nearest : null;
 }
 
-function findNearestCreature(creatures: CreaturePublicState[], position: Vector2, currentTile: MapTileRef, maxRange = 180) {
+function findNearestCreature(creatures: CreaturePublicState[], position: Vector2, maxRange = 180) {
   let nearest: CreaturePublicState | null = null;
   let nearestDistance = Number.POSITIVE_INFINITY;
   for (const creature of creatures) {
-    if (creature.hp <= 0 || !isSameTile(entityTile(creature as any), currentTile)) continue;
+    if (creature.hp <= 0) continue;
     const distance = Math.hypot(creature.position.x - position.x, creature.position.y - position.y);
     if (distance < nearestDistance) {
       nearest = creature;
@@ -191,9 +172,9 @@ function createDemoSnapshot(nickname: string, position: Vector2, direction: Dire
     worldId: "offline-demo",
     serverTime: Date.now(),
     players: [{ id: demoPlayerId, nickname: nickname === "..." ? "Demo" : nickname, position, direction, currentTile, hp: 100, maxHp: 100 } as any],
-    creatures: getCurrentTileCreatures(creatures, currentTile),
-    resources: getCurrentTileResources(resources, currentTile),
-    buildings: getCurrentTileBuildings(buildings, currentTile),
+    creatures,
+    resources,
+    buildings,
   };
 }
 
@@ -212,6 +193,7 @@ export function GameClientTileDemo() {
   const demoResourcesRef = useRef<ResourceNodeState[]>(createTileBasedDemoResources());
   const demoCreaturesRef = useRef<CreaturePublicState[]>(createTileBasedDemoCreatures());
   const demoBuildingsRef = useRef<BuildingState[]>(createTileBasedDemoBuildings());
+  const demoTileIndexRef = useRef(createDemoTileIndex(demoResourcesRef.current, demoCreaturesRef.current, demoBuildingsRef.current));
   const lastDemoAttackAtRef = useRef(0);
   const lastUiSnapshotAtRef = useRef(0);
 
@@ -221,9 +203,20 @@ export function GameClientTileDemo() {
   );
   const placementBuildingType = selectedPlacementBuilding?.type as BuildingType | undefined;
 
+  const getCurrentResources = useCallback(() => getAliveTileResources(demoTileIndexRef.current, demoTileRef.current), []);
+  const getCurrentCreatures = useCallback(() => getAliveTileCreatures(demoTileIndexRef.current, demoTileRef.current), []);
+  const getCurrentBuildings = useCallback(() => getTileBuildings(demoTileIndexRef.current, demoTileRef.current), []);
+
   const applyDemoSnapshot = useCallback((forceUiUpdate = false) => {
-    const currentTileCreatures = getCurrentTileCreatures(demoCreaturesRef.current, demoTileRef.current);
-    const nextSnapshot = createDemoSnapshot(nickname, demoPositionRef.current, demoDirectionRef.current, demoTileRef.current, demoResourcesRef.current, currentTileCreatures, demoBuildingsRef.current);
+    const nextSnapshot = createDemoSnapshot(
+      nickname,
+      demoPositionRef.current,
+      demoDirectionRef.current,
+      demoTileRef.current,
+      getCurrentResources(),
+      getCurrentCreatures(),
+      getCurrentBuildings(),
+    );
     sceneRef.current?.applySnapshot(nextSnapshot, demoPlayerId);
     const player = nextSnapshot.players[0] as any;
     if (player?.currentTile) demoTileRef.current = { ...player.currentTile };
@@ -237,7 +230,7 @@ export function GameClientTileDemo() {
       lastUiSnapshotAtRef.current = now;
       setSnapshot(nextSnapshot);
     }
-  }, [nickname]);
+  }, [getCurrentBuildings, getCurrentCreatures, getCurrentResources, nickname]);
 
   useEffect(() => {
     setNickname(createClientNickname());
@@ -259,17 +252,17 @@ export function GameClientTileDemo() {
       });
       demoPositionRef.current.x = next.x;
       demoPositionRef.current.y = next.y;
-      moveDemoCreatures(getCurrentTileCreatures(demoCreaturesRef.current, demoTileRef.current), deltaSeconds, now, demoPositionRef.current, demoTileRef.current);
+      moveDemoCreatures(getCurrentCreatures(), deltaSeconds, now, demoPositionRef.current);
       applyDemoSnapshot(false);
       lastTick = now;
       animationFrame = requestAnimationFrame(tick);
     };
     animationFrame = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(animationFrame);
-  }, [applyDemoSnapshot]);
+  }, [applyDemoSnapshot, getCurrentCreatures]);
 
   const handleDemoInteract = useCallback(() => {
-    const resource = findNearestResource(demoResourcesRef.current, demoPositionRef.current, demoTileRef.current);
+    const resource = findNearestResource(getCurrentResources(), demoPositionRef.current);
     if (!resource) {
       setChatLines((prev) => [...prev.slice(-5), "[demo] 현재 타일에서 가까운 자원이 없습니다."]);
       return;
@@ -279,13 +272,13 @@ export function GameClientTileDemo() {
     setInventory((current) => addInventoryItem(current ?? createDemoInventory(), resource.resourceType, gainAmount));
     setChatLines((prev) => [...prev.slice(-5), `[demo] ${getItemLabel(resource.resourceType)} ${gainAmount}개 획득`]);
     applyDemoSnapshot(true);
-  }, [applyDemoSnapshot]);
+  }, [applyDemoSnapshot, getCurrentResources]);
 
   const handleDemoAttack = useCallback(() => {
     const now = performance.now();
     if (now - lastDemoAttackAtRef.current < 380) return;
     lastDemoAttackAtRef.current = now;
-    const target = findNearestCreature(demoCreaturesRef.current, demoPositionRef.current, demoTileRef.current);
+    const target = findNearestCreature(getCurrentCreatures(), demoPositionRef.current);
     if (!target) {
       setChatLines((prev) => [...prev.slice(-5), "[demo] 현재 타일 공격 범위 안에 몬스터가 없습니다."]);
       return;
@@ -298,7 +291,7 @@ export function GameClientTileDemo() {
       setChatLines((prev) => [...prev.slice(-5), `[demo] ${target.speciesId}에게 18 피해`]);
     }
     applyDemoSnapshot(true);
-  }, [applyDemoSnapshot]);
+  }, [applyDemoSnapshot, getCurrentCreatures]);
 
   useEffect(() => {
     let animationFrame = 0;
@@ -384,6 +377,7 @@ export function GameClientTileDemo() {
         maxHp: building.maxHp,
       } as BuildingState;
       demoBuildingsRef.current = [...demoBuildingsRef.current, placedBuilding];
+      addBuildingToTileIndex(demoTileIndexRef.current, placedBuilding);
       setSelectedBuildingItemId(null);
       setSelectedBuilding(placedBuilding);
       setChatLines((prev) => [...prev.slice(-5), `[demo] ${building.name} 설치 완료`]);
