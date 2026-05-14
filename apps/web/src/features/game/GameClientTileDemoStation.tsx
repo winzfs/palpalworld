@@ -26,6 +26,7 @@ type QuickButtonId = "inventory" | "crafting";
 
 const demoPlayerId = "demo-player";
 const joystickRadius = 56;
+const uiSnapshotIntervalMs = 500;
 const quickSlotCount = 5;
 const menuTabs: { id: MenuTab; label: string }[] = [
   { id: "status", label: "캐릭터" },
@@ -219,6 +220,7 @@ export function GameClientTileDemoStation() {
   const demoBuildingsRef = useRef<BuildingState[]>(createTileBasedDemoBuildings());
   const demoTileIndexRef = useRef(createDemoTileIndex(demoResourcesRef.current, demoCreaturesRef.current, demoBuildingsRef.current));
   const lastDemoAttackAtRef = useRef(0);
+  const lastUiSnapshotAtRef = useRef(0);
 
   const selectedPlacementBuilding = useMemo(() => selectedBuildingItemId ? getProgressionBuildingByItemId(selectedBuildingItemId) : null, [selectedBuildingItemId]);
   const placementBuildingType = selectedPlacementBuilding?.type as BuildingType | undefined;
@@ -249,7 +251,11 @@ export function GameClientTileDemoStation() {
       demoPositionRef.current.x = player.position.x;
       demoPositionRef.current.y = player.position.y;
     }
-    if (forceUiUpdate) setSnapshot(nextSnapshot);
+    const now = performance.now();
+    if (forceUiUpdate || now - lastUiSnapshotAtRef.current >= uiSnapshotIntervalMs) {
+      lastUiSnapshotAtRef.current = now;
+      setSnapshot(nextSnapshot);
+    }
   }, [getCurrentBuildings, getCurrentCreatures, getCurrentResources, nickname]);
 
   useEffect(() => {
@@ -546,20 +552,4 @@ function FloatingQuickButton({ id, onOpen }: { id: QuickButtonId; onOpen: () => 
 function MobileControls({ onInputChange, onInteract }: { onInputChange: (input: GameSceneInput) => void; onInteract: () => void }) {
   const [stick, setStick] = useState({ x: 0, y: 0 });
   const pointerIdRef = useRef<number | null>(null);
-  const activeInputRef = useRef<GameSceneInput>({ x: 0, y: 0, primary: false, secondary: false });
-  const emitInput = useCallback((patch: Partial<GameSceneInput>) => { const next = { ...activeInputRef.current, ...patch }; activeInputRef.current = next; onInputChange(next); }, [onInputChange]);
-  const updateStickFromPointer = useCallback((event: PointerEvent<HTMLDivElement>) => { const rect = event.currentTarget.getBoundingClientRect(); const centerX = rect.left + rect.width / 2; const centerY = rect.top + rect.height / 2; const rawX = event.clientX - centerX; const rawY = event.clientY - centerY; const distance = Math.hypot(rawX, rawY); const clampedDistance = Math.min(distance, joystickRadius); const angle = Math.atan2(rawY, rawX); const visual = { x: Math.cos(angle) * clampedDistance, y: Math.sin(angle) * clampedDistance }; setStick(visual); emitInput({ x: distance === 0 ? 0 : visual.x / joystickRadius, y: distance === 0 ? 0 : visual.y / joystickRadius }); }, [emitInput]);
-  const stopMovement = useCallback(() => { pointerIdRef.current = null; setStick({ x: 0, y: 0 }); emitInput({ x: 0, y: 0 }); }, [emitInput]);
-  return (
-    <>
-      <div className="mobile-control-hint">왼쪽 이동 · 오른쪽 행동</div>
-      <div className="mobile-joystick" role="application" aria-label="이동 조이스틱" onPointerDown={(event) => { event.preventDefault(); pointerIdRef.current = event.pointerId; event.currentTarget.setPointerCapture(event.pointerId); updateStickFromPointer(event); }} onPointerMove={(event) => { if (pointerIdRef.current !== event.pointerId) return; event.preventDefault(); updateStickFromPointer(event); }} onPointerUp={(event) => { if (pointerIdRef.current !== event.pointerId) return; event.preventDefault(); event.currentTarget.releasePointerCapture(event.pointerId); stopMovement(); }} onPointerCancel={stopMovement}>
-        <div className="joystick-base"><div className="joystick-cross joystick-cross--horizontal" /><div className="joystick-cross joystick-cross--vertical" /><div className="joystick-stick" style={{ transform: `translate(calc(-50% + ${stick.x}px), calc(-50% + ${stick.y}px))` }} /></div>
-      </div>
-      <div className="mobile-actions" aria-label="행동 버튼">
-        <button className="mobile-action mobile-action--primary" onPointerDown={(event) => { event.preventDefault(); emitInput({ primary: true }); }} onPointerUp={(event) => { event.preventDefault(); emitInput({ primary: false }); }} onPointerCancel={() => emitInput({ primary: false })}>공격</button>
-        <button className="mobile-action mobile-action--secondary" onPointerDown={(event) => event.preventDefault()} onClick={onInteract}>채집</button>
-      </div>
-    </>
-  );
-}
+  const activeInput... (truncated due to context)
