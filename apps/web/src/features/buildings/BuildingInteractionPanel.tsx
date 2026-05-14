@@ -16,13 +16,6 @@ function getBuildingAction(buildingType: string) {
   }
 
   switch (buildingType) {
-    case "storage_box":
-    case "cold_storage":
-      return {
-        title: "보관함 열기",
-        description: "아이템을 넣고 꺼내는 보관함입니다.",
-        stationId: null,
-      };
     case "base_core":
       return {
         title: "거점 관리",
@@ -42,6 +35,10 @@ function getBuildingAction(buildingType: string) {
         stationId: null,
       };
   }
+}
+
+function isStorageBuilding(buildingType: string) {
+  return buildingType === "storage_box" || buildingType === "cold_storage";
 }
 
 export function BuildingInteractionPanel({
@@ -84,7 +81,6 @@ export function BuildingInteractionPanel({
   const action = getBuildingAction(building.type);
   const hpPercent = Math.max(0, Math.min(100, Math.round((building.hp / building.maxHp) * 100)));
   const canOpenCrafting = Boolean(action.stationId);
-  const isStorage = building.type === "storage_box" || building.type === "cold_storage";
 
   const updateInventory = (nextInventory: InventoryState) => {
     const storedInventory = writeStoredInventory(nextInventory);
@@ -116,6 +112,20 @@ export function BuildingInteractionPanel({
     updateInventory(addInventoryStack(activeInventory, itemId, nextAmount));
   };
 
+  if (isStorageBuilding(building.type)) {
+    return (
+      <div className="storage-overlay-panel" aria-label="보관함">
+        <button className="storage-overlay-panel__close" onClick={onClose} aria-label="보관함 닫기">×</button>
+        <StorageBoxPanel
+          inventory={activeInventory}
+          storageItems={storageItems}
+          onDeposit={handleDeposit}
+          onWithdraw={handleWithdraw}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="feature-panel feature-panel--building-interaction">
       <div className="feature-panel__section-title">건설물 상호작용</div>
@@ -129,25 +139,14 @@ export function BuildingInteractionPanel({
         <b>{building.hp} / {building.maxHp} ({hpPercent}%)</b>
       </div>
 
-      {isStorage ? (
-        <StorageBoxPanel
-          inventory={activeInventory}
-          storageItems={storageItems}
-          onDeposit={handleDeposit}
-          onWithdraw={handleWithdraw}
-        />
-      ) : (
-        <>
-          <button
-            className="building-interaction__action"
-            onClick={action.stationId ? () => onOpenCrafting?.(action.stationId) : undefined}
-            disabled={!canOpenCrafting}
-          >
-            {action.title}
-          </button>
-          <p className="feature-panel__hint">{action.description}</p>
-        </>
-      )}
+      <button
+        className="building-interaction__action"
+        onClick={action.stationId ? () => onOpenCrafting?.(action.stationId) : undefined}
+        disabled={!canOpenCrafting}
+      >
+        {action.title}
+      </button>
+      <p className="feature-panel__hint">{action.description}</p>
     </div>
   );
 }
