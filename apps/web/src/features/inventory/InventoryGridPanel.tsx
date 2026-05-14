@@ -1,5 +1,7 @@
 import type { InventoryState } from "@palpalworld/shared";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { getPetItemLabel } from "../pets/petInventory";
+import { readStoredInventory, removeInventoryStack, writeStoredInventory } from "./inventoryStore";
 import {
   buildInventoryEntries,
   findInventoryEntryByKey,
@@ -10,6 +12,19 @@ import {
 
 const categories: InventoryCategory[] = ["general", "usable", "material", "equipment", "building", "pet"];
 const gridSlotCount = 36;
+const mountedPetStorageKey = "palpalworld.demo.mountedPetItemId";
+
+function readMountedPetItemId() {
+  if (typeof window === "undefined") return null;
+  return window.localStorage.getItem(mountedPetStorageKey);
+}
+
+function persistMountedPet(itemId: string | null) {
+  if (typeof window === "undefined") return;
+  if (itemId) window.localStorage.setItem(mountedPetStorageKey, itemId);
+  else window.localStorage.removeItem(mountedPetStorageKey);
+  window.dispatchEvent(new CustomEvent("palpalworld:mounted-pet-changed", { detail: { itemId } }));
+}
 
 function EntryIcon({ entry }: { entry: InventoryEntry }) {
   if (entry.iconSrc) return <img src={entry.iconSrc} alt="" />;
@@ -21,7 +36,7 @@ export function InventoryGridPanel({
   inventory,
   quickSlots,
   selectedBuildingItemId,
-  mountedPetItemId,
+  mountedPetItemId: mountedPetItemIdProp,
   onSelectBuildingItem,
   onAssignQuickSlot,
   onMountPet,
@@ -37,16 +52,42 @@ export function InventoryGridPanel({
   onReleasePet?: (itemId: string) => void;
 }) {
   const [category, setCategory] = useState<InventoryCategory>("general");
+  const [internalMountedPetItemId, setInternalMountedPetItemId] = useState<string | null>(() => readMountedPetItemId());
+  const mountedPetItemId = mountedPetItemIdProp ?? internalMountedPetItemId;
   const entries = useMemo(() => buildInventoryEntries(inventory), [inventory]);
   const filteredEntries = entries.filter((entry) => entry.category === category);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const selectedEntry = entries.find((entry) => entry.key === selectedKey) ?? filteredEntries[0] ?? null;
   const visibleSlots = Array.from({ length: Math.max(gridSlotCount, Math.ceil(filteredEntries.length / 6) * 6 || gridSlotCount) }, (_, index) => filteredEntries[index] ?? null);
 
+  useEffect(() => {
+    const handleMountedPetChanged = (event: Event) => {
+      const customEvent = event as CustomEvent<{ itemId?: string | null }>;
+      setInternalMountedPetItemId(customEvent.detail?.itemId ?? readMountedPetItemId());
+    };
+    window.addEventListener("palpalworld:mounted-pet-changed", handleMountedPetChanged);
+    return () => window.removeEventListener("palpalworld:mounted-pet-changed", handleMountedPetChanged);
+  }, []);
+
   const handleUseOrBuild = (entry: InventoryEntry) => {
-    if (entry.category === "building" && onSelectBuildingItem) {
-      onSelectBuildingItem(entry.itemId);
+    if (entry.category === "building" && onSelectBuildingItem) onSelectBuildingItem(entry.itemId);
+  };
+
+  const handleMountPet = (itemId: string) => {
+    if (onMountPet) onMountPet(itemId);
+    else persistMountedPet(itemId);
+    setInternalMountedPetItemId(itemId);
+  };
+
+  const handleReleasePet = (itemId: string) => {
+    if (mountedPetItemId === itemId) persistMountedPet(null);
+    if (onReleasePet) {
+      onReleasePet(itemId);
+      return;
     }
+    const base = readStoredInventory(inventory ?? undefined);
+    writeStoredInventory(removeInventoryStack(base, itemId, 1));
+    setSelectedKey(null);
   };
 
   const getQuickSlotIndex = (entryKey: string) => quickSlots.findIndex((slotKey) => slotKey === entryKey);
@@ -110,8 +151,8 @@ export function InventoryGridPanel({
                 ) : null}
                 {selectedEntry.category === "pet" ? (
                   <>
-                    <button onClick={() => onMountPet?.(selectedEntry.itemId)}>{mountedPetItemId === selectedEntry.itemId ? "타는 중" : "타기"}</button>
-                    <button onClick={() => onReleasePet?.(selectedEntry.itemId)}>방생</button>
+                    <button onClick={() => handleMountPet(selectedEntry.itemId)}>{mountedPetItemId === selectedEntry.itemId ? `${getPetItemLabel(selectedEntry.itemId)} 타는 중` : "타기"}</button>
+                    <button onClick={() => handleReleasePet(selectedEntry.itemId)}>방생</button>
                   </>
                 ) : null}
                 {selectedEntry.quickSlotEligible ? (
