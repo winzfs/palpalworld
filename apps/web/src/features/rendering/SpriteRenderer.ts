@@ -2,7 +2,7 @@ import type { BuildingState, CreaturePublicState, PlayerDirection, PlayerPublicS
 import type { SpriteDirection, SpriteSheetAsset } from "../assets/assetTypes";
 import { getBuildingSpriteSet, getCreatureSpriteSet, getPlayerSpriteSet, getResourceSpriteSet } from "../assets/assetCatalog";
 import { AssetLoader } from "../assets/AssetLoader";
-import { EnhancedPrimitiveRenderer } from "./EnhancedPrimitiveRenderer";
+import { PixelArtPrimitiveRenderer } from "./PixelArtPrimitiveRenderer";
 
 function toSpriteDirection(direction: PlayerDirection | undefined): SpriteDirection {
   if (direction === "up" || direction === "left" || direction === "right") return direction;
@@ -31,7 +31,7 @@ function drawSpriteSheetFrame(
 
 export class SpriteRenderer {
   private readonly loader = new AssetLoader();
-  private readonly fallback = new EnhancedPrimitiveRenderer();
+  private readonly fallback = new PixelArtPrimitiveRenderer();
 
   drawResource(ctx: CanvasRenderingContext2D, resource: ResourceNodeState, x: number, y: number) {
     const spriteSet = getResourceSpriteSet(resource.resourceType);
