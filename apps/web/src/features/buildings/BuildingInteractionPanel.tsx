@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { BuildingState, ItemStack } from "@palpalworld/shared";
+import type { BuildingState, InventoryState, ItemStack } from "@palpalworld/shared";
 import { getCraftingStationByBuildingType, getProgressionBuilding, type CraftingStationId } from "../crafting/progressionCatalog";
 import { StorageBoxPanel } from "../storage/StorageBoxPanel";
 import { addStorageStack, readStorageBoxItems, removeStorageStack, writeStorageBoxItems } from "../storage/storageStore";
@@ -57,16 +57,8 @@ function removeStack(stacks: ItemStack[], itemId: string, amount: number) {
     .filter((stack) => stack.amount > 0);
 }
 
-export function BuildingInteractionPanel({
-  building,
-  onClose,
-  onOpenCrafting,
-}: {
-  building: BuildingState | null;
-  onClose: () => void;
-  onOpenCrafting?: (stationId: CraftingStationId) => void;
-}) {
-  const [demoInventory, setDemoInventory] = useState(() => ({
+function createFallbackInventory(): InventoryState {
+  return {
     ownerPlayerId: "demo-player",
     items: [
       { itemId: "wood", amount: 30 },
@@ -75,8 +67,25 @@ export function BuildingInteractionPanel({
       { itemId: "berry", amount: 10 },
     ],
     itemInstances: [],
-  }));
+  };
+}
+
+export function BuildingInteractionPanel({
+  building,
+  inventory,
+  onInventoryChange,
+  onClose,
+  onOpenCrafting,
+}: {
+  building: BuildingState | null;
+  inventory?: InventoryState | null;
+  onInventoryChange?: (inventory: InventoryState) => void;
+  onClose: () => void;
+  onOpenCrafting?: (stationId: CraftingStationId) => void;
+}) {
+  const [fallbackInventory, setFallbackInventory] = useState<InventoryState>(() => createFallbackInventory());
   const [storageItems, setStorageItems] = useState<ItemStack[]>(() => readStorageBoxItems(building));
+  const activeInventory = inventory ?? fallbackInventory;
 
   useEffect(() => {
     setStorageItems(readStorageBoxItems(building));
@@ -90,11 +99,16 @@ export function BuildingInteractionPanel({
   const canOpenCrafting = Boolean(action.stationId);
   const isStorage = building.type === "storage_box" || building.type === "cold_storage";
 
+  const updateInventory = (nextInventory: InventoryState) => {
+    if (onInventoryChange) onInventoryChange(nextInventory);
+    else setFallbackInventory(nextInventory);
+  };
+
   const handleDeposit = (itemId: string, amount: number) => {
-    const owned = demoInventory.items.find((item) => item.itemId === itemId)?.amount ?? 0;
+    const owned = activeInventory.items.find((item) => item.itemId === itemId)?.amount ?? 0;
     const nextAmount = Math.min(amount, owned);
     if (nextAmount <= 0) return;
-    setDemoInventory((current) => ({ ...current, items: removeStack(current.items, itemId, nextAmount) }));
+    updateInventory({ ...activeInventory, items: removeStack(activeInventory.items, itemId, nextAmount) });
     setStorageItems((current) => {
       const next = addStorageStack(current, itemId, nextAmount);
       writeStorageBoxItems(building, next);
@@ -111,7 +125,7 @@ export function BuildingInteractionPanel({
       writeStorageBoxItems(building, next);
       return next;
     });
-    setDemoInventory((current) => ({ ...current, items: addStack(current.items, itemId, nextAmount) }));
+    updateInventory({ ...activeInventory, items: addStack(activeInventory.items, itemId, nextAmount) });
   };
 
   return (
@@ -129,7 +143,7 @@ export function BuildingInteractionPanel({
 
       {isStorage ? (
         <StorageBoxPanel
-          inventory={demoInventory}
+          inventory={activeInventory}
           storageItems={storageItems}
           onDeposit={handleDeposit}
           onWithdraw={handleWithdraw}
