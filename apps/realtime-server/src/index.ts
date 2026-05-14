@@ -5,6 +5,7 @@ import { Server } from "socket.io";
 import { normalizeVector } from "@palpalworld/game-core";
 import type { ClientToServerEvents, PlayerInputPayload, PlayerPublicState, ServerToClientEvents } from "@palpalworld/shared";
 import { WORLD } from "@palpalworld/shared";
+import { DEFAULT_PLAYER_TILE, MAP_TILE_SIZE, clampPositionToTile } from "../../../packages/shared/src/worldTiles";
 import { BuildingService } from "./buildings/BuildingService";
 import { CombatService } from "./combat/CombatService";
 import { CraftingService } from "./crafting/CraftingService";
@@ -71,11 +72,12 @@ function createPlayer(socketId: string, nickname: string): PlayerPublicState {
   return {
     id: socketId,
     nickname: safeNickname,
-    position: { x: 160 + Math.random() * 120, y: 160 + Math.random() * 120 },
+    position: { x: MAP_TILE_SIZE.width / 2, y: MAP_TILE_SIZE.height / 2 },
     direction: "down",
+    currentTile: { ...DEFAULT_PLAYER_TILE },
     hp: profile.stats.maxHp,
     maxHp: profile.stats.maxHp,
-  };
+  } as PlayerPublicState;
 }
 
 function handleAttack(playerId: string) {
@@ -200,7 +202,7 @@ io.on("connection", (socket) => {
   });
 
   socket.on("client:place_building", ({ buildingType, position, itemId }) => {
-    const result = buildings.place(socket.id, buildingType, position, itemId);
+    const result = buildings.place(socket.id, buildingType, clampPositionToTile(position), itemId);
     if (!result.ok) {
       const reasonMessage = {
         missing_player: "플레이어 정보를 찾을 수 없습니다.",
@@ -263,10 +265,12 @@ setInterval(() => {
     const input = lastInputs.get(playerId) ?? { x: 0, y: 0 };
     const movement = normalizeVector(input);
     const profile = players.getPlayerProfile(playerId);
-    player.position = {
+    const nextPosition = clampPositionToTile({
       x: player.position.x + movement.x * profile.stats.moveSpeed * deltaSeconds,
       y: player.position.y + movement.y * profile.stats.moveSpeed * deltaSeconds,
-    };
+    });
+
+    player.position = nextPosition;
 
     if (Math.abs(movement.x) > Math.abs(movement.y)) {
       player.direction = movement.x >= 0 ? "right" : "left";
