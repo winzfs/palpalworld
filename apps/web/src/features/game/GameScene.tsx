@@ -48,6 +48,8 @@ type ViewportBounds = {
   bottom: number;
 };
 
+type EquipmentChangedEvent = CustomEvent<{ weaponItemId?: string | null }>;
+
 const fallbackPlayerTiles = new Map<string, MapTileRef>();
 const cullPadding = 96;
 
@@ -58,6 +60,23 @@ function distance(a: Vector2, b: Vector2) {
 function getTileRef(entity: unknown) {
   const candidate = (entity as { currentTile?: MapTileRef })?.currentTile;
   return candidate ?? DEFAULT_PLAYER_TILE;
+}
+
+function readStoredWeaponItemId() {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem("palpalworld.demo.equipment");
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as { slots?: { weapon?: string } };
+    const weaponInstanceId = parsed.slots?.weapon;
+    if (!weaponInstanceId) return null;
+    const inventoryRaw = window.localStorage.getItem("palpalworld.demo.inventory");
+    if (!inventoryRaw) return null;
+    const inventory = JSON.parse(inventoryRaw) as { itemInstances?: { instanceId: string; itemId: string }[] };
+    return inventory.itemInstances?.find((item) => item.instanceId === weaponInstanceId)?.itemId ?? null;
+  } catch {
+    return null;
+  }
 }
 
 function setPositionInPlace(target: Vector2, next: Vector2) {
@@ -120,6 +139,7 @@ export class GameWorldScene {
   private previousPlayerPositions = new Map<string, Vector2>();
   private movingPlayerIds = new Set<string>();
   private localPlayerId: string | null = null;
+  private localEquippedWeaponItemId: string | null = null;
   private pointerWorldPosition: Vector2 | null = null;
   private hoverBuildingId: string | null = null;
   private placementPreviewBuildingType: BuildingType | null = null;
@@ -127,16 +147,12 @@ export class GameWorldScene {
   private onInteract: () => void;
   private onWorldClick: (target: WorldClickTarget) => void;
 
-  constructor(
-    root: HTMLDivElement,
-    onInputChange: (input: GameSceneInput) => void,
-    onInteract: () => void,
-    onWorldClick: (target: WorldClickTarget) => void,
-  ) {
+  constructor(root: HTMLDivElement, onInputChange: (input: GameSceneInput) => void, onInteract: () => void, onWorldClick: (target: WorldClickTarget) => void) {
     this.root = root;
     this.onInputChange = onInputChange;
     this.onInteract = onInteract;
     this.onWorldClick = onWorldClick;
+    this.localEquippedWeaponItemId = readStoredWeaponItemId();
     this.canvas = document.createElement("canvas");
     this.canvas.style.width = "100%";
     this.canvas.style.height = "100%";
@@ -148,6 +164,7 @@ export class GameWorldScene {
     window.addEventListener("resize", this.resize);
     window.addEventListener("keydown", this.handleKeyDown);
     window.addEventListener("keyup", this.handleKeyUp);
+    window.addEventListener("palpalworld:equipment-changed", this.handleEquipmentChanged as EventListener);
     this.canvas.addEventListener("pointerdown", this.handlePointerDown);
     this.canvas.addEventListener("pointermove", this.handlePointerMove);
     this.canvas.addEventListener("pointerleave", this.handlePointerLeave);
@@ -160,6 +177,7 @@ export class GameWorldScene {
     window.removeEventListener("resize", this.resize);
     window.removeEventListener("keydown", this.handleKeyDown);
     window.removeEventListener("keyup", this.handleKeyUp);
+    window.removeEventListener("palpalworld:equipment-changed", this.handleEquipmentChanged as EventListener);
     this.canvas.removeEventListener("pointerdown", this.handlePointerDown);
     this.canvas.removeEventListener("pointermove", this.handlePointerMove);
     this.canvas.removeEventListener("pointerleave", this.handlePointerLeave);
@@ -208,6 +226,10 @@ export class GameWorldScene {
     return this.getLocalPlayer()?.position ?? null;
   }
 
+  private handleEquipmentChanged = (event: EquipmentChangedEvent) => {
+    this.localEquippedWeaponItemId = event.detail?.weaponItemId ?? null;
+  };
+
   private getLocalPlayer() {
     return this.snapshot?.players.find((player) => player.id === this.localPlayerId) ?? this.snapshot?.players[0] ?? null;
   }
@@ -230,31 +252,19 @@ export class GameWorldScene {
 
   getPlacementValidity(position: Vector2): PlacementValidity {
     if (!this.placementPreviewBuildingType) return { ok: true, reason: "설치 모드가 아닙니다." };
-
     const localPlayer = this.getLocalPlayerPosition();
     if (!localPlayer) return { ok: false, reason: "플레이어 위치를 찾을 수 없습니다." };
-
-    if (position.x < 0 || position.x > MAP_TILE_SIZE.width || position.y < 0 || position.y > MAP_TILE_SIZE.height) {
-      return { ok: false, reason: "타일 밖에는 설치할 수 없습니다." };
-    }
-
-    if (distance(localPlayer, position) > WORLD.buildRange) {
-      return { ok: false, reason: "너무 멀리 설치할 수 없습니다." };
-    }
-
+    if (position.x < 0 || position.x > MAP_TILE_SIZE.width || position.y < 0 || position.y > MAP_TILE_SIZE.height) return { ok: false, reason: "타일 밖에는 설치할 수 없습니다." };
+    if (distance(localPlayer, position) > WORLD.buildRange) return { ok: false, reason: "너무 멀리 설치할 수 없습니다." };
     for (const building of this.getSceneBuildings()) {
-      if (distance(building.position, position) < WORLD.tileSize) {
-        return { ok: false, reason: "이미 다른 건물이 있는 위치입니다." };
-      }
+      if (distance(building.position, position) < WORLD.tileSize) return { ok: false, reason: "이미 다른 건물이 있는 위치입니다." };
     }
-
     return { ok: true, reason: "설치 가능" };
   }
 
   private getBuildingAt(position: Vector2) {
     let nearest: BuildingState | null = null;
     let nearestDistance = Number.POSITIVE_INFINITY;
-
     for (const building of this.getSceneBuildings()) {
       const hitDistance = distance(building.position, position);
       if (hitDistance <= 42 && hitDistance < nearestDistance) {
@@ -262,7 +272,6 @@ export class GameWorldScene {
         nearestDistance = hitDistance;
       }
     }
-
     return nearest;
   }
 
@@ -278,21 +287,13 @@ export class GameWorldScene {
 
   private getViewportBounds(cameraX: number, cameraY: number): ViewportBounds {
     const rect = this.root.getBoundingClientRect();
-    return {
-      left: cameraX,
-      top: cameraY,
-      right: cameraX + rect.width,
-      bottom: cameraY + rect.height,
-    };
+    return { left: cameraX, top: cameraY, right: cameraX + rect.width, bottom: cameraY + rect.height };
   }
 
   private screenToWorld(clientX: number, clientY: number): Vector2 {
     const rect = this.canvas.getBoundingClientRect();
     const camera = this.getCameraOffset();
-    return clampPositionToTile({
-      x: clientX - rect.left + camera.x,
-      y: clientY - rect.top + camera.y,
-    });
+    return clampPositionToTile({ x: clientX - rect.left + camera.x, y: clientY - rect.top + camera.y });
   }
 
   private resize = () => {
@@ -308,7 +309,6 @@ export class GameWorldScene {
     if (event.button !== 0) return;
     const position = this.screenToWorld(event.clientX, event.clientY);
     this.pointerWorldPosition = position;
-
     if (!this.placementPreviewBuildingType) {
       const building = this.getBuildingAt(position);
       if (building) {
@@ -316,7 +316,6 @@ export class GameWorldScene {
         return;
       }
     }
-
     this.onWorldClick({ kind: "field", position, validity: this.getPlacementValidity(position) });
   };
 
@@ -335,9 +334,7 @@ export class GameWorldScene {
 
   private handleKeyDown = (event: KeyboardEvent) => {
     const key = event.key.toLowerCase();
-    if (key === "e" && !this.keys.has(key)) {
-      this.onInteract();
-    }
+    if (key === "e" && !this.keys.has(key)) this.onInteract();
     this.keys.add(key);
     this.emitKeyboardInput();
   };
@@ -352,13 +349,7 @@ export class GameWorldScene {
     const right = this.keys.has("d") || this.keys.has("arrowright");
     const up = this.keys.has("w") || this.keys.has("arrowup");
     const down = this.keys.has("s") || this.keys.has("arrowdown");
-
-    this.onInputChange({
-      x: Number(right) - Number(left),
-      y: Number(down) - Number(up),
-      primary: this.keys.has(" "),
-      secondary: this.keys.has("e"),
-    });
+    this.onInputChange({ x: Number(right) - Number(left), y: Number(down) - Number(up), primary: this.keys.has(" "), secondary: this.keys.has("e") });
   }
 
   private loop = () => {
@@ -370,11 +361,9 @@ export class GameWorldScene {
     const rect = this.root.getBoundingClientRect();
     const ctx = this.context;
     ctx.clearRect(0, 0, rect.width, rect.height);
-
     const camera = this.getCameraOffset();
     const viewport = this.getViewportBounds(camera.x, camera.y);
     const now = performance.now();
-
     this.tileMapRenderer.draw(ctx, rect.width, rect.height, camera.x, camera.y);
     this.drawMapBoundaryAndPortals(ctx, camera.x, camera.y);
     this.drawBuildings(ctx, camera.x, camera.y, viewport);
@@ -388,7 +377,6 @@ export class GameWorldScene {
   private drawMapBoundaryAndPortals(ctx: CanvasRenderingContext2D, cameraX: number, cameraY: number) {
     const currentTile = this.getCurrentTile();
     const tile = getMapTile(currentTile);
-
     const x = -cameraX;
     const y = -cameraY;
     ctx.save();
@@ -397,9 +385,7 @@ export class GameWorldScene {
     ctx.setLineDash([12, 8]);
     ctx.strokeRect(x, y, MAP_TILE_SIZE.width, MAP_TILE_SIZE.height);
     ctx.restore();
-
     if (!tile) return;
-
     const edge = MAP_TILE_SIZE.portalRadius;
     ctx.save();
     ctx.setLineDash([]);
@@ -409,36 +395,10 @@ export class GameWorldScene {
     ctx.font = "13px system-ui";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.fillStyle = "rgba(14, 165, 233, 0.18)";
-
-    if (tile.exits.north) {
-      ctx.fillRect(x, y, MAP_TILE_SIZE.width, edge);
-      ctx.strokeRect(x, y, MAP_TILE_SIZE.width, edge);
-      ctx.fillStyle = "rgba(224, 242, 254, 0.95)";
-      ctx.fillText(portalLabels.north, x + MAP_TILE_SIZE.width / 2, y + edge / 2);
-      ctx.fillStyle = "rgba(14, 165, 233, 0.18)";
-    }
-    if (tile.exits.south) {
-      ctx.fillRect(x, y + MAP_TILE_SIZE.height - edge, MAP_TILE_SIZE.width, edge);
-      ctx.strokeRect(x, y + MAP_TILE_SIZE.height - edge, MAP_TILE_SIZE.width, edge);
-      ctx.fillStyle = "rgba(224, 242, 254, 0.95)";
-      ctx.fillText(portalLabels.south, x + MAP_TILE_SIZE.width / 2, y + MAP_TILE_SIZE.height - edge / 2);
-      ctx.fillStyle = "rgba(14, 165, 233, 0.18)";
-    }
-    if (tile.exits.west) {
-      ctx.fillRect(x, y, edge, MAP_TILE_SIZE.height);
-      ctx.strokeRect(x, y, edge, MAP_TILE_SIZE.height);
-      ctx.fillStyle = "rgba(224, 242, 254, 0.95)";
-      ctx.fillText(portalLabels.west, x + edge / 2, y + MAP_TILE_SIZE.height / 2);
-      ctx.fillStyle = "rgba(14, 165, 233, 0.18)";
-    }
-    if (tile.exits.east) {
-      ctx.fillRect(x + MAP_TILE_SIZE.width - edge, y, edge, MAP_TILE_SIZE.height);
-      ctx.strokeRect(x + MAP_TILE_SIZE.width - edge, y, edge, MAP_TILE_SIZE.height);
-      ctx.fillStyle = "rgba(224, 242, 254, 0.95)";
-      ctx.fillText(portalLabels.east, x + MAP_TILE_SIZE.width - edge / 2, y + MAP_TILE_SIZE.height / 2);
-    }
-
+    if (tile.exits.north) { ctx.fillRect(x, y, MAP_TILE_SIZE.width, edge); ctx.strokeRect(x, y, MAP_TILE_SIZE.width, edge); ctx.fillStyle = "rgba(224, 242, 254, 0.95)"; ctx.fillText(portalLabels.north, x + MAP_TILE_SIZE.width / 2, y + edge / 2); ctx.fillStyle = "rgba(14, 165, 233, 0.18)"; }
+    if (tile.exits.south) { ctx.fillRect(x, y + MAP_TILE_SIZE.height - edge, MAP_TILE_SIZE.width, edge); ctx.strokeRect(x, y + MAP_TILE_SIZE.height - edge, MAP_TILE_SIZE.width, edge); ctx.fillStyle = "rgba(224, 242, 254, 0.95)"; ctx.fillText(portalLabels.south, x + MAP_TILE_SIZE.width / 2, y + MAP_TILE_SIZE.height - edge / 2); ctx.fillStyle = "rgba(14, 165, 233, 0.18)"; }
+    if (tile.exits.west) { ctx.fillRect(x, y, edge, MAP_TILE_SIZE.height); ctx.strokeRect(x, y, edge, MAP_TILE_SIZE.height); ctx.fillStyle = "rgba(224, 242, 254, 0.95)"; ctx.fillText(portalLabels.west, x + edge / 2, y + MAP_TILE_SIZE.height / 2); ctx.fillStyle = "rgba(14, 165, 233, 0.18)"; }
+    if (tile.exits.east) { ctx.fillRect(x + MAP_TILE_SIZE.width - edge, y, edge, MAP_TILE_SIZE.height); ctx.strokeRect(x + MAP_TILE_SIZE.width - edge, y, edge, MAP_TILE_SIZE.height); ctx.fillStyle = "rgba(224, 242, 254, 0.95)"; ctx.fillText(portalLabels.east, x + MAP_TILE_SIZE.width - edge / 2, y + MAP_TILE_SIZE.height / 2); }
     ctx.restore();
   }
 
@@ -461,17 +421,11 @@ export class GameWorldScene {
   }
 
   private drawResources(ctx: CanvasRenderingContext2D, cameraX: number, cameraY: number, viewport: ViewportBounds) {
-    for (const resource of this.getSceneResources()) {
-      if (!isPositionInViewport(resource.position, viewport)) continue;
-      this.renderer.drawResource(ctx, resource, resource.position.x - cameraX, resource.position.y - cameraY);
-    }
+    for (const resource of this.getSceneResources()) if (isPositionInViewport(resource.position, viewport)) this.renderer.drawResource(ctx, resource, resource.position.x - cameraX, resource.position.y - cameraY);
   }
 
   private drawCreatures(ctx: CanvasRenderingContext2D, cameraX: number, cameraY: number, viewport: ViewportBounds) {
-    for (const creature of this.getSceneCreatures()) {
-      if (!isPositionInViewport(creature.position, viewport)) continue;
-      this.renderer.drawCreature(ctx, creature, creature.position.x - cameraX, creature.position.y - cameraY);
-    }
+    for (const creature of this.getSceneCreatures()) if (isPositionInViewport(creature.position, viewport)) this.renderer.drawCreature(ctx, creature, creature.position.x - cameraX, creature.position.y - cameraY);
   }
 
   private drawPlayers(ctx: CanvasRenderingContext2D, cameraX: number, cameraY: number, now: number, viewport: ViewportBounds) {
@@ -481,32 +435,22 @@ export class GameWorldScene {
       if (!isSameTile(getTileRef(player), currentTile) || !isPositionInViewport(player.position, viewport)) continue;
       const isLocal = player.id === this.localPlayerId;
       const isMoving = this.movingPlayerIds.has(player.id);
-      this.renderer.drawPlayer(ctx, player, player.position.x - cameraX, player.position.y - cameraY, isLocal, isMoving, now);
+      const weaponItemId = isLocal ? this.localEquippedWeaponItemId : null;
+      this.renderer.drawPlayer(ctx, player, player.position.x - cameraX, player.position.y - cameraY, isLocal, isMoving, now, weaponItemId);
     }
   }
 
   private drawPlacementPreview(ctx: CanvasRenderingContext2D, cameraX: number, cameraY: number) {
     if (!this.placementPreviewBuildingType || !this.pointerWorldPosition) return;
-
     const validity = this.getPlacementValidity(this.pointerWorldPosition);
-    const previewBuilding: BuildingState = {
-      id: "placement-preview",
-      type: this.placementPreviewBuildingType,
-      ownerPlayerId: this.localPlayerId ?? "preview",
-      position: this.pointerWorldPosition,
-      hp: 1,
-      maxHp: 1,
-    };
-
+    const previewBuilding: BuildingState = { id: "placement-preview", type: this.placementPreviewBuildingType, ownerPlayerId: this.localPlayerId ?? "preview", position: this.pointerWorldPosition, hp: 1, maxHp: 1 };
     const x = this.pointerWorldPosition.x - cameraX;
     const y = this.pointerWorldPosition.y - cameraY;
     const accent = validity.ok ? "34, 197, 94" : "239, 68, 68";
-
     ctx.save();
     ctx.globalAlpha = validity.ok ? 0.5 : 0.34;
     this.renderer.drawBuilding(ctx, previewBuilding, x, y);
     ctx.restore();
-
     ctx.save();
     ctx.strokeStyle = `rgba(${accent}, 0.9)`;
     ctx.fillStyle = `rgba(${accent}, 0.16)`;
@@ -517,7 +461,6 @@ export class GameWorldScene {
     ctx.fill();
     ctx.stroke();
     ctx.restore();
-
     ctx.save();
     ctx.fillStyle = "rgba(15, 23, 42, 0.86)";
     ctx.strokeStyle = `rgba(${accent}, 0.82)`;
@@ -538,7 +481,6 @@ export class GameWorldScene {
     const nearestId = this.getNearestInteractableId();
     const target = this.getSceneResources().find((resource) => resource.id === nearestId);
     if (!target) return;
-
     const x = target.position.x - cameraX;
     const y = target.position.y - cameraY;
     ctx.strokeStyle = "#facc15";
@@ -546,7 +488,6 @@ export class GameWorldScene {
     ctx.beginPath();
     ctx.roundRect(x - 23, y - 23, 46, 46, 12);
     ctx.stroke();
-
     ctx.fillStyle = "rgba(15, 23, 42, 0.82)";
     ctx.beginPath();
     ctx.roundRect(x - 55, y - 56, 110, 24, 8);
@@ -558,19 +499,7 @@ export class GameWorldScene {
   }
 }
 
-export function GameScene({
-  onReady,
-  onInputChange,
-  onInteract,
-  onWorldClick,
-  placementBuildingType,
-}: {
-  onReady: (scene: GameWorldScene) => void;
-  onInputChange: (input: GameSceneInput) => void;
-  onInteract: () => void;
-  onWorldClick: (target: WorldClickTarget) => void;
-  placementBuildingType?: BuildingType | null;
-}) {
+export function GameScene({ onReady, onInputChange, onInteract, onWorldClick, placementBuildingType }: { onReady: (scene: GameWorldScene) => void; onInputChange: (input: GameSceneInput) => void; onInteract: () => void; onWorldClick: (target: WorldClickTarget) => void; placementBuildingType?: BuildingType | null }) {
   const rootRef = useRef<HTMLDivElement | null>(null);
   const sceneRef = useRef<GameWorldScene | null>(null);
 
