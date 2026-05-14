@@ -122,6 +122,7 @@ export class GameWorldScene {
 
     this.snapshot = normalizedSnapshot;
     this.localPlayerId = localPlayerId;
+    window.dispatchEvent(new CustomEvent("palpalworld:world_snapshot", { detail: { snapshot: normalizedSnapshot, localPlayerId } }));
   }
 
   setPlacementPreviewBuildingType(buildingType: BuildingType | null) {
@@ -198,8 +199,8 @@ export class GameWorldScene {
     const localPlayer = this.getLocalPlayer();
     const target = localPlayer?.position ?? { x: rect.width / 2, y: rect.height / 2 };
     return {
-      x: Math.max(0, Math.min(MAP_TILE_SIZE.width - rect.width, target.x - rect.width / 2)),
-      y: Math.max(0, Math.min(MAP_TILE_SIZE.height - rect.height, target.y - rect.height / 2)),
+      x: Math.max(0, Math.min(Math.max(0, MAP_TILE_SIZE.width - rect.width), target.x - rect.width / 2)),
+      y: Math.max(0, Math.min(Math.max(0, MAP_TILE_SIZE.height - rect.height), target.y - rect.height / 2)),
     };
   }
 
@@ -269,10 +270,20 @@ export class GameWorldScene {
     const right = this.keys.has("d") || this.keys.has("arrowright");
     const up = this.keys.has("w") || this.keys.has("arrowup");
     const down = this.keys.has("s") || this.keys.has("arrowdown");
+    const localPlayer = this.getLocalPlayerPosition();
+    let x = Number(right) - Number(left);
+    let y = Number(down) - Number(up);
+
+    if (localPlayer) {
+      if (localPlayer.x <= 0 && x < 0) x = 0;
+      if (localPlayer.x >= MAP_TILE_SIZE.width && x > 0) x = 0;
+      if (localPlayer.y <= 0 && y < 0) y = 0;
+      if (localPlayer.y >= MAP_TILE_SIZE.height && y > 0) y = 0;
+    }
 
     this.onInputChange({
-      x: Number(right) - Number(left),
-      y: Number(down) - Number(up),
+      x,
+      y,
       primary: this.keys.has(" "),
       secondary: this.keys.has("e"),
     });
