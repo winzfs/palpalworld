@@ -193,7 +193,7 @@ function StationCraftingSection({
 
             {tierBuildings.length > 0 ? (
               <>
-                <div className="feature-panel__section-title">{tier} 건설 아이템 제작</div>
+                <div className="feature-panel__section-title">{tier} 건설</div>
                 <div className="control-grid control-grid--wide">
                   {tierBuildings.map((building) => {
                     const affordable = canAfford(inventory, building.requires);
@@ -203,10 +203,10 @@ function StationCraftingSection({
                       <button
                         key={building.type}
                         className="crafting-card"
-                        onClick={() => onStartJob({ stationId: station.id, kind: "building", targetId: building.type, name: `${building.name} 설치 아이템`, outputsLabel }, 2000)}
+                        onClick={() => onStartJob({ stationId: station.id, kind: "building", targetId: building.type, name: building.name, outputsLabel }, 2000)}
                         disabled={!affordable || queueFull}
                       >
-                        <b>{building.name} 설치 아이템</b>
+                        <b>{building.name}</b>
                         <span>{building.description}</span>
                         <small>Lv.{building.unlockLevel} · {building.category} · 결과 {outputsLabel}</small>
                         <RequirementList inventory={inventory} stacks={building.requires} />
@@ -226,11 +226,13 @@ function StationCraftingSection({
 export function CraftingPanel({
   inventory = null,
   stationId,
+  compact = false,
   onCraft,
   onCraftBuildingItem,
 }: {
   inventory?: InventoryState | null;
   stationId?: CraftingStationId;
+  compact?: boolean;
   onCraft: (recipeId: string) => void;
   onCraftBuildingItem: (buildingType: string) => void;
 }) {
@@ -280,9 +282,11 @@ export function CraftingPanel({
 
   return (
     <div className="feature-panel feature-panel--crafting">
-      <div className="feature-panel__hint">
-        제작은 제작소 데이터 기준으로 자동 분류됩니다. 제작 버튼을 누르면 큐에 등록되고 완료 후 수령할 수 있습니다.
-      </div>
+      {!compact ? (
+        <div className="feature-panel__hint">
+          제작은 제작소 데이터 기준으로 자동 분류됩니다. 제작 버튼을 누르면 큐에 등록되고 완료 후 수령할 수 있습니다.
+        </div>
+      ) : null}
       {stations.map((station) => (
         <StationCraftingSection
           key={station.id}
