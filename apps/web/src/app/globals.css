@@ -602,11 +602,48 @@ button:disabled {
   cursor: not-allowed;
 }
 
-@media (min-width: 900px) {
+@media (hover: hover) and (pointer: fine) and (min-width: 900px) {
   .mobile-joystick,
   .mobile-actions,
   .mobile-control-hint {
     display: none;
+  }
+}
+
+@media (min-width: 721px) and (hover: none), (min-width: 721px) and (pointer: coarse) {
+  .mobile-control-hint {
+    bottom: calc(162px + var(--safe-bottom));
+  }
+
+  .mobile-actions {
+    right: calc(18px + var(--safe-right));
+    bottom: calc(22px + var(--safe-bottom));
+    grid-template-columns: repeat(2, 66px);
+    gap: 10px;
+  }
+
+  .action-button,
+  .mobile-action {
+    width: 66px;
+    height: 66px;
+    font-size: 12px;
+  }
+
+  .mobile-joystick {
+    left: calc(18px + var(--safe-left));
+    bottom: calc(18px + var(--safe-bottom));
+    width: 144px;
+    height: 144px;
+  }
+
+  .joystick-base {
+    width: 144px;
+    height: 144px;
+  }
+
+  .joystick-stick {
+    width: 58px;
+    height: 58px;
   }
 }
 
