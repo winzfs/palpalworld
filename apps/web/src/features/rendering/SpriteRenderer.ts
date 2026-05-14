@@ -1,10 +1,10 @@
-import type { BuildingState, CreaturePublicState, PlayerDirection, PlayerPublicState, ResourceNodeState } from "@palpalworld/shared";
+import type { BuildingState, CreaturePublicState, Direction, PlayerPublicState, ResourceNodeState } from "@palpalworld/shared";
 import type { SpriteDirection, SpriteSheetAsset } from "../assets/assetTypes";
 import { getBuildingSpriteSet, getCreatureSpriteSet, getPlayerSpriteSet, getResourceSpriteSet } from "../assets/assetCatalog";
 import { AssetLoader } from "../assets/AssetLoader";
 import { PixelArtPrimitiveRenderer } from "./PixelArtPrimitiveRenderer";
 
-function toSpriteDirection(direction: PlayerDirection | undefined): SpriteDirection {
+function toSpriteDirection(direction: Direction | undefined): SpriteDirection {
   if (direction === "up" || direction === "left" || direction === "right") return direction;
   return "down";
 }
