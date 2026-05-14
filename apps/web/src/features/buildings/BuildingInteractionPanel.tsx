@@ -1,40 +1,41 @@
 import type { BuildingState } from "@palpalworld/shared";
-import { getProgressionBuilding } from "../crafting/progressionCatalog";
+import { getCraftingStationByBuildingType, getProgressionBuilding, type CraftingStationId } from "../crafting/progressionCatalog";
 
 function getBuildingAction(buildingType: string) {
+  const station = getCraftingStationByBuildingType(buildingType);
+  if (station) {
+    return {
+      title: `${station.name} 열기`,
+      description: station.description,
+      stationId: station.id,
+    };
+  }
+
   switch (buildingType) {
-    case "workbench":
-    case "advanced_workbench":
-      return {
-        title: "제작대 열기",
-        description: "이 건물 근처에서 도구, 장비, 포획구 제작 기능을 확장할 수 있습니다.",
-      };
     case "storage_box":
     case "cold_storage":
       return {
         title: "보관함 열기",
         description: "아이템을 넣고 꺼내는 창고 UI로 연결할 예정입니다.",
-      };
-    case "campfire":
-    case "kitchen":
-      return {
-        title: "요리하기",
-        description: "음식과 회복 아이템 제작 UI로 연결할 예정입니다.",
-      };
-    case "furnace":
-      return {
-        title: "제련하기",
-        description: "광석을 주괴로 바꾸는 제련 UI로 연결할 예정입니다.",
+        stationId: null,
       };
     case "base_core":
       return {
         title: "거점 관리",
         description: "거점 이름, 작업 배치, 몬스터 관리 UI로 연결할 예정입니다.",
+        stationId: null,
+      };
+    case "farm_plot":
+      return {
+        title: "밭 관리",
+        description: "씨앗 심기, 수확, 작업 펄 배치 UI로 연결할 예정입니다.",
+        stationId: null,
       };
     default:
       return {
         title: "건설물 정보",
         description: "아직 전용 상호작용이 없는 건설물입니다.",
+        stationId: null,
       };
   }
 }
@@ -46,14 +47,14 @@ export function BuildingInteractionPanel({
 }: {
   building: BuildingState | null;
   onClose: () => void;
-  onOpenCrafting?: () => void;
+  onOpenCrafting?: (stationId: CraftingStationId) => void;
 }) {
   if (!building) return null;
 
   const definition = getProgressionBuilding(building.type);
   const action = getBuildingAction(building.type);
   const hpPercent = Math.max(0, Math.min(100, Math.round((building.hp / building.maxHp) * 100)));
-  const canOpenCrafting = building.type === "workbench" || building.type === "advanced_workbench" || building.type === "campfire" || building.type === "furnace";
+  const canOpenCrafting = Boolean(action.stationId);
 
   return (
     <div className="feature-panel feature-panel--building-interaction">
@@ -69,7 +70,7 @@ export function BuildingInteractionPanel({
       </div>
       <button
         className="building-interaction__action"
-        onClick={canOpenCrafting ? onOpenCrafting : undefined}
+        onClick={action.stationId ? () => onOpenCrafting?.(action.stationId) : undefined}
         disabled={!canOpenCrafting}
       >
         {action.title}
