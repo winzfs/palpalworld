@@ -11,18 +11,30 @@ import {
 const categories: InventoryCategory[] = ["general", "usable", "material", "equipment", "building", "pet"];
 const gridSlotCount = 36;
 
+function EntryIcon({ entry }: { entry: InventoryEntry }) {
+  if (entry.iconSrc) return <img src={entry.iconSrc} alt="" />;
+  if (entry.iconText) return <span className="inventory-grid-slot__emoji">{entry.iconText}</span>;
+  return <span className="inventory-grid-slot__fallback">?</span>;
+}
+
 export function InventoryGridPanel({
   inventory,
   quickSlots,
   selectedBuildingItemId,
+  mountedPetItemId,
   onSelectBuildingItem,
   onAssignQuickSlot,
+  onMountPet,
+  onReleasePet,
 }: {
   inventory: InventoryState | null;
   quickSlots: (string | null)[];
   selectedBuildingItemId?: string | null;
+  mountedPetItemId?: string | null;
   onSelectBuildingItem?: (itemId: string) => void;
   onAssignQuickSlot: (slotIndex: number, entryKey: string | null) => void;
+  onMountPet?: (itemId: string) => void;
+  onReleasePet?: (itemId: string) => void;
 }) {
   const [category, setCategory] = useState<InventoryCategory>("general");
   const entries = useMemo(() => buildInventoryEntries(inventory), [inventory]);
@@ -61,20 +73,21 @@ export function InventoryGridPanel({
           {visibleSlots.map((entry, index) => {
             const selected = Boolean(entry && selectedEntry?.key === entry.key);
             const buildingSelected = Boolean(entry && selectedBuildingItemId === entry.itemId);
+            const mountedSelected = Boolean(entry && mountedPetItemId === entry.itemId);
             const quickSlotIndex = entry ? getQuickSlotIndex(entry.key) : -1;
             return (
               <button
                 key={entry?.key ?? `empty-${index}`}
-                className={selected || buildingSelected ? "inventory-grid-slot inventory-grid-slot--selected" : "inventory-grid-slot"}
+                className={selected || buildingSelected || mountedSelected ? "inventory-grid-slot inventory-grid-slot--selected" : "inventory-grid-slot"}
                 onClick={() => entry ? setSelectedKey(entry.key) : undefined}
                 disabled={!entry}
               >
                 {entry ? (
                   <>
-                    {entry.iconSrc ? <img src={entry.iconSrc} alt="" /> : <span className="inventory-grid-slot__fallback">?</span>}
+                    <EntryIcon entry={entry} />
                     {entry.amount ? <b>{entry.amount}</b> : null}
                     {entry.detail ? <small>{entry.detail}</small> : null}
-                    {quickSlotIndex >= 0 ? <i className="inventory-grid-slot__quick-badge">Q{quickSlotIndex + 1}</i> : null}
+                    {mountedSelected ? <i className="inventory-grid-slot__quick-badge">탑승</i> : quickSlotIndex >= 0 ? <i className="inventory-grid-slot__quick-badge">Q{quickSlotIndex + 1}</i> : null}
                   </>
                 ) : null}
               </button>
@@ -86,7 +99,7 @@ export function InventoryGridPanel({
           {selectedEntry ? (
             <>
               <div className="inventory-detail-card__icon">
-                {selectedEntry.iconSrc ? <img src={selectedEntry.iconSrc} alt="" /> : <span>?</span>}
+                {selectedEntry.iconSrc ? <img src={selectedEntry.iconSrc} alt="" /> : selectedEntry.iconText ? <span>{selectedEntry.iconText}</span> : <span>?</span>}
               </div>
               <strong>{selectedEntry.label}</strong>
               <small>{inventoryCategoryLabels[selectedEntry.category]} {selectedEntry.amount ? `· ${selectedEntry.amount}개` : selectedEntry.detail ? `· ${selectedEntry.detail}` : ""}</small>
@@ -94,6 +107,12 @@ export function InventoryGridPanel({
               <div className="inventory-detail-card__actions">
                 {selectedEntry.category === "building" ? (
                   <button onClick={() => handleUseOrBuild(selectedEntry)}>{selectedBuildingItemId === selectedEntry.itemId ? "배치 취소/전환" : "배치하기"}</button>
+                ) : null}
+                {selectedEntry.category === "pet" ? (
+                  <>
+                    <button onClick={() => onMountPet?.(selectedEntry.itemId)}>{mountedPetItemId === selectedEntry.itemId ? "타는 중" : "타기"}</button>
+                    <button onClick={() => onReleasePet?.(selectedEntry.itemId)}>방생</button>
+                  </>
                 ) : null}
                 {selectedEntry.quickSlotEligible ? (
                   <div className="inventory-quick-assign inventory-quick-assign--icons">
@@ -112,8 +131,12 @@ export function InventoryGridPanel({
                             <em>{index + 1}</em>
                             {isCurrent && selectedEntry.iconSrc ? (
                               <img src={selectedEntry.iconSrc} alt="" />
+                            ) : isCurrent && selectedEntry.iconText ? (
+                              <span>{selectedEntry.iconText}</span>
                             ) : assignedEntry?.iconSrc ? (
                               <img src={assignedEntry.iconSrc} alt="" />
+                            ) : assignedEntry?.iconText ? (
+                              <span>{assignedEntry.iconText}</span>
                             ) : (
                               <span>{isCurrent ? "✓" : "+"}</span>
                             )}
