@@ -70,6 +70,22 @@ function entityTile(entity: { currentTile?: MapTileRef }) {
   return entity.currentTile ?? DEFAULT_PLAYER_TILE;
 }
 
+function isOnTile(entity: { currentTile?: MapTileRef }, tile: MapTileRef) {
+  return isSameTile(entityTile(entity), tile);
+}
+
+function getCurrentTileResources(resources: ResourceNodeState[], tile: MapTileRef) {
+  return resources.filter((resource) => resource.remainingAmount > 0 && isOnTile(resource as any, tile));
+}
+
+function getCurrentTileCreatures(creatures: CreaturePublicState[], tile: MapTileRef) {
+  return creatures.filter((creature) => creature.hp > 0 && isOnTile(creature as any, tile));
+}
+
+function getCurrentTileBuildings(buildings: BuildingState[], tile: MapTileRef) {
+  return buildings.filter((building) => isOnTile(building as any, tile));
+}
+
 function moveDemoCreatures(creatures: CreaturePublicState[], deltaSeconds: number, now: number, playerPosition: Vector2, playerTile: MapTileRef) {
   for (const creature of creatures) {
     if (creature.hp <= 0) continue;
@@ -80,15 +96,12 @@ function moveDemoCreatures(creatures: CreaturePublicState[], deltaSeconds: numbe
     let angle = Math.sin(time * 0.42 + seed * 0.013) * Math.PI + Math.cos(time * 0.19 + seed * 0.007) * 0.85;
     let speedMultiplier = 0.75 + Math.sin(time * 0.63 + seed) * 0.25;
 
-    const currentTile = entityTile(creature as any);
-    if (isSameTile(currentTile, playerTile)) {
-      const dx = creature.position.x - playerPosition.x;
-      const dy = creature.position.y - playerPosition.y;
-      const distance = Math.hypot(dx, dy);
-      if (distance > 0 && distance < 230) {
-        angle = Math.atan2(dy, dx);
-        speedMultiplier = 1.45;
-      }
+    const dx = creature.position.x - playerPosition.x;
+    const dy = creature.position.y - playerPosition.y;
+    const distance = Math.hypot(dx, dy);
+    if (distance > 0 && distance < 230) {
+      angle = Math.atan2(dy, dx);
+      speedMultiplier = 1.45;
     }
 
     const next = clampCreaturePosition(clampPositionToTile({
@@ -178,9 +191,9 @@ function createDemoSnapshot(nickname: string, position: Vector2, direction: Dire
     worldId: "offline-demo",
     serverTime: Date.now(),
     players: [{ id: demoPlayerId, nickname: nickname === "..." ? "Demo" : nickname, position, direction, currentTile, hp: 100, maxHp: 100 } as any],
-    creatures: creatures.filter((creature) => creature.hp > 0),
-    resources: resources.filter((resource) => resource.remainingAmount > 0),
-    buildings,
+    creatures: getCurrentTileCreatures(creatures, currentTile),
+    resources: getCurrentTileResources(resources, currentTile),
+    buildings: getCurrentTileBuildings(buildings, currentTile),
   };
 }
 
@@ -209,7 +222,8 @@ export function GameClientTileDemo() {
   const placementBuildingType = selectedPlacementBuilding?.type as BuildingType | undefined;
 
   const applyDemoSnapshot = useCallback((forceUiUpdate = false) => {
-    const nextSnapshot = createDemoSnapshot(nickname, demoPositionRef.current, demoDirectionRef.current, demoTileRef.current, demoResourcesRef.current, demoCreaturesRef.current, demoBuildingsRef.current);
+    const currentTileCreatures = getCurrentTileCreatures(demoCreaturesRef.current, demoTileRef.current);
+    const nextSnapshot = createDemoSnapshot(nickname, demoPositionRef.current, demoDirectionRef.current, demoTileRef.current, demoResourcesRef.current, currentTileCreatures, demoBuildingsRef.current);
     sceneRef.current?.applySnapshot(nextSnapshot, demoPlayerId);
     const player = nextSnapshot.players[0] as any;
     if (player?.currentTile) demoTileRef.current = { ...player.currentTile };
@@ -245,7 +259,7 @@ export function GameClientTileDemo() {
       });
       demoPositionRef.current.x = next.x;
       demoPositionRef.current.y = next.y;
-      moveDemoCreatures(demoCreaturesRef.current, deltaSeconds, now, demoPositionRef.current, demoTileRef.current);
+      moveDemoCreatures(getCurrentTileCreatures(demoCreaturesRef.current, demoTileRef.current), deltaSeconds, now, demoPositionRef.current, demoTileRef.current);
       applyDemoSnapshot(false);
       lastTick = now;
       animationFrame = requestAnimationFrame(tick);
