@@ -1,5 +1,4 @@
 import type { PlayerProfileState, WorldSnapshot } from "@palpalworld/shared";
-import { FloatingMiniMap } from "../world/FloatingMiniMap";
 import { StatRow } from "../ui/StatRow";
 
 export function CharacterPanel({
@@ -21,8 +20,6 @@ export function CharacterPanel({
 
   return (
     <div className="feature-panel feature-panel--character">
-      <FloatingMiniMap snapshot={snapshot} />
-
       <div className="feature-panel__section-title">캐릭터</div>
       <StatRow label="상태" value={connectionState} />
       <StatRow label="닉네임" value={nickname} />
