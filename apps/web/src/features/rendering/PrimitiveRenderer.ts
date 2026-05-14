@@ -40,13 +40,6 @@ export class PrimitiveRenderer {
       default: this.drawGenericCreature(ctx, x, drawY, fill, breathe); break;
     }
 
-    if (creature.traitIds.length > 0) {
-      ctx.strokeStyle = creature.traitIds.includes("flying") ? "#93c5fd" : "#facc15";
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.roundRect(x - 23, drawY - 23, 46, 44, 13);
-      ctx.stroke();
-    }
     this.drawMiniBar(ctx, x, y + 25, 44, creature.hp / creature.maxHp, "#ef4444");
     this.drawLabel(ctx, `${creature.speciesId} Lv.${creature.level}`, x, y - 30);
   }
@@ -87,8 +80,6 @@ export class PrimitiveRenderer {
     ctx.fillStyle = "#fef3c7";
     ctx.beginPath(); ctx.moveTo(x, y - 7); ctx.lineTo(x + 8, y - 2); ctx.lineTo(x, y + 3); ctx.closePath(); ctx.fill(); ctx.stroke();
     ctx.fillStyle = "#111827"; ctx.fillRect(x - 5, y - 8, 3, 3); ctx.fillRect(x + 3, y - 8, 3, 3);
-    ctx.strokeStyle = "rgba(147,197,253,0.55)"; ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.arc(x, y, 27 + Math.abs(wing) * 0.15, 0, Math.PI * 2); ctx.stroke();
   }
 
   private drawLeafbun(ctx: CanvasRenderingContext2D, x: number, y: number, fill: string, wiggle: number, breathe: number) { ctx.strokeStyle = "#1f1308"; ctx.lineWidth = 3; ctx.fillStyle = "#86efac"; ctx.beginPath(); ctx.ellipse(x - 9 + wiggle * 0.2, y - 20, 7, 16 + breathe * 0.2, -0.45, 0, Math.PI * 2); ctx.ellipse(x + 9 + wiggle * 0.2, y - 20, 7, 16 + breathe * 0.2, 0.45, 0, Math.PI * 2); ctx.fill(); ctx.stroke(); ctx.fillStyle = fill; ctx.beginPath(); ctx.roundRect(x - 17, y - 13, 34, 30 + breathe, 12); ctx.fill(); ctx.stroke(); this.drawEyes(ctx, x, y - 2); ctx.fillStyle = "#22c55e"; ctx.beginPath(); ctx.arc(x, y - 18, 5, 0, Math.PI * 2); ctx.fill(); }
