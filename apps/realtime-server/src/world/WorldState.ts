@@ -1,6 +1,6 @@
 import type { BuildingState, CreaturePublicState, PlayerPublicState, ResourceNodeState, WorldSnapshot } from "@palpalworld/shared";
 import { CREATURE_CATALOG, STARTER_CREATURE_SPAWNS, STARTER_RESOURCE_NODES, WORLD } from "@palpalworld/shared";
-import { getEntityTileById } from "../../../../packages/shared/src/worldTiles";
+import { clampPositionToTile, getEntityTileById } from "../../../../packages/shared/src/worldTiles";
 
 export class WorldState {
   readonly players = new Map<string, PlayerPublicState>();
@@ -13,6 +13,8 @@ export class WorldState {
   }
 
   createSnapshot(): WorldSnapshot {
+    this.clampWorldPositions();
+
     return {
       worldId: WORLD.defaultWorldId,
       serverTime: Date.now(),
@@ -23,11 +25,18 @@ export class WorldState {
     };
   }
 
+  private clampWorldPositions() {
+    for (const player of this.players.values()) player.position = clampPositionToTile(player.position);
+    for (const creature of this.creatures.values()) creature.position = clampPositionToTile(creature.position);
+    for (const resource of this.resources.values()) resource.position = clampPositionToTile(resource.position);
+    for (const building of this.buildings.values()) building.position = clampPositionToTile(building.position);
+  }
+
   private seedStarterIsland() {
     for (const resource of STARTER_RESOURCE_NODES) {
       this.resources.set(resource.id, {
         ...resource,
-        position: { ...resource.position },
+        position: clampPositionToTile(resource.position),
         currentTile: getEntityTileById(resource.id),
       } as ResourceNodeState);
     }
@@ -43,7 +52,7 @@ export class WorldState {
         id: spawn.id,
         speciesId: spawn.speciesId,
         regionId: spawn.regionId,
-        position: { ...spawn.position },
+        position: clampPositionToTile(spawn.position),
         currentTile: getEntityTileById(spawn.id),
         level: spawn.level,
         hp: maxHp,
