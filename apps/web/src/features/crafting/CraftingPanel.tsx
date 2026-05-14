@@ -5,6 +5,7 @@ import {
   getBuildableBuildingsByStation,
   getCraftingStation,
   getRecipesByStation,
+  type CraftingStationDefinition,
   type CraftingStationId,
   type ProgressionTier,
   type RecipeCategory,
@@ -52,25 +53,24 @@ function RequirementList({ inventory, stacks }: { inventory: InventoryState | nu
   );
 }
 
-export function CraftingPanel({
+function StationCraftingSection({
+  station,
   inventory,
-  stationId = "hand",
   onCraft,
   onCraftBuildingItem,
 }: {
+  station: CraftingStationDefinition;
   inventory: InventoryState | null;
-  stationId?: CraftingStationId;
   onCraft: (recipeId: string) => void;
   onCraftBuildingItem: (buildingType: string) => void;
 }) {
-  const station = getCraftingStation(stationId) ?? CRAFTING_STATIONS[0];
   const recipes = getRecipesByStation(station.id);
   const buildableBuildings = getBuildableBuildingsByStation(station.id);
   const hasRecipes = recipes.length > 0;
   const hasBuildings = buildableBuildings.length > 0;
 
   return (
-    <div className="feature-panel feature-panel--crafting">
+    <section className="crafting-station-section">
       <div className="feature-panel__section-title">{station.name}</div>
       <div className="feature-panel__hint">
         {station.description} · 제작 큐 {station.queueSize}칸
@@ -86,7 +86,7 @@ export function CraftingPanel({
         if (tierRecipes.length === 0 && tierBuildings.length === 0) return null;
 
         return (
-          <section key={tier} className="crafting-tier">
+          <section key={`${station.id}-${tier}`} className="crafting-tier">
             {tierRecipes.length > 0 ? (
               <>
                 <div className="feature-panel__section-title">{tier} 제작</div>
@@ -127,6 +127,37 @@ export function CraftingPanel({
           </section>
         );
       })}
+    </section>
+  );
+}
+
+export function CraftingPanel({
+  inventory = null,
+  stationId,
+  onCraft,
+  onCraftBuildingItem,
+}: {
+  inventory?: InventoryState | null;
+  stationId?: CraftingStationId;
+  onCraft: (recipeId: string) => void;
+  onCraftBuildingItem: (buildingType: string) => void;
+}) {
+  const stations = stationId ? [getCraftingStation(stationId)].filter(Boolean) as CraftingStationDefinition[] : CRAFTING_STATIONS;
+
+  return (
+    <div className="feature-panel feature-panel--crafting">
+      <div className="feature-panel__hint">
+        제작은 제작소 데이터 기준으로 자동 분류됩니다. 새 레시피나 건물을 추가할 때는 카탈로그 데이터만 확장하면 됩니다.
+      </div>
+      {stations.map((station) => (
+        <StationCraftingSection
+          key={station.id}
+          station={station}
+          inventory={inventory}
+          onCraft={onCraft}
+          onCraftBuildingItem={onCraftBuildingItem}
+        />
+      ))}
     </div>
   );
 }
