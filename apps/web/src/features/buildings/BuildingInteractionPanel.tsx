@@ -142,7 +142,7 @@ export function BuildingInteractionPanel({
     return (
       <>
         <span className="storage-menu-empty-marker" aria-hidden="true" />
-        {portalHost ? createPortal(storageWindow, portalHost) : storageWindow}
+        {portalHost ? createPortal(storageWindow, portalHost) : null}
       </>
     );
   }
