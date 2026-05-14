@@ -41,7 +41,15 @@ export type WorldClickTarget =
   | { kind: "field"; position: Vector2; validity: PlacementValidity }
   | { kind: "building"; building: BuildingState };
 
+type ViewportBounds = {
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
+};
+
 const fallbackPlayerTiles = new Map<string, MapTileRef>();
+const cullPadding = 96;
 
 function distance(a: Vector2, b: Vector2) {
   return Math.hypot(a.x - b.x, a.y - b.y);
@@ -55,6 +63,15 @@ function getTileRef(entity: unknown) {
 function setPositionInPlace(target: Vector2, next: Vector2) {
   target.x = next.x;
   target.y = next.y;
+}
+
+function isPositionInViewport(position: Vector2, viewport: ViewportBounds, padding = cullPadding) {
+  return (
+    position.x >= viewport.left - padding &&
+    position.x <= viewport.right + padding &&
+    position.y >= viewport.top - padding &&
+    position.y <= viewport.bottom + padding
+  );
 }
 
 function normalizeSnapshotToCurrentTile(snapshot: WorldSnapshot): WorldSnapshot {
@@ -272,6 +289,16 @@ export class GameWorldScene {
     };
   }
 
+  private getViewportBounds(cameraX: number, cameraY: number): ViewportBounds {
+    const rect = this.root.getBoundingClientRect();
+    return {
+      left: cameraX,
+      top: cameraY,
+      right: cameraX + rect.width,
+      bottom: cameraY + rect.height,
+    };
+  }
+
   private screenToWorld(clientX: number, clientY: number): Vector2 {
     const rect = this.canvas.getBoundingClientRect();
     const camera = this.getCameraOffset();
@@ -358,14 +385,15 @@ export class GameWorldScene {
     ctx.clearRect(0, 0, rect.width, rect.height);
 
     const camera = this.getCameraOffset();
+    const viewport = this.getViewportBounds(camera.x, camera.y);
     const now = performance.now();
 
     this.tileMapRenderer.draw(ctx, rect.width, rect.height, camera.x, camera.y);
     this.drawMapBoundaryAndPortals(ctx, camera.x, camera.y);
-    this.drawBuildings(ctx, camera.x, camera.y);
-    this.drawResources(ctx, camera.x, camera.y);
-    this.drawCreatures(ctx, camera.x, camera.y);
-    this.drawPlayers(ctx, camera.x, camera.y, now);
+    this.drawBuildings(ctx, camera.x, camera.y, viewport);
+    this.drawResources(ctx, camera.x, camera.y, viewport);
+    this.drawCreatures(ctx, camera.x, camera.y, viewport);
+    this.drawPlayers(ctx, camera.x, camera.y, now, viewport);
     this.drawInteractionHint(ctx, camera.x, camera.y);
     this.drawPlacementPreview(ctx, camera.x, camera.y);
   }
@@ -427,8 +455,9 @@ export class GameWorldScene {
     ctx.restore();
   }
 
-  private drawBuildings(ctx: CanvasRenderingContext2D, cameraX: number, cameraY: number) {
+  private drawBuildings(ctx: CanvasRenderingContext2D, cameraX: number, cameraY: number, viewport: ViewportBounds) {
     for (const building of this.getCurrentTileBuildings()) {
+      if (!isPositionInViewport(building.position, viewport)) continue;
       const x = building.position.x - cameraX;
       const y = building.position.y - cameraY;
       this.renderer.drawBuilding(ctx, building, x, y);
@@ -444,23 +473,25 @@ export class GameWorldScene {
     }
   }
 
-  private drawResources(ctx: CanvasRenderingContext2D, cameraX: number, cameraY: number) {
+  private drawResources(ctx: CanvasRenderingContext2D, cameraX: number, cameraY: number, viewport: ViewportBounds) {
     for (const resource of this.getCurrentTileResources()) {
+      if (!isPositionInViewport(resource.position, viewport)) continue;
       this.renderer.drawResource(ctx, resource, resource.position.x - cameraX, resource.position.y - cameraY);
     }
   }
 
-  private drawCreatures(ctx: CanvasRenderingContext2D, cameraX: number, cameraY: number) {
+  private drawCreatures(ctx: CanvasRenderingContext2D, cameraX: number, cameraY: number, viewport: ViewportBounds) {
     for (const creature of this.getCurrentTileCreatures()) {
+      if (!isPositionInViewport(creature.position, viewport)) continue;
       this.renderer.drawCreature(ctx, creature, creature.position.x - cameraX, creature.position.y - cameraY);
     }
   }
 
-  private drawPlayers(ctx: CanvasRenderingContext2D, cameraX: number, cameraY: number, now: number) {
+  private drawPlayers(ctx: CanvasRenderingContext2D, cameraX: number, cameraY: number, now: number, viewport: ViewportBounds) {
     if (!this.snapshot) return;
     const currentTile = this.getCurrentTile();
     for (const player of this.snapshot.players) {
-      if (!isSameTile(getTileRef(player), currentTile)) continue;
+      if (!isSameTile(getTileRef(player), currentTile) || !isPositionInViewport(player.position, viewport)) continue;
       const isLocal = player.id === this.localPlayerId;
       const isMoving = this.movingPlayerIds.has(player.id);
       this.renderer.drawPlayer(ctx, player, player.position.x - cameraX, player.position.y - cameraY, isLocal, isMoving, now);
