@@ -20,7 +20,7 @@ function StorageItemSlot({
       className={item ? "storage-slot storage-slot--filled" : "storage-slot storage-slot--empty"}
       onClick={item && onClick ? () => onClick(item) : undefined}
       disabled={!item}
-      title={item ? getItemLabel(item.itemId) : emptyLabel}
+      title={item ? `${getItemLabel(item.itemId)} 전체 이동` : emptyLabel}
     >
       {item ? (
         <>
@@ -67,11 +67,11 @@ export function StorageBoxPanel({
               key={item?.itemId ?? `bag-empty-${index}`}
               item={item}
               emptyLabel={`가방 빈칸 ${index + 1}`}
-              onClick={(clickedItem) => onDeposit(clickedItem.itemId, Math.min(10, clickedItem.amount))}
+              onClick={(clickedItem) => onDeposit(clickedItem.itemId, clickedItem.amount)}
             />
           ))}
         </div>
-        <p className="storage-box-panel__hint">가방 아이템을 누르면 최대 10개씩 보관함으로 이동합니다.</p>
+        <p className="storage-box-panel__hint">가방 아이템을 누르면 해당 아이템 전체 수량을 보관함으로 이동합니다.</p>
       </section>
 
       <section className="storage-box-panel__section storage-box-panel__section--storage">
@@ -85,11 +85,11 @@ export function StorageBoxPanel({
               key={item?.itemId ?? `storage-empty-${index}`}
               item={item}
               emptyLabel={`보관함 빈칸 ${index + 1}`}
-              onClick={(clickedItem) => onWithdraw(clickedItem.itemId, Math.min(10, clickedItem.amount))}
+              onClick={(clickedItem) => onWithdraw(clickedItem.itemId, clickedItem.amount)}
             />
           ))}
         </div>
-        <p className="storage-box-panel__hint">보관함 아이템을 누르면 최대 10개씩 가방으로 꺼냅니다.</p>
+        <p className="storage-box-panel__hint">보관함 아이템을 누르면 해당 아이템 전체 수량을 가방으로 꺼냅니다.</p>
       </section>
     </div>
   );
