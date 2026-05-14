@@ -36,6 +36,8 @@ export function InventoryGridPanel({
     }
   };
 
+  const getQuickSlotIndex = (entryKey: string) => quickSlots.findIndex((slotKey) => slotKey === entryKey);
+
   return (
     <div className="inventory-grid-panel">
       <div className="inventory-grid-panel__tabs">
@@ -58,6 +60,7 @@ export function InventoryGridPanel({
           {visibleSlots.map((entry, index) => {
             const selected = Boolean(entry && selectedEntry?.key === entry.key);
             const buildingSelected = Boolean(entry && selectedBuildingItemId === entry.itemId);
+            const quickSlotIndex = entry ? getQuickSlotIndex(entry.key) : -1;
             return (
               <button
                 key={entry?.key ?? `empty-${index}`}
@@ -70,6 +73,7 @@ export function InventoryGridPanel({
                     {entry.iconSrc ? <img src={entry.iconSrc} alt="" /> : <span className="inventory-grid-slot__fallback">?</span>}
                     {entry.amount ? <b>{entry.amount}</b> : null}
                     {entry.detail ? <small>{entry.detail}</small> : null}
+                    {quickSlotIndex >= 0 ? <i className="inventory-grid-slot__quick-badge">Q{quickSlotIndex + 1}</i> : null}
                   </>
                 ) : null}
               </button>
@@ -100,7 +104,7 @@ export function InventoryGridPanel({
                           className={slotKey === selectedEntry.key ? "inventory-quick-assign__slot inventory-quick-assign__slot--active" : "inventory-quick-assign__slot"}
                           onClick={() => onAssignQuickSlot(index, slotKey === selectedEntry.key ? null : selectedEntry.key)}
                         >
-                          {index + 1}
+                          {slotKey === selectedEntry.key ? `✓ ${index + 1}` : index + 1}
                         </button>
                       ))}
                     </div>
