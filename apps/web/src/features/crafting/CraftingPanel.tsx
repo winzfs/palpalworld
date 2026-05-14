@@ -297,6 +297,7 @@ export function CraftingPanel({
   useEffect(() => {
     const timer = window.setInterval(() => {
       const tickNow = Date.now();
+      const completedJobs: CraftQueueJob[] = [];
       setNow(tickNow);
       setQueueState((current) => {
         let changed = false;
@@ -306,8 +307,7 @@ export function CraftingPanel({
           for (const job of jobs) {
             if (tickNow >= job.finishesAt) {
               changed = true;
-              if (job.kind === "recipe") onCraftRef.current(job.targetId);
-              else onCraftBuildingItemRef.current(job.targetId);
+              completedJobs.push(job);
             } else {
               remainingJobs.push(job);
             }
@@ -316,6 +316,14 @@ export function CraftingPanel({
         }
         return changed ? next : current;
       });
+      if (completedJobs.length > 0) {
+        window.setTimeout(() => {
+          for (const job of completedJobs) {
+            if (job.kind === "recipe") onCraftRef.current(job.targetId);
+            else onCraftBuildingItemRef.current(job.targetId);
+          }
+        }, 0);
+      }
     }, 250);
     return () => window.clearInterval(timer);
   }, []);
