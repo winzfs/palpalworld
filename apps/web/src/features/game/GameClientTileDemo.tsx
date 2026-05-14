@@ -42,6 +42,60 @@ function directionFromMovement(input: Vector2, fallback: Direction): Direction {
   return input.y >= 0 ? "down" : "up";
 }
 
+function hashId(id: string) {
+  let hash = 0;
+  for (let index = 0; index < id.length; index += 1) hash = (hash * 31 + id.charCodeAt(index)) % 100_000;
+  return hash;
+}
+
+function getCreatureMoveSpeed(speciesId: string) {
+  if (speciesId === "sparkit") return 46;
+  if (speciesId === "leafbun") return 38;
+  if (speciesId === "droplet") return 24;
+  if (speciesId === "moleminer") return 28;
+  if (speciesId === "mossboar") return 34;
+  if (speciesId === "rockturtle") return 14;
+  return 26;
+}
+
+function clampCreaturePosition(position: Vector2): Vector2 {
+  return {
+    x: Math.max(140, Math.min(2860, position.x)),
+    y: Math.max(140, Math.min(2860, position.y)),
+  };
+}
+
+function moveDemoCreatures(creatures: CreaturePublicState[], deltaSeconds: number, now: number, playerPosition: Vector2, playerTile: MapTileRef) {
+  for (const creature of creatures) {
+    if (creature.hp <= 0) continue;
+
+    const seed = hashId(creature.id);
+    const time = now / 1000;
+    const speed = getCreatureMoveSpeed(creature.speciesId);
+    let angle = Math.sin(time * 0.42 + seed * 0.013) * Math.PI + Math.cos(time * 0.19 + seed * 0.007) * 0.85;
+    let speedMultiplier = 0.75 + Math.sin(time * 0.63 + seed) * 0.25;
+
+    const currentTile = entityTile(creature as any);
+    if (isSameTile(currentTile, playerTile)) {
+      const dx = creature.position.x - playerPosition.x;
+      const dy = creature.position.y - playerPosition.y;
+      const distance = Math.hypot(dx, dy);
+      if (distance > 0 && distance < 230) {
+        angle = Math.atan2(dy, dx);
+        speedMultiplier = 1.45;
+      }
+    }
+
+    const next = clampCreaturePosition(clampPositionToTile({
+      x: creature.position.x + Math.cos(angle) * speed * speedMultiplier * deltaSeconds,
+      y: creature.position.y + Math.sin(angle) * speed * speedMultiplier * deltaSeconds,
+    }));
+
+    creature.position.x = next.x;
+    creature.position.y = next.y;
+  }
+}
+
 function createDemoInventory(): InventoryState {
   return {
     ownerPlayerId: demoPlayerId,
@@ -184,6 +238,7 @@ export function GameClientTileDemo() {
       });
       demoPositionRef.current.x = next.x;
       demoPositionRef.current.y = next.y;
+      moveDemoCreatures(demoCreaturesRef.current, deltaSeconds, now, demoPositionRef.current, demoTileRef.current);
       applyDemoSnapshot();
       lastTick = now;
       animationFrame = requestAnimationFrame(tick);
