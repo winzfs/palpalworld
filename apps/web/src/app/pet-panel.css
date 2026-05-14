@@ -1,0 +1,63 @@
+.inventory-grid-slot__emoji,
+.quick-slot__emoji {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  font-size: 24px;
+  line-height: 1;
+  filter: drop-shadow(0 2px 2px rgb(0 0 0 / 0.65));
+}
+
+.inventory-detail-card__icon > span {
+  font-size: 30px;
+  line-height: 1;
+  filter: drop-shadow(0 2px 2px rgb(0 0 0 / 0.65));
+}
+
+.pet-dismount-button {
+  pointer-events: auto;
+  position: fixed;
+  right: calc(20px + var(--safe-right));
+  bottom: calc(150px + var(--safe-bottom));
+  z-index: 24;
+  min-width: 92px;
+  min-height: 36px;
+  padding: 7px 10px;
+  border: 1px solid rgb(125 211 252 / 0.46);
+  border-radius: 999px;
+  background: linear-gradient(rgb(12 74 110 / 0.9), rgb(8 47 73 / 0.9));
+  color: #e0f2fe;
+  font-size: 11px;
+  font-weight: 950;
+  box-shadow: 0 12px 28px rgb(0 0 0 / 0.36), inset 0 0 0 1px rgb(255 255 255 / 0.08);
+  backdrop-filter: blur(8px);
+  cursor: pointer;
+}
+
+.pet-dismount-button:active {
+  transform: translateY(1px) scale(0.97);
+}
+
+.quick-slot .quick-slot__emoji {
+  font-size: 20px;
+}
+
+@media (max-width: 720px) {
+  .inventory-grid-slot__emoji {
+    font-size: 20px;
+  }
+
+  .inventory-detail-card__icon > span {
+    font-size: 25px;
+  }
+
+  .pet-dismount-button {
+    right: calc(18px + var(--safe-right));
+    bottom: calc(146px + var(--safe-bottom));
+    min-width: 78px;
+    min-height: 32px;
+    padding: 5px 8px;
+    font-size: 10px;
+  }
+}
