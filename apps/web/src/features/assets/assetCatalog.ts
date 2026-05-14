@@ -8,6 +8,59 @@ function makeSprite(key: string, src: string, width = 64, height = 64): SpriteAs
   return { key, src, width, height };
 }
 
+function playerFrameSvg(frameX: number, frameY: number, direction: "down" | "left" | "right" | "up", frame: number, action: "idle" | "run") {
+  const ox = frameX * 64;
+  const oy = frameY * 64;
+  const bob = action === "run" ? (frame % 2 === 0 ? 1 : -1) : frame % 6 === 0 ? -1 : 0;
+  const step = action === "run" ? (frame % 4 < 2 ? -2 : 2) : 0;
+  const faceOffset = direction === "left" ? -2 : direction === "right" ? 2 : 0;
+  const hair = direction === "up" ? "#111827" : "#1f2937";
+  const skin = "#f8c7a1";
+  const shirt = "#2563eb";
+  const vest = "#1e40af";
+  const pants = "#334155";
+  const boot = "#111827";
+  const scarf = "#ef4444";
+  return `
+    <g transform="translate(${ox} ${oy})" shape-rendering="crispEdges">
+      <ellipse cx="32" cy="55" rx="15" ry="4" fill="rgba(0,0,0,.32)"/>
+      <rect x="23" y="20" width="18" height="20" fill="#0f172a"/>
+      <rect x="25" y="18" width="14" height="17" fill="${shirt}"/>
+      <rect x="27" y="20" width="10" height="15" fill="${vest}"/>
+      <rect x="22" y="22" width="5" height="14" fill="${shirt}"/>
+      <rect x="37" y="22" width="5" height="14" fill="${shirt}"/>
+      <rect x="21" y="34" width="7" height="5" fill="${skin}"/>
+      <rect x="36" y="34" width="7" height="5" fill="${skin}"/>
+      <rect x="25" y="38" width="6" height="12" fill="${pants}"/>
+      <rect x="33" y="38" width="6" height="12" fill="${pants}"/>
+      <rect x="24" y="49" width="7" height="4" fill="${boot}"/>
+      <rect x="33" y="49" width="7" height="4" fill="${boot}"/>
+      <rect x="${25 + step}" y="38" width="6" height="12" fill="${pants}"/>
+      <rect x="${33 - step}" y="38" width="6" height="12" fill="${pants}"/>
+      <rect x="${24 + step}" y="49" width="7" height="4" fill="${boot}"/>
+      <rect x="${33 - step}" y="49" width="7" height="4" fill="${boot}"/>
+      <rect x="24" y="9" width="16" height="15" fill="${skin}"/>
+      <rect x="22" y="7" width="20" height="8" fill="${hair}"/>
+      <rect x="22" y="13" width="4" height="7" fill="${hair}"/>
+      <rect x="38" y="13" width="4" height="7" fill="${hair}"/>
+      <rect x="${27 + faceOffset}" y="16" width="3" height="3" fill="#111827"/>
+      <rect x="${35 + faceOffset}" y="16" width="3" height="3" fill="#111827"/>
+      <rect x="31" y="21" width="5" height="2" fill="#b45309"/>
+      <rect x="24" y="25" width="16" height="4" fill="${scarf}"/>
+      <rect x="38" y="27" width="7" height="3" fill="${scarf}"/>
+      <rect x="28" y="11" width="9" height="3" fill="rgba(255,255,255,.18)"/>
+      <rect x="26" y="18" width="3" height="2" fill="rgba(255,255,255,.28)"/>
+    </g>`;
+}
+
+function playerSheetSvg(action: "idle" | "run", columns: number, rows = 4) {
+  const directions = ["down", "left", "right", "up"] as const;
+  const frames = Array.from({ length: rows }, (_, row) =>
+    Array.from({ length: columns }, (_, column) => playerFrameSvg(column, row, directions[row], column, action)).join(""),
+  ).join("");
+  return svgDataUrl(`<svg xmlns="http://www.w3.org/2000/svg" width="${columns * 64}" height="${rows * 64}" viewBox="0 0 ${columns * 64} ${rows * 64}" shape-rendering="crispEdges">${frames}</svg>`);
+}
+
 function itemIconSvg(label: string, color: string, accent = "#fff7ad") {
   return svgDataUrl(`<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32" shape-rendering="crispEdges"><rect width="32" height="32" rx="4" fill="#171421"/><rect x="3" y="3" width="26" height="26" rx="3" fill="${color}"/><rect x="5" y="5" width="22" height="7" fill="rgba(255,255,255,0.22)"/><rect x="7" y="18" width="18" height="5" fill="rgba(0,0,0,0.22)"/><text x="16" y="21" fill="${accent}" font-family="monospace" font-size="8" font-weight="900" text-anchor="middle">${label}</text></svg>`);
 }
@@ -36,8 +89,8 @@ function buildingSvg(kind: string, main: string, roof: string, accent = "#facc15
 const meadowTilesetSrc = svgDataUrl(`<svg xmlns="http://www.w3.org/2000/svg" width="192" height="32" viewBox="0 0 192 32" shape-rendering="crispEdges"><rect x="0" y="0" width="32" height="32" fill="#2f9e44"/><path d="M4 7h3v2H4zM14 22h2v2h-2zM25 12h3v2h-3z" fill="#5fd35f" opacity="0.8"/><path d="M8 25h2v2H8zM20 5h3v2h-3z" fill="#1f7a35" opacity="0.75"/><rect x="32" y="0" width="32" height="32" fill="#237a36"/><path d="M38 9h4v2h-4zM51 19h2v2h-2zM58 27h3v2h-3z" fill="#2f9e44" opacity="0.8"/><path d="M45 4h2v3h-2zM56 11h2v2h-2z" fill="#14532d" opacity="0.7"/><rect x="64" y="0" width="32" height="32" fill="#45b85a"/><path d="M70 11h3v2h-3zM80 5h2v2h-2zM89 25h3v2h-3z" fill="#7ee081" opacity="0.9"/><path d="M75 23h2v2h-2zM91 9h2v3h-2z" fill="#2f9e44" opacity="0.75"/><rect x="96" y="0" width="32" height="32" fill="#9a6a37"/><path d="M96 4h32v4H96zM96 17h32v3H96z" fill="#8a5a2b" opacity="0.6"/><path d="M101 12h5v2h-5zM116 25h6v2h-6z" fill="#c08a4b" opacity="0.65"/><rect x="128" y="0" width="32" height="32" fill="#2f9e44"/><path d="M137 11h2v2h-2zM147 22h2v2h-2z" fill="#fff7ad"/><path d="M135 13h6v1h-6zM145 24h6v1h-6z" fill="#7ee081" opacity="0.8"/><path d="M133 5h3v2h-3zM153 9h2v2h-2z" fill="#1f7a35"/><rect x="160" y="0" width="32" height="32" fill="#1d75b8"/><path d="M160 8c8-5 16 5 32 0v5c-9 5-18-4-32 1z" fill="#39a7e8" opacity="0.65"/><path d="M160 22c9-4 18 4 32-1v4c-9 5-20-3-32 1z" fill="#8bd5ff" opacity="0.55"/></svg>`);
 
 const playerDefaultSheets: DirectionalSpriteSheetSet = {
-  idle: { key: "player.default.idle.unarmed.with_shadow", src: "/assets/sprites/player/default/Unarmed_Idle_with_shadow.png", frameWidth: 64, frameHeight: 64, columns: 12, rows: 4, frameCount: 12, rowByDirection: { down: 0, left: 1, right: 2, up: 3 }, frameDurationMs: 150 },
-  walk: { key: "player.default.run.unarmed.with_shadow", src: "/assets/sprites/player/default/Unarmed_Run_with_shadow.png", frameWidth: 64, frameHeight: 64, columns: 8, rows: 4, frameCount: 8, rowByDirection: { down: 0, left: 1, right: 2, up: 3 }, frameDurationMs: 85 },
+  idle: { key: "player.default.idle.embedded", src: playerSheetSvg("idle", 12), frameWidth: 64, frameHeight: 64, columns: 12, rows: 4, frameCount: 12, rowByDirection: { down: 0, left: 1, right: 2, up: 3 }, frameDurationMs: 150 },
+  walk: { key: "player.default.run.embedded", src: playerSheetSvg("run", 8), frameWidth: 64, frameHeight: 64, columns: 8, rows: 4, frameCount: 8, rowByDirection: { down: 0, left: 1, right: 2, up: 3 }, frameDurationMs: 85 },
 };
 
 const buildingSprites = {
