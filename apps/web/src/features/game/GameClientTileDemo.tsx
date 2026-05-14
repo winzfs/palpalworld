@@ -34,9 +34,9 @@ const menuTabs: { id: MenuTab; label: string }[] = [
 ];
 const minimapSizes: MiniMapSize[] = ["small", "medium", "large"];
 const minimapSizeLabels: Record<MiniMapSize, string> = {
-  small: "작게",
-  medium: "보통",
-  large: "크게",
+  small: "S",
+  medium: "M",
+  large: "L",
 };
 const quickButtonDefaults: Record<QuickButtonId, { x: number; y: number; icon: string; label: string; tab: MenuTab }> = {
   inventory: { x: 12, y: 112, icon: "🎒", label: "가방", tab: "inventory" },
@@ -475,10 +475,9 @@ export function GameClientTileDemo() {
         <FloatingQuickButton id="crafting" onOpen={openMenuTab} />
 
         <section className={`hud-minimap hud-minimap--${minimapSize}`} aria-label="미니맵">
-          <div className="hud-minimap__header">
-            <b>미니맵</b>
-            <button onClick={cycleMinimapSize}>{minimapSizeLabels[minimapSize]}</button>
-          </div>
+          <button className="hud-minimap__size-button" onClick={cycleMinimapSize} aria-label="미니맵 크기 변경">
+            {minimapSizeLabels[minimapSize]}
+          </button>
           <MiniMapPanel snapshot={snapshot} localPlayerId={demoPlayerId} />
         </section>
 
