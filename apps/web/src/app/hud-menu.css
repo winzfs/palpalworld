@@ -29,6 +29,65 @@
   transform: translateY(1px) scale(0.98);
 }
 
+.hud-quick-button {
+  pointer-events: auto;
+  position: absolute;
+  z-index: 15;
+  display: grid;
+  place-items: center;
+  gap: 1px;
+  width: 44px;
+  height: 44px;
+  padding: 3px;
+  border: 1px solid rgb(242 209 107 / 0.45);
+  border-radius: 12px;
+  background: rgb(20 18 28 / 0.56);
+  color: var(--jrpg-text);
+  box-shadow:
+    0 8px 22px rgb(0 0 0 / 0.28),
+    inset 0 0 0 1px rgb(255 255 255 / 0.08);
+  backdrop-filter: blur(8px);
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  opacity: 0.78;
+}
+
+.hud-quick-button:active {
+  cursor: grabbing;
+  opacity: 0.95;
+  transform: scale(0.96);
+}
+
+.hud-quick-button span {
+  display: block;
+  font-size: 18px;
+  line-height: 1;
+  filter: drop-shadow(0 2px 2px rgb(0 0 0 / 0.55));
+}
+
+.hud-quick-button small {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  color: rgb(255 247 223 / 0.9);
+  font-size: 8px;
+  font-weight: 900;
+  line-height: 1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hud-quick-button--inventory {
+  border-color: rgb(125 211 252 / 0.5);
+  background: rgb(8 47 73 / 0.5);
+}
+
+.hud-quick-button--crafting {
+  border-color: rgb(250 204 21 / 0.5);
+  background: rgb(83 56 19 / 0.5);
+}
+
 .hud-minimap {
   position: absolute;
   right: calc(12px + var(--safe-right));
@@ -183,6 +242,21 @@
     padding: 6px 10px;
     border-width: 1px;
     font-size: 11px;
+  }
+
+  .hud-quick-button {
+    width: 38px;
+    height: 38px;
+    border-radius: 10px;
+    opacity: 0.72;
+  }
+
+  .hud-quick-button span {
+    font-size: 16px;
+  }
+
+  .hud-quick-button small {
+    font-size: 7px;
   }
 
   .hud-minimap {
