@@ -4,6 +4,8 @@ import { getBuildingSpriteSet, getCreatureSpriteSet, getPlayerSpriteSet, getReso
 import { AssetLoader } from "../assets/AssetLoader";
 import { PrimitiveRenderer } from "./PrimitiveRenderer";
 
+const mountedPetStorageKey = "palpalworld.demo.mountedPetItemId";
+
 function toSpriteDirection(direction: Direction | undefined): SpriteDirection {
   if (direction === "up" || direction === "left" || direction === "right") return direction;
   return "down";
@@ -11,6 +13,89 @@ function toSpriteDirection(direction: Direction | undefined): SpriteDirection {
 
 function isDrawableImage(image: HTMLImageElement | null | undefined) {
   return Boolean(image && image.complete && image.naturalWidth > 0 && image.naturalHeight > 0);
+}
+
+function readMountedPetItemId() {
+  if (typeof window === "undefined") return null;
+  return window.localStorage.getItem(mountedPetStorageKey);
+}
+
+function getMountedPetSpeciesId(itemId: string | null) {
+  return itemId?.startsWith("pet_") ? itemId.slice(4) : null;
+}
+
+function getMountedPetStyle(speciesId: string | null) {
+  if (speciesId === "sparkit") return { body: "#facc15", belly: "#fef3c7", accent: "#fde047", ear: "#f59e0b" };
+  if (speciesId === "droplet") return { body: "#38bdf8", belly: "#dbeafe", accent: "#0ea5e9", ear: "#7dd3fc" };
+  if (speciesId === "moleminer") return { body: "#92400e", belly: "#fde68a", accent: "#78350f", ear: "#a16207" };
+  if (speciesId === "mossboar") return { body: "#4d7c0f", belly: "#d9f99d", accent: "#365314", ear: "#84cc16" };
+  if (speciesId === "rockturtle") return { body: "#64748b", belly: "#cbd5e1", accent: "#334155", ear: "#94a3b8" };
+  return { body: "#22c55e", belly: "#bbf7d0", accent: "#15803d", ear: "#86efac" };
+}
+
+function drawMountedPet(ctx: CanvasRenderingContext2D, x: number, y: number, speciesId: string | null, direction: SpriteDirection, isMoving: boolean, now: number) {
+  if (!speciesId) return;
+  const style = getMountedPetStyle(speciesId);
+  const bob = isMoving ? Math.sin(now / 120) * 1.5 : 0;
+  const baseY = y + 8 + bob;
+  const facingLeft = direction === "left";
+  const facingRight = direction === "right";
+  const headX = x + (facingLeft ? -23 : facingRight ? 23 : 0);
+  const tailX = x + (facingLeft ? 25 : facingRight ? -25 : 0);
+
+  ctx.save();
+  ctx.lineWidth = 2;
+  ctx.strokeStyle = "rgba(0,0,0,0.72)";
+
+  ctx.fillStyle = "rgba(0,0,0,0.36)";
+  ctx.beginPath();
+  ctx.ellipse(x, baseY + 16, 35, 9, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.fillStyle = style.body;
+  ctx.beginPath();
+  ctx.ellipse(x, baseY, 31, 17, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.fillStyle = style.belly;
+  ctx.beginPath();
+  ctx.ellipse(x, baseY + 3, 18, 8, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.fillStyle = style.body;
+  ctx.beginPath();
+  ctx.ellipse(headX, baseY - 6, 14, 13, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.fillStyle = style.ear;
+  ctx.beginPath();
+  ctx.ellipse(headX - 7, baseY - 17, 5, 9, -0.5, 0, Math.PI * 2);
+  ctx.ellipse(headX + 7, baseY - 17, 5, 9, 0.5, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.fillStyle = "#111827";
+  ctx.beginPath();
+  ctx.arc(headX + (facingLeft ? -4 : 4), baseY - 8, 2, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.fillStyle = style.accent;
+  ctx.beginPath();
+  ctx.ellipse(tailX, baseY - 2, 9, 5, 0.3, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.fillStyle = style.accent;
+  for (const legX of [-18, -6, 10, 21]) {
+    ctx.beginPath();
+    ctx.roundRect(x + legX - 3, baseY + 11, 6, 10, 3);
+    ctx.fill();
+    ctx.stroke();
+  }
+
+  ctx.restore();
 }
 
 function drawSpriteSheetFrame(
@@ -148,29 +233,33 @@ export class SpriteRenderer {
     const sheet = isMoving ? spriteSet.walk ?? spriteSet.idle : spriteSet.idle;
     const image = this.loader.getImage(sheet ?? null);
     const direction = toSpriteDirection(player.direction);
+    const mountedPetSpeciesId = isLocal ? getMountedPetSpeciesId(readMountedPetItemId()) : null;
+    const playerDrawY = mountedPetSpeciesId ? y - 18 : y;
+
+    if (mountedPetSpeciesId) drawMountedPet(ctx, x, y, mountedPetSpeciesId, direction, isMoving, now);
 
     if (!sheet || !isDrawableImage(image)) {
-      this.fallback.drawPlayer(ctx, player, x, y, isLocal);
-      drawEquippedWeapon(ctx, x, y, direction, equippedWeaponItemId);
+      this.fallback.drawPlayer(ctx, player, x, playerDrawY, isLocal);
+      drawEquippedWeapon(ctx, x, playerDrawY, direction, equippedWeaponItemId);
       return;
     }
 
     try {
       const frameIndex = sheet.frameCount <= 1 ? 0 : Math.floor(now / sheet.frameDurationMs) % sheet.frameCount;
-      drawSpriteSheetFrame(ctx, image, sheet, direction, frameIndex, x, y, 1);
+      drawSpriteSheetFrame(ctx, image, sheet, direction, frameIndex, x, playerDrawY, 1);
     } catch {
-      this.fallback.drawPlayer(ctx, player, x, y, isLocal);
-      drawEquippedWeapon(ctx, x, y, direction, equippedWeaponItemId);
+      this.fallback.drawPlayer(ctx, player, x, playerDrawY, isLocal);
+      drawEquippedWeapon(ctx, x, playerDrawY, direction, equippedWeaponItemId);
       return;
     }
 
-    drawEquippedWeapon(ctx, x, y, direction, equippedWeaponItemId);
+    drawEquippedWeapon(ctx, x, playerDrawY, direction, equippedWeaponItemId);
 
     if (isLocal) {
-      ctx.strokeStyle = "rgba(250, 204, 21, 0.8)";
+      ctx.strokeStyle = mountedPetSpeciesId ? "rgba(125, 211, 252, 0.85)" : "rgba(250, 204, 21, 0.8)";
       ctx.lineWidth = 2;
       ctx.beginPath();
-      ctx.ellipse(x, y + 17, 18, 7, 0, 0, Math.PI * 2);
+      ctx.ellipse(x, y + 17, mountedPetSpeciesId ? 32 : 18, mountedPetSpeciesId ? 10 : 7, 0, 0, Math.PI * 2);
       ctx.stroke();
     }
 
@@ -178,9 +267,9 @@ export class SpriteRenderer {
     ctx.textAlign = "center";
     ctx.lineWidth = 3;
     ctx.strokeStyle = "rgba(0,0,0,0.75)";
-    ctx.strokeText(player.nickname, x, y - 48);
+    ctx.strokeText(player.nickname, x, playerDrawY - 48);
     ctx.fillStyle = "#ffffff";
-    ctx.fillText(player.nickname, x, y - 48);
+    ctx.fillText(player.nickname, x, playerDrawY - 48);
 
     ctx.fillStyle = "rgba(0,0,0,0.45)";
     ctx.fillRect(x - 22, y + 24, 44, 5);
