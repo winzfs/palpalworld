@@ -3,6 +3,7 @@ import { createEmptyEquipment, equipItemInstance, findItemInstance, getEquipment
 import { findInventoryEntryByKey } from "./inventoryUiModel";
 
 const equipmentStorageKey = "palpalworld.demo.equipment";
+const equippedWeaponStorageKey = "palpalworld.demo.equippedWeaponItemId";
 
 function readStoredEquipment(ownerPlayerId: string): EquipmentState {
   if (typeof window === "undefined") return createEmptyEquipment(ownerPlayerId);
@@ -19,6 +20,8 @@ function readStoredEquipment(ownerPlayerId: string): EquipmentState {
 function persistEquipment(equipment: EquipmentState, weaponItemId: string | null) {
   if (typeof window === "undefined") return;
   window.localStorage.setItem(equipmentStorageKey, JSON.stringify(equipment));
+  if (weaponItemId) window.localStorage.setItem(equippedWeaponStorageKey, weaponItemId);
+  else window.localStorage.removeItem(equippedWeaponStorageKey);
   window.dispatchEvent(new CustomEvent("palpalworld:equipment-changed", { detail: { equipment, weaponItemId } }));
 }
 
