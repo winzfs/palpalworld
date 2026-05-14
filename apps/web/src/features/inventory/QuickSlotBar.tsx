@@ -1,9 +1,12 @@
 import type { EquipmentState, InventoryState } from "@palpalworld/shared";
+import { useEffect, useState } from "react";
 import { createEmptyEquipment, equipItemInstance, findItemInstance, getEquipmentSlotForItemId, isEquippableItemId } from "../equipment/equipmentRules";
+import { getPetItemLabel, isPetItemId } from "../pets/petInventory";
 import { findInventoryEntryByKey } from "./inventoryUiModel";
 
 const equipmentStorageKey = "palpalworld.demo.equipment";
 const equippedWeaponStorageKey = "palpalworld.demo.equippedWeaponItemId";
+const mountedPetStorageKey = "palpalworld.demo.mountedPetItemId";
 
 function readStoredEquipment(ownerPlayerId: string): EquipmentState {
   if (typeof window === "undefined") return createEmptyEquipment(ownerPlayerId);
@@ -25,9 +28,28 @@ function persistEquipment(equipment: EquipmentState, weaponItemId: string | null
   window.dispatchEvent(new CustomEvent("palpalworld:equipment-changed", { detail: { equipment, weaponItemId } }));
 }
 
+function persistMountedPet(itemId: string | null) {
+  if (typeof window === "undefined") return;
+  if (itemId) window.localStorage.setItem(mountedPetStorageKey, itemId);
+  else window.localStorage.removeItem(mountedPetStorageKey);
+  window.dispatchEvent(new CustomEvent("palpalworld:mounted-pet-changed", { detail: { itemId } }));
+}
+
+function readMountedPetItemId() {
+  if (typeof window === "undefined") return null;
+  return window.localStorage.getItem(mountedPetStorageKey);
+}
+
 function equipQuickSlotItem(inventory: InventoryState | null, entryKey: string | null | undefined) {
   const entry = findInventoryEntryByKey(inventory, entryKey);
-  if (!entry || !isEquippableItemId(entry.itemId)) return false;
+  if (!entry) return false;
+
+  if (isPetItemId(entry.itemId)) {
+    persistMountedPet(entry.itemId);
+    return true;
+  }
+
+  if (!isEquippableItemId(entry.itemId)) return false;
 
   const ownerPlayerId = inventory?.ownerPlayerId ?? "demo-player";
   const current = readStoredEquipment(ownerPlayerId);
@@ -54,6 +76,21 @@ function equipQuickSlotItem(inventory: InventoryState | null, entryKey: string |
   return true;
 }
 
+function useMountedPet() {
+  const [mountedPetItemId, setMountedPetItemId] = useState<string | null>(() => readMountedPetItemId());
+
+  useEffect(() => {
+    const handleMountedPetChanged = (event: Event) => {
+      const customEvent = event as CustomEvent<{ itemId?: string | null }>;
+      setMountedPetItemId(customEvent.detail?.itemId ?? readMountedPetItemId());
+    };
+    window.addEventListener("palpalworld:mounted-pet-changed", handleMountedPetChanged);
+    return () => window.removeEventListener("palpalworld:mounted-pet-changed", handleMountedPetChanged);
+  }, []);
+
+  return mountedPetItemId;
+}
+
 export function QuickSlotBar({
   inventory,
   quickSlots,
@@ -65,31 +102,40 @@ export function QuickSlotBar({
   onUseQuickSlot: (slotIndex: number) => void;
   onClearQuickSlot: (slotIndex: number) => void;
 }) {
+  const mountedPetItemId = useMountedPet();
+
   return (
-    <div className="quick-slot-bar" aria-label="퀵슬롯">
-      {quickSlots.map((entryKey, index) => {
-        const entry = findInventoryEntryByKey(inventory, entryKey);
-        return (
-          <button
-            key={index}
-            className={entry ? "quick-slot" : "quick-slot quick-slot--empty"}
-            onClick={() => {
-              if (!entry) return;
-              const equipped = equipQuickSlotItem(inventory, entryKey);
-              if (!equipped) onUseQuickSlot(index);
-            }}
-            onContextMenu={(event) => {
-              event.preventDefault();
-              onClearQuickSlot(index);
-            }}
-            title={entry ? entry.label : `퀵슬롯 ${index + 1}`}
-          >
-            <em>{index + 1}</em>
-            {entry?.iconSrc ? <img src={entry.iconSrc} alt="" /> : <span />}
-            {entry?.amount ? <b>{entry.amount}</b> : null}
-          </button>
-        );
-      })}
-    </div>
+    <>
+      {mountedPetItemId ? (
+        <button className="pet-dismount-button" onClick={() => persistMountedPet(null)}>
+          내리기 · {getPetItemLabel(mountedPetItemId)}
+        </button>
+      ) : null}
+      <div className="quick-slot-bar" aria-label="퀵슬롯">
+        {quickSlots.map((entryKey, index) => {
+          const entry = findInventoryEntryByKey(inventory, entryKey);
+          return (
+            <button
+              key={index}
+              className={entry ? "quick-slot" : "quick-slot quick-slot--empty"}
+              onClick={() => {
+                if (!entry) return;
+                const equipped = equipQuickSlotItem(inventory, entryKey);
+                if (!equipped) onUseQuickSlot(index);
+              }}
+              onContextMenu={(event) => {
+                event.preventDefault();
+                onClearQuickSlot(index);
+              }}
+              title={entry ? entry.label : `퀵슬롯 ${index + 1}`}
+            >
+              <em>{index + 1}</em>
+              {entry?.iconSrc ? <img src={entry.iconSrc} alt="" /> : entry?.iconText ? <span className="quick-slot__emoji">{entry.iconText}</span> : <span />}
+              {entry?.amount ? <b>{entry.amount}</b> : null}
+            </button>
+          );
+        })}
+      </div>
+    </>
   );
 }
