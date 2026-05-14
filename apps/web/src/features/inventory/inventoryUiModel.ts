@@ -2,7 +2,7 @@ import type { InventoryState } from "@palpalworld/shared";
 import { getIconAsset } from "../assets/assetCatalog";
 import { getProgressionBuildingByItemId, isBuildingItemId } from "../crafting/progressionCatalog";
 import { getItemLabel } from "../items/itemLabels";
-import { getPetItemDescription, getPetItemLabel, isPetItemId } from "../pets/petInventory";
+import { getPetItemDescription, getPetItemEmoji, getPetItemLabel, isPetItemId } from "../pets/petInventory";
 
 export type InventoryCategory = "general" | "usable" | "material" | "equipment" | "building" | "pet";
 export type InventoryEntryKind = "stack" | "instance";
@@ -17,6 +17,7 @@ export type InventoryEntry = {
   detail?: string;
   category: InventoryCategory;
   iconSrc?: string;
+  iconText?: string;
   description: string;
   quickSlotEligible: boolean;
   buildingType?: string | null;
@@ -100,7 +101,7 @@ export function getInventoryItemDescription(entry: InventoryEntry) {
 }
 
 export function isQuickSlotEligible(_itemId: string, category: InventoryCategory) {
-  return category === "equipment" || category === "usable" || category === "building";
+  return category === "equipment" || category === "usable" || category === "building" || category === "pet";
 }
 
 export function buildInventoryEntries(inventory: InventoryState | null): InventoryEntry[] {
@@ -116,6 +117,7 @@ export function buildInventoryEntries(inventory: InventoryState | null): Invento
       amount: item.amount,
       category,
       iconSrc: icon?.src,
+      iconText: category === "pet" ? getPetItemEmoji(item.itemId) : undefined,
       description: "",
       quickSlotEligible: isQuickSlotEligible(item.itemId, category),
       buildingType: building?.type ?? null,
@@ -135,6 +137,7 @@ export function buildInventoryEntries(inventory: InventoryState | null): Invento
       detail: `Lv.${item.level}`,
       category,
       iconSrc: icon?.src,
+      iconText: category === "pet" ? getPetItemEmoji(item.itemId) : undefined,
       description: "",
       quickSlotEligible: isQuickSlotEligible(item.itemId, category),
     };
