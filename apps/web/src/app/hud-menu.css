@@ -1,5 +1,4 @@
 .hud-menu-button,
-.hud-minimap,
 .hud-menu-panel {
   pointer-events: auto;
   border: 2px solid var(--jrpg-border);
@@ -89,79 +88,52 @@
 }
 
 .hud-minimap {
+  pointer-events: auto;
   position: absolute;
   right: calc(12px + var(--safe-right));
   top: calc(12px + var(--safe-top));
   z-index: 12;
   overflow: hidden;
-  border-radius: 12px;
-  transition: width 0.18s ease, max-height 0.18s ease;
+  padding: 4px;
+  border: 1px solid rgb(125 211 252 / 0.35);
+  border-radius: 10px;
+  background: rgb(15 23 42 / 0.42);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.28), inset 0 0 0 1px rgb(255 255 255 / 0.06);
+  backdrop-filter: blur(6px);
+  transition: width 0.18s ease;
 }
 
 .hud-minimap--small {
-  width: 180px;
-  max-height: 235px;
+  width: 96px;
 }
 
 .hud-minimap--medium {
-  width: 250px;
-  max-height: 360px;
+  width: 132px;
 }
 
 .hud-minimap--large {
-  width: 340px;
-  max-height: calc(100vh - 116px);
+  width: 176px;
 }
 
-.hud-minimap__header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 7px 8px;
-  border-bottom: 1px solid rgb(250 204 21 / 0.3);
-  background: linear-gradient(rgb(58 45 28 / 0.92), rgb(22 18 28 / 0.92));
-  color: var(--jrpg-gold);
-  font-size: 12px;
-  font-weight: 900;
-}
-
-.hud-minimap__header button {
-  min-height: 24px;
-  padding: 3px 7px;
-  border: 1px solid rgb(242 209 107 / 0.46);
+.hud-minimap__size-button {
+  position: absolute;
+  right: 7px;
+  top: 7px;
+  z-index: 3;
+  min-width: 22px;
+  min-height: 20px;
+  padding: 2px 5px;
+  border: 1px solid rgb(255 255 255 / 0.24);
   border-radius: 999px;
-  background: rgb(0 0 0 / 0.26);
-  color: var(--jrpg-text);
-  font-size: 10px;
-  font-weight: 900;
+  background: rgb(0 0 0 / 0.44);
+  color: rgb(255 247 223 / 0.92);
+  font-size: 9px;
+  font-weight: 950;
   cursor: pointer;
 }
 
-.hud-minimap > .minimap-panel {
-  max-height: inherit;
-  overflow: auto;
-  padding: 8px;
-}
-
-.hud-minimap--small .minimap-panel__header span,
-.hud-minimap--small .minimap-legend,
-.hud-minimap--small .minimap-grid--tiles,
-.hud-minimap--small .minimap-portals,
-.hud-minimap--small .minimap-note {
-  display: none;
-}
-
-.hud-minimap--small .minimap-map {
-  min-height: 132px !important;
-}
-
-.hud-minimap--small .minimap-panel {
-  gap: 6px;
-}
-
-.hud-minimap--medium .minimap-map {
-  min-height: 170px !important;
+.hud-minimap__size-button:active {
+  transform: scale(0.94);
 }
 
 .hud-menu-panel {
@@ -262,46 +234,29 @@
   .hud-minimap {
     right: calc(8px + var(--safe-right));
     top: calc(8px + var(--safe-top));
-    border-width: 1px;
-    border-radius: 9px;
+    padding: 3px;
+    border-radius: 8px;
   }
 
   .hud-minimap--small {
-    width: 132px;
-    max-height: 178px;
+    width: 78px;
   }
 
   .hud-minimap--medium {
-    width: 176px;
-    max-height: 260px;
+    width: 104px;
   }
 
   .hud-minimap--large {
-    width: min(270px, calc(100vw - 16px));
-    max-height: 48vh;
+    width: 136px;
   }
 
-  .hud-minimap__header {
-    padding: 4px 5px;
-    font-size: 9px;
-  }
-
-  .hud-minimap__header button {
-    min-height: 20px;
-    padding: 2px 5px;
+  .hud-minimap__size-button {
+    right: 5px;
+    top: 5px;
+    min-width: 19px;
+    min-height: 18px;
+    padding: 1px 4px;
     font-size: 8px;
-  }
-
-  .hud-minimap > .minimap-panel {
-    padding: 5px;
-  }
-
-  .hud-minimap--small .minimap-map {
-    min-height: 92px !important;
-  }
-
-  .hud-minimap--medium .minimap-map {
-    min-height: 122px !important;
   }
 
   .hud-menu-panel {
@@ -345,11 +300,11 @@
 
 @media (max-width: 420px) {
   .hud-minimap--medium {
-    width: 158px;
+    width: 92px;
   }
 
   .hud-minimap--large {
-    width: min(238px, calc(100vw - 16px));
+    width: 122px;
   }
 
   .hud-menu-panel {
