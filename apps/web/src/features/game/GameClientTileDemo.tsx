@@ -10,24 +10,32 @@ import { InventoryPanel } from "../inventory/InventoryPanel";
 import { getItemLabel } from "../items/itemLabels";
 import { LogPanel } from "../logs/LogPanel";
 import { BuildingInteractionPanel } from "../buildings/BuildingInteractionPanel";
+import { MiniMapPanel } from "../world/MiniMapPanel";
 import { DEFAULT_PLAYER_TILE, clampPositionToTile, type MapTileRef } from "../../../../../packages/shared/src/worldTiles";
 import { createTileBasedDemoBuildings, createTileBasedDemoCreatures, createTileBasedDemoResources } from "./demoWorldSpawns";
 import { GameScene, type GameSceneInput, type GameWorldScene, type WorldClickTarget } from "./GameScene";
 import { addBuildingToTileIndex, createDemoTileIndex, getAliveTileCreatures, getAliveTileResources, getTileBuildings } from "./demoTileIndex";
 
-type PanelId = "status" | "objective" | "inventory" | "equipment" | "build" | "buildingInteraction" | "chat";
+type MenuTab = "status" | "objective" | "inventory" | "equipment" | "crafting" | "building" | "logs";
+type MiniMapSize = "small" | "medium" | "large";
 
 const demoPlayerId = "demo-player";
 const joystickRadius = 56;
 const uiSnapshotIntervalMs = 250;
-const panelDefaults: Record<PanelId, { x: number; y: number; width: number; collapsed?: boolean }> = {
-  status: { x: 8, y: 8, width: 320 },
-  objective: { x: 8, y: 60, width: 270, collapsed: true },
-  inventory: { x: 8, y: 108, width: 340, collapsed: true },
-  equipment: { x: 8, y: 156, width: 300, collapsed: true },
-  build: { x: 8, y: 204, width: 420, collapsed: true },
-  buildingInteraction: { x: 440, y: 108, width: 340 },
-  chat: { x: 8, y: 252, width: 320, collapsed: true },
+const menuTabs: { id: MenuTab; label: string }[] = [
+  { id: "status", label: "캐릭터" },
+  { id: "objective", label: "목표" },
+  { id: "inventory", label: "가방" },
+  { id: "equipment", label: "장비" },
+  { id: "crafting", label: "제작" },
+  { id: "building", label: "건물" },
+  { id: "logs", label: "로그" },
+];
+const minimapSizes: MiniMapSize[] = ["small", "medium", "large"];
+const minimapSizeLabels: Record<MiniMapSize, string> = {
+  small: "작게",
+  medium: "보통",
+  large: "크게",
 };
 
 function createClientNickname() {
@@ -185,6 +193,9 @@ export function GameClientTileDemo() {
   const [chatLines, setChatLines] = useState<string[]>(["[info] 타일 기반 데모 월드로 실행 중입니다."]);
   const [selectedBuildingItemId, setSelectedBuildingItemId] = useState<string | null>(null);
   const [selectedBuilding, setSelectedBuilding] = useState<BuildingState | null>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [activeMenuTab, setActiveMenuTab] = useState<MenuTab>("inventory");
+  const [minimapSize, setMinimapSize] = useState<MiniMapSize>("medium");
   const sceneRef = useRef<GameWorldScene | null>(null);
   const inputRef = useRef<GameSceneInput>({ x: 0, y: 0, primary: false, secondary: false });
   const demoPositionRef = useRef<Vector2>({ x: 1500, y: 1500 });
@@ -348,6 +359,7 @@ export function GameClientTileDemo() {
     if (!building) return;
     setSelectedBuilding(null);
     setSelectedBuildingItemId((current) => current === itemId ? null : itemId);
+    setMenuOpen(false);
     setChatLines((prev) => [...prev.slice(-5), `[build] ${building.name} 배치 모드`]);
   }, []);
 
@@ -355,6 +367,8 @@ export function GameClientTileDemo() {
     if (target.kind === "building") {
       setSelectedBuildingItemId(null);
       setSelectedBuilding(target.building);
+      setActiveMenuTab("building");
+      setMenuOpen(true);
       return;
     }
     if (!selectedBuildingItemId) return;
@@ -380,6 +394,8 @@ export function GameClientTileDemo() {
       addBuildingToTileIndex(demoTileIndexRef.current, placedBuilding);
       setSelectedBuildingItemId(null);
       setSelectedBuilding(placedBuilding);
+      setActiveMenuTab("building");
+      setMenuOpen(true);
       setChatLines((prev) => [...prev.slice(-5), `[demo] ${building.name} 설치 완료`]);
       applyDemoSnapshot(true);
       return consumed;
@@ -390,37 +406,85 @@ export function GameClientTileDemo() {
   const handleInputChange = useCallback((input: GameSceneInput) => { inputRef.current = input; }, []);
   const objectiveText = useMemo(() => selectedBuildingItemId ? "배치 모드입니다. 설치할 필드 위치를 클릭하세요." : "타일마다 다른 자원과 몬스터가 배치됩니다.", [selectedBuildingItemId]);
 
+  const cycleMinimapSize = useCallback(() => {
+    setMinimapSize((current) => {
+      const currentIndex = minimapSizes.indexOf(current);
+      return minimapSizes[(currentIndex + 1) % minimapSizes.length];
+    });
+  }, []);
+
+  const activeMenuContent = useMemo<ReactNode>(() => {
+    switch (activeMenuTab) {
+      case "status":
+        return <CharacterPanel nickname={nickname} connectionState="offline-demo" serverEndpoint="tile-demo" snapshot={snapshot} />;
+      case "objective":
+        return <p className="feature-panel__hint">{objectiveText}</p>;
+      case "inventory":
+        return <InventoryPanel inventory={inventory} selectedBuildingItemId={selectedBuildingItemId} onSelectBuildingItem={handleSelectBuildingItem} />;
+      case "equipment":
+        return <EquipmentPanel inventory={inventory} />;
+      case "crafting":
+        return <CraftingPanel inventory={inventory} onCraft={handleCraft} onCraftBuildingItem={handleCraftBuildingItem} />;
+      case "building":
+        return selectedBuilding ? (
+          <BuildingInteractionPanel
+            building={selectedBuilding}
+            onClose={() => setSelectedBuilding(null)}
+            onOpenCrafting={() => {
+              setActiveMenuTab("crafting");
+              setChatLines((prev) => [...prev.slice(-5), "[build] 제작 탭에서 해당 제작소 목록을 확인하세요."]);
+            }}
+          />
+        ) : (
+          <div className="feature-panel feature-panel__hint">필드의 건설물을 클릭하면 이곳에 상호작용 메뉴가 표시됩니다.</div>
+        );
+      case "logs":
+        return <LogPanel lines={chatLines} />;
+      default:
+        return null;
+    }
+  }, [activeMenuTab, chatLines, handleCraft, handleCraftBuildingItem, handleSelectBuildingItem, inventory, nickname, objectiveText, selectedBuilding, selectedBuildingItemId, snapshot]);
+
   return (
     <main className={`game-shell ${selectedBuildingItemId ? "game-shell--placing" : ""}`}>
       <GameScene onReady={handleSceneReady} onInputChange={handleInputChange} onInteract={handleDemoInteract} onWorldClick={handleWorldClick} placementBuildingType={placementBuildingType} />
       <section className="game-hud" aria-label="Game HUD">
-        <DraggablePanel id="status" title="캐릭터"><CharacterPanel nickname={nickname} connectionState="offline-demo" serverEndpoint="tile-demo" snapshot={snapshot} /></DraggablePanel>
-        <DraggablePanel id="objective" title="목표"><p>{objectiveText}</p></DraggablePanel>
-        <DraggablePanel id="inventory" title="인벤토리"><InventoryPanel inventory={inventory} selectedBuildingItemId={selectedBuildingItemId} onSelectBuildingItem={handleSelectBuildingItem} /></DraggablePanel>
-        <DraggablePanel id="equipment" title="장비"><EquipmentPanel inventory={inventory} /></DraggablePanel>
-        <DraggablePanel id="build" title="제작 / 건설"><CraftingPanel inventory={inventory} onCraft={handleCraft} onCraftBuildingItem={handleCraftBuildingItem} /></DraggablePanel>
-        {selectedBuilding ? <DraggablePanel id="buildingInteraction" title="건설물"><BuildingInteractionPanel building={selectedBuilding} onClose={() => setSelectedBuilding(null)} onOpenCrafting={() => setChatLines((prev) => [...prev.slice(-5), "[build] 제작 패널에서 해당 제작소 목록을 확인하세요."])} /></DraggablePanel> : null}
-        <DraggablePanel id="chat" title="로그"><LogPanel lines={chatLines} /></DraggablePanel>
+        <button className="hud-menu-button" onClick={() => setMenuOpen((value) => !value)} aria-expanded={menuOpen}>
+          ☰ 메뉴
+        </button>
+
+        <section className={`hud-minimap hud-minimap--${minimapSize}`} aria-label="미니맵">
+          <div className="hud-minimap__header">
+            <b>미니맵</b>
+            <button onClick={cycleMinimapSize}>{minimapSizeLabels[minimapSize]}</button>
+          </div>
+          <MiniMapPanel snapshot={snapshot} localPlayerId={demoPlayerId} />
+        </section>
+
+        {menuOpen ? (
+          <section className="hud-menu-panel" aria-label="게임 메뉴">
+            <header className="hud-menu-panel__header">
+              <strong>게임 메뉴</strong>
+              <button onClick={() => setMenuOpen(false)}>닫기</button>
+            </header>
+            <nav className="hud-menu-tabs" aria-label="메뉴 탭">
+              {menuTabs.map((tab) => (
+                <button
+                  key={tab.id}
+                  className={activeMenuTab === tab.id ? "hud-menu-tabs__button hud-menu-tabs__button--active" : "hud-menu-tabs__button"}
+                  onClick={() => setActiveMenuTab(tab.id)}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </nav>
+            <div className="hud-menu-panel__body">{activeMenuContent}</div>
+          </section>
+        ) : null}
+
         <MobileControls onInputChange={handleInputChange} onInteract={handleDemoInteract} />
       </section>
     </main>
-  );
-}
-
-function DraggablePanel({ id, title, children }: { id: PanelId; title: string; children: ReactNode }) {
-  const defaults = panelDefaults[id];
-  const [position, setPosition] = useState({ x: defaults.x, y: defaults.y });
-  const [collapsed, setCollapsed] = useState(Boolean(defaults.collapsed));
-  const dragRef = useRef<{ pointerId: number; startX: number; startY: number; panelX: number; panelY: number } | null>(null);
-  useEffect(() => { setPosition((current) => ({ x: Math.min(current.x, Math.max(4, window.innerWidth - 132)), y: Math.min(current.y, Math.max(4, window.innerHeight - 44)) })); }, []);
-  return (
-    <section className={`hud-panel draggable-panel ${collapsed ? "draggable-panel--collapsed" : ""}`} style={{ left: position.x, top: position.y, width: defaults.width }}>
-      <header className="draggable-panel__header" onPointerDown={(event) => { event.preventDefault(); dragRef.current = { pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, panelX: position.x, panelY: position.y }; event.currentTarget.setPointerCapture(event.pointerId); }} onPointerMove={(event) => { const drag = dragRef.current; if (!drag || drag.pointerId !== event.pointerId) return; setPosition({ x: Math.max(4, Math.min(window.innerWidth - 86, drag.panelX + event.clientX - drag.startX)), y: Math.max(4, Math.min(window.innerHeight - 42, drag.panelY + event.clientY - drag.startY)) }); }} onPointerUp={(event) => { if (dragRef.current?.pointerId === event.pointerId) dragRef.current = null; }} onPointerCancel={() => { dragRef.current = null; }}>
-        <strong>{title}</strong>
-        <button className="draggable-panel__toggle" onPointerDown={(event) => event.stopPropagation()} onClick={() => setCollapsed((value) => !value)}>{collapsed ? "펼치기" : "접기"}</button>
-      </header>
-      {!collapsed ? <div className="draggable-panel__body">{children}</div> : null}
-    </section>
   );
 }
 
