@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { BuildingState, ItemStack } from "@palpalworld/shared";
 import { getCraftingStationByBuildingType, getProgressionBuilding, type CraftingStationId } from "../crafting/progressionCatalog";
 import { StorageBoxPanel } from "../storage/StorageBoxPanel";
+import { addStorageStack, readStorageBoxItems, removeStorageStack, writeStorageBoxItems } from "../storage/storageStore";
 
 function getBuildingAction(buildingType: string) {
   const station = getCraftingStationByBuildingType(buildingType);
@@ -75,7 +76,11 @@ export function BuildingInteractionPanel({
     ],
     itemInstances: [],
   }));
-  const [storageItems, setStorageItems] = useState<ItemStack[]>([]);
+  const [storageItems, setStorageItems] = useState<ItemStack[]>(() => readStorageBoxItems(building));
+
+  useEffect(() => {
+    setStorageItems(readStorageBoxItems(building));
+  }, [building?.id, building?.type]);
 
   if (!building) return null;
 
@@ -90,14 +95,22 @@ export function BuildingInteractionPanel({
     const nextAmount = Math.min(amount, owned);
     if (nextAmount <= 0) return;
     setDemoInventory((current) => ({ ...current, items: removeStack(current.items, itemId, nextAmount) }));
-    setStorageItems((current) => addStack(current, itemId, nextAmount));
+    setStorageItems((current) => {
+      const next = addStorageStack(current, itemId, nextAmount);
+      writeStorageBoxItems(building, next);
+      return next;
+    });
   };
 
   const handleWithdraw = (itemId: string, amount: number) => {
     const stored = storageItems.find((item) => item.itemId === itemId)?.amount ?? 0;
     const nextAmount = Math.min(amount, stored);
     if (nextAmount <= 0) return;
-    setStorageItems((current) => removeStack(current, itemId, nextAmount));
+    setStorageItems((current) => {
+      const next = removeStorageStack(current, itemId, nextAmount);
+      writeStorageBoxItems(building, next);
+      return next;
+    });
     setDemoInventory((current) => ({ ...current, items: addStack(current.items, itemId, nextAmount) }));
   };
 
