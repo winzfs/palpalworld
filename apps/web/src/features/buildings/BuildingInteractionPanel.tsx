@@ -41,6 +41,14 @@ function isStorageBuilding(buildingType: string) {
   return buildingType === "storage_box" || buildingType === "cold_storage";
 }
 
+function cloneInventoryForView(inventory: InventoryState): InventoryState {
+  return {
+    ownerPlayerId: inventory.ownerPlayerId,
+    items: inventory.items.map((item) => ({ itemId: item.itemId, amount: item.amount })).filter((item) => item.amount > 0),
+    itemInstances: inventory.itemInstances.map((item) => ({ ...item, traitIds: [...item.traitIds] })),
+  };
+}
+
 export function BuildingInteractionPanel({
   building,
   inventory,
@@ -58,14 +66,14 @@ export function BuildingInteractionPanel({
   const [storageItems, setStorageItems] = useState<ItemStack[]>(() => readStorageBoxItems(building));
 
   useEffect(() => {
-    if (inventory) setActiveInventory(writeStoredInventory(inventory));
+    if (inventory) setActiveInventory(cloneInventoryForView(inventory));
   }, [inventory]);
 
   useEffect(() => {
     const handleInventoryChanged = (event: Event) => {
       const customEvent = event as CustomEvent<{ inventory?: InventoryState }>;
       if (customEvent.detail?.inventory) setActiveInventory(customEvent.detail.inventory);
-      else setActiveInventory(readStoredInventory(inventory ?? createFallbackInventory()));
+      else if (!inventory) setActiveInventory(readStoredInventory(createFallbackInventory()));
     };
     window.addEventListener("palpalworld:inventory-changed", handleInventoryChanged);
     return () => window.removeEventListener("palpalworld:inventory-changed", handleInventoryChanged);
