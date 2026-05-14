@@ -6,6 +6,7 @@ const petEmojiBySpeciesId: Record<string, string> = {
   leafbun: "🐰",
   sparkit: "⚡",
   droplet: "💧",
+  breezewing: "🪽",
   moleminer: "⛏️",
   mossboar: "🐗",
   rockturtle: "🐢",
