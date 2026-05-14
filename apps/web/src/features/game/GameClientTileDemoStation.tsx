@@ -16,7 +16,7 @@ import { getItemLabel } from "../items/itemLabels";
 import { LogPanel } from "../logs/LogPanel";
 import { CaptureMinigameOverlay } from "../pets/CaptureMinigameOverlay";
 import { canStartCapture, createCaptureMinigameConfig, isCaptureOrbItemId, type CaptureMinigameConfig, type CaptureOrbItemId } from "../pets/captureRules";
-import { createPetItemId } from "../pets/petInventory";
+import { createPetItemId, getSpeciesIdFromPetItemId } from "../pets/petInventory";
 import { getPetSpeciesDefinition } from "../pets/petCatalog";
 import { MiniMapPanel } from "../world/MiniMapPanel";
 import { DEFAULT_PLAYER_TILE, clampPositionToTile, type MapTileRef } from "../../../../../packages/shared/src/worldTiles";
@@ -28,12 +28,14 @@ type MenuTab = "status" | "objective" | "equipment" | "crafting" | "logs";
 type MiniMapSize = "small" | "medium" | "large";
 type QuickButtonId = "inventory" | "crafting";
 type ActiveCaptureState = { creature: CreaturePublicState; orbItemId: CaptureOrbItemId; config: CaptureMinigameConfig };
+type CreatureWanderTarget = { x: number; y: number; nextRetargetAt: number };
 
 const demoPlayerId = "demo-player";
 const joystickRadius = 56;
 const uiSnapshotIntervalMs = 500;
 const quickSlotCount = 5;
 const mountedPetStorageKey = "palpalworld.demo.mountedPetItemId";
+const creatureWanderTargets = new Map<string, CreatureWanderTarget>();
 const menuTabs: { id: MenuTab; label: string }[] = [
   { id: "status", label: "캐릭터" },
   { id: "objective", label: "목표" },
@@ -62,6 +64,7 @@ function directionFromMovement(input: Vector2, fallback: Direction): Direction {
 }
 function hashId(id: string) { let hash = 0; for (let i = 0; i < id.length; i += 1) hash = (hash * 31 + id.charCodeAt(i)) % 100_000; return hash; }
 function getCreatureMoveSpeed(speciesId: string) {
+  if (speciesId === "breezewing") return 74;
   if (speciesId === "sparkit") return 46;
   if (speciesId === "leafbun") return 38;
   if (speciesId === "droplet") return 24;
@@ -78,21 +81,56 @@ function clampHudButtonPosition(position: { x: number; y: number }) {
 function getInventoryAmount(inventory: InventoryState | null, itemId: string) { return inventory?.items.find((item) => item.itemId === itemId)?.amount ?? 0; }
 function getMountedPlayerMoveSpeed() {
   if (typeof window === "undefined") return 180;
-  return window.localStorage.getItem(mountedPetStorageKey) ? 260 : 180;
+  const mountedPetItemId = window.localStorage.getItem(mountedPetStorageKey);
+  if (!mountedPetItemId) return 180;
+  const speciesId = getSpeciesIdFromPetItemId(mountedPetItemId);
+  return getPetSpeciesDefinition(speciesId).mountSpeed ?? 260;
+}
+function createWanderTarget(creature: CreaturePublicState, now: number): CreatureWanderTarget {
+  const seed = hashId(creature.id);
+  const bucket = Math.floor(now / (4700 + (seed % 2800)));
+  const mixedA = (seed * 48271 + bucket * 69621 + creature.level * 97) % 100_000;
+  const mixedB = (seed * 69691 + bucket * 48299 + creature.level * 131) % 100_000;
+  return {
+    x: 180 + (mixedA % 2640),
+    y: 180 + (mixedB % 2640),
+    nextRetargetAt: now + 3600 + (seed % 5200),
+  };
+}
+function getWanderTarget(creature: CreaturePublicState, now: number): CreatureWanderTarget {
+  const current = creatureWanderTargets.get(creature.id);
+  const distanceToTarget = current ? Math.hypot(current.x - creature.position.x, current.y - creature.position.y) : Number.POSITIVE_INFINITY;
+  if (!current || now >= current.nextRetargetAt || distanceToTarget < 48) {
+    const next = createWanderTarget(creature, now);
+    creatureWanderTargets.set(creature.id, next);
+    return next;
+  }
+  return current;
 }
 function moveDemoCreatures(creatures: CreaturePublicState[], deltaSeconds: number, now: number, playerPosition: Vector2) {
   for (const creature of creatures) {
     if (creature.hp <= 0) continue;
-    const seed = hashId(creature.id);
-    const time = now / 1000;
+    const target = getWanderTarget(creature, now);
     const speed = getCreatureMoveSpeed(creature.speciesId);
-    let angle = Math.sin(time * 0.42 + seed * 0.013) * Math.PI + Math.cos(time * 0.19 + seed * 0.007) * 0.85;
-    let speedMultiplier = 0.75 + Math.sin(time * 0.63 + seed) * 0.25;
-    const dx = creature.position.x - playerPosition.x;
-    const dy = creature.position.y - playerPosition.y;
-    const distance = Math.hypot(dx, dy);
-    if (distance > 0 && distance < 230) { angle = Math.atan2(dy, dx); speedMultiplier = 1.45; }
-    const next = clampCreaturePosition(clampPositionToTile({ x: creature.position.x + Math.cos(angle) * speed * speedMultiplier * deltaSeconds, y: creature.position.y + Math.sin(angle) * speed * speedMultiplier * deltaSeconds }));
+    const isFlying = creature.speciesId === "breezewing" || creature.traitIds.includes("flying");
+    const dxToTarget = target.x - creature.position.x;
+    const dyToTarget = target.y - creature.position.y;
+    let angle = Math.atan2(dyToTarget, dxToTarget);
+    let speedMultiplier = isFlying ? 1.12 : 0.86;
+    const dxFromPlayer = creature.position.x - playerPosition.x;
+    const dyFromPlayer = creature.position.y - playerPosition.y;
+    const playerDistance = Math.hypot(dxFromPlayer, dyFromPlayer);
+    if (playerDistance > 0 && playerDistance < 150) {
+      angle = Math.atan2(dyFromPlayer, dxFromPlayer);
+      speedMultiplier = isFlying ? 1.35 : 1.05;
+    }
+    const drift = isFlying ? Math.sin(now / 480 + hashId(creature.id)) * 0.28 : Math.sin(now / 900 + hashId(creature.id)) * 0.12;
+    const next = clampCreaturePosition(clampPositionToTile({
+      x: creature.position.x + Math.cos(angle + drift) * speed * speedMultiplier * deltaSeconds,
+      y: creature.position.y + Math.sin(angle + drift) * speed * speedMultiplier * deltaSeconds,
+    }));
+    const touchedEdge = next.x <= 145 || next.x >= 2855 || next.y <= 145 || next.y >= 2855;
+    if (touchedEdge) creatureWanderTargets.set(creature.id, createWanderTarget(creature, now + 9999));
     creature.position.x = next.x;
     creature.position.y = next.y;
   }
