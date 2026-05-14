@@ -1,0 +1,151 @@
+.capture-minigame-overlay {
+  pointer-events: auto;
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: rgb(0 0 0 / 0.22);
+}
+
+.capture-minigame-card {
+  width: min(520px, calc(100vw - 24px));
+  padding: 12px;
+  border: 2px solid rgb(74 222 128 / 0.48);
+  border-radius: 16px;
+  background: rgb(13 12 24 / 0.92);
+  color: var(--jrpg-text);
+  box-shadow: 0 24px 70px rgb(0 0 0 / 0.52), inset 0 0 0 1px rgb(255 255 255 / 0.08);
+  backdrop-filter: blur(12px);
+}
+
+.capture-minigame-card__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: -12px -12px 12px;
+  padding: 9px 10px;
+  border-bottom: 1px solid rgb(74 222 128 / 0.25);
+  background: linear-gradient(rgb(22 64 45 / 0.9), rgb(18 18 28 / 0.9));
+}
+
+.capture-minigame-card__header strong {
+  color: #bbf7d0;
+  font-size: 15px;
+  font-weight: 950;
+}
+
+.capture-minigame-card__header button {
+  width: 26px;
+  height: 26px;
+  border: 1px solid rgb(255 255 255 / 0.22);
+  border-radius: 999px;
+  background: rgb(0 0 0 / 0.34);
+  color: var(--jrpg-text);
+  font-weight: 950;
+  cursor: pointer;
+}
+
+.capture-minigame-card p {
+  margin: 0 0 12px;
+  color: var(--jrpg-muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.capture-minigame-meter {
+  position: relative;
+  height: 34px;
+  overflow: hidden;
+  border: 1px solid rgb(255 255 255 / 0.14);
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgb(127 29 29 / 0.55), rgb(69 26 3 / 0.55), rgb(127 29 29 / 0.55));
+  box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.28);
+}
+
+.capture-minigame-meter__zone {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-left: 1px solid rgb(255 255 255 / 0.44);
+  border-right: 1px solid rgb(255 255 255 / 0.44);
+  background: linear-gradient(90deg, rgb(34 197 94 / 0.65), rgb(187 247 208 / 0.8), rgb(34 197 94 / 0.65));
+}
+
+.capture-minigame-meter__cursor {
+  position: absolute;
+  top: -4px;
+  bottom: -4px;
+  width: 4px;
+  transform: translateX(-50%);
+  border-radius: 999px;
+  background: #fff7df;
+  box-shadow: 0 0 12px rgb(255 247 223 / 0.85), 0 0 0 1px rgb(0 0 0 / 0.45);
+}
+
+.capture-minigame-card__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.capture-minigame-card__footer small {
+  color: var(--jrpg-muted);
+  font-size: 11px;
+}
+
+.capture-minigame-card__strike {
+  min-width: 100px;
+  min-height: 34px;
+  border: 1px solid rgb(74 222 128 / 0.5);
+  border-radius: 10px;
+  background: linear-gradient(#166534, #052e16);
+  color: #ecfdf5;
+  font-size: 13px;
+  font-weight: 950;
+  cursor: pointer;
+}
+
+.capture-ready-badge {
+  pointer-events: none;
+  position: absolute;
+  left: 50%;
+  bottom: calc(84px + var(--safe-bottom));
+  z-index: 18;
+  transform: translateX(-50%);
+  padding: 7px 10px;
+  border: 1px solid rgb(74 222 128 / 0.48);
+  border-radius: 999px;
+  background: rgb(5 46 22 / 0.72);
+  color: #bbf7d0;
+  font-size: 11px;
+  font-weight: 950;
+  box-shadow: 0 12px 26px rgb(0 0 0 / 0.3);
+  backdrop-filter: blur(8px);
+}
+
+@media (max-width: 720px) {
+  .capture-minigame-card {
+    padding: 10px;
+    border-width: 1px;
+    border-radius: 13px;
+  }
+
+  .capture-minigame-card__header {
+    margin: -10px -10px 10px;
+    padding: 7px 8px;
+  }
+
+  .capture-minigame-meter {
+    height: 30px;
+  }
+
+  .capture-ready-badge {
+    bottom: calc(76px + var(--safe-bottom));
+    font-size: 10px;
+  }
+}
