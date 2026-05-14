@@ -8,7 +8,7 @@ import {
   type InventoryEntry,
 } from "./inventoryUiModel";
 
-const categories: InventoryCategory[] = ["general", "usable", "material", "equipment", "building"];
+const categories: InventoryCategory[] = ["general", "usable", "material", "equipment", "building", "pet"];
 const gridSlotCount = 36;
 
 export function InventoryGridPanel({
@@ -41,7 +41,7 @@ export function InventoryGridPanel({
 
   return (
     <div className="inventory-grid-panel">
-      <div className="inventory-grid-panel__tabs">
+      <div className="inventory-grid-panel__tabs inventory-grid-panel__tabs--six">
         {categories.map((nextCategory) => (
           <button
             key={nextCategory}
