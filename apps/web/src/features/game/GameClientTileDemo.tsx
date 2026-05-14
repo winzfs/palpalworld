@@ -18,6 +18,7 @@ type PanelId = "status" | "objective" | "inventory" | "equipment" | "build" | "b
 
 const demoPlayerId = "demo-player";
 const joystickRadius = 56;
+const uiSnapshotIntervalMs = 250;
 const panelDefaults: Record<PanelId, { x: number; y: number; width: number; collapsed?: boolean }> = {
   status: { x: 8, y: 8, width: 320 },
   objective: { x: 8, y: 60, width: 270, collapsed: true },
@@ -63,6 +64,10 @@ function clampCreaturePosition(position: Vector2): Vector2 {
     x: Math.max(140, Math.min(2860, position.x)),
     y: Math.max(140, Math.min(2860, position.y)),
   };
+}
+
+function entityTile(entity: { currentTile?: MapTileRef }) {
+  return entity.currentTile ?? DEFAULT_PLAYER_TILE;
 }
 
 function moveDemoCreatures(creatures: CreaturePublicState[], deltaSeconds: number, now: number, playerPosition: Vector2, playerTile: MapTileRef) {
@@ -140,10 +145,6 @@ function consumeInventoryItems(inventory: InventoryState, requirements: { itemId
   return { ...inventory, items: items.filter((item) => item.amount > 0) };
 }
 
-function entityTile(entity: { currentTile?: MapTileRef }) {
-  return entity.currentTile ?? DEFAULT_PLAYER_TILE;
-}
-
 function findNearestResource(resources: ResourceNodeState[], position: Vector2, currentTile: MapTileRef, maxRange = 180) {
   let nearest: ResourceNodeState | null = null;
   let nearestDistance = Number.POSITIVE_INFINITY;
@@ -199,6 +200,7 @@ export function GameClientTileDemo() {
   const demoCreaturesRef = useRef<CreaturePublicState[]>(createTileBasedDemoCreatures());
   const demoBuildingsRef = useRef<BuildingState[]>(createTileBasedDemoBuildings());
   const lastDemoAttackAtRef = useRef(0);
+  const lastUiSnapshotAtRef = useRef(0);
 
   const selectedPlacementBuilding = useMemo(
     () => (selectedBuildingItemId ? getProgressionBuildingByItemId(selectedBuildingItemId) : null),
@@ -206,7 +208,7 @@ export function GameClientTileDemo() {
   );
   const placementBuildingType = selectedPlacementBuilding?.type as BuildingType | undefined;
 
-  const applyDemoSnapshot = useCallback(() => {
+  const applyDemoSnapshot = useCallback((forceUiUpdate = false) => {
     const nextSnapshot = createDemoSnapshot(nickname, demoPositionRef.current, demoDirectionRef.current, demoTileRef.current, demoResourcesRef.current, demoCreaturesRef.current, demoBuildingsRef.current);
     sceneRef.current?.applySnapshot(nextSnapshot, demoPlayerId);
     const player = nextSnapshot.players[0] as any;
@@ -215,7 +217,12 @@ export function GameClientTileDemo() {
       demoPositionRef.current.x = player.position.x;
       demoPositionRef.current.y = player.position.y;
     }
-    setSnapshot(nextSnapshot);
+
+    const now = performance.now();
+    if (forceUiUpdate || now - lastUiSnapshotAtRef.current >= uiSnapshotIntervalMs) {
+      lastUiSnapshotAtRef.current = now;
+      setSnapshot(nextSnapshot);
+    }
   }, [nickname]);
 
   useEffect(() => {
@@ -239,7 +246,7 @@ export function GameClientTileDemo() {
       demoPositionRef.current.x = next.x;
       demoPositionRef.current.y = next.y;
       moveDemoCreatures(demoCreaturesRef.current, deltaSeconds, now, demoPositionRef.current, demoTileRef.current);
-      applyDemoSnapshot();
+      applyDemoSnapshot(false);
       lastTick = now;
       animationFrame = requestAnimationFrame(tick);
     };
@@ -257,7 +264,7 @@ export function GameClientTileDemo() {
     resource.remainingAmount = Math.max(0, resource.remainingAmount - 25);
     setInventory((current) => addInventoryItem(current ?? createDemoInventory(), resource.resourceType, gainAmount));
     setChatLines((prev) => [...prev.slice(-5), `[demo] ${getItemLabel(resource.resourceType)} ${gainAmount}개 획득`]);
-    applyDemoSnapshot();
+    applyDemoSnapshot(true);
   }, [applyDemoSnapshot]);
 
   const handleDemoAttack = useCallback(() => {
@@ -276,7 +283,7 @@ export function GameClientTileDemo() {
     } else {
       setChatLines((prev) => [...prev.slice(-5), `[demo] ${target.speciesId}에게 18 피해`]);
     }
-    applyDemoSnapshot();
+    applyDemoSnapshot(true);
   }, [applyDemoSnapshot]);
 
   useEffect(() => {
@@ -366,7 +373,7 @@ export function GameClientTileDemo() {
       setSelectedBuildingItemId(null);
       setSelectedBuilding(placedBuilding);
       setChatLines((prev) => [...prev.slice(-5), `[demo] ${building.name} 설치 완료`]);
-      applyDemoSnapshot();
+      applyDemoSnapshot(true);
       return consumed;
     });
   }, [applyDemoSnapshot, selectedBuildingItemId]);
