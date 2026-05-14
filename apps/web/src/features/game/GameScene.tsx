@@ -18,7 +18,9 @@ import {
   getNeighborTile,
   getPortalDirectionAtPosition,
   getSpawnPositionAfterTravel,
+  isSameTile,
   type MapDirection,
+  type MapTileRef,
 } from "../../../../../packages/shared/src/worldTiles";
 import { SpriteRenderer } from "../rendering/SpriteRenderer";
 import { TileMapRenderer } from "../rendering/TileMapRenderer";
@@ -39,32 +41,46 @@ export type WorldClickTarget =
   | { kind: "field"; position: Vector2; validity: PlacementValidity }
   | { kind: "building"; building: BuildingState };
 
+const fallbackPlayerTiles = new Map<string, MapTileRef>();
+
 function distance(a: Vector2, b: Vector2) {
   return Math.hypot(a.x - b.x, a.y - b.y);
 }
 
 function getTileRef(entity: unknown) {
-  return (entity as { currentTile?: typeof DEFAULT_PLAYER_TILE })?.currentTile ?? DEFAULT_PLAYER_TILE;
+  const candidate = (entity as { currentTile?: MapTileRef })?.currentTile;
+  return candidate ?? DEFAULT_PLAYER_TILE;
+}
+
+function setPositionInPlace(target: Vector2, next: Vector2) {
+  target.x = next.x;
+  target.y = next.y;
 }
 
 function normalizeSnapshotToCurrentTile(snapshot: WorldSnapshot): WorldSnapshot {
   for (const player of snapshot.players) {
-    const currentTile = getTileRef(player);
+    const serverTile = getTileRef(player);
+    const rememberedTile = fallbackPlayerTiles.get(player.id);
+    const currentTile = rememberedTile && isSameTile(serverTile, DEFAULT_PLAYER_TILE) ? rememberedTile : serverTile;
     const clamped = clampPositionToTile(player.position);
     const direction = getPortalDirectionAtPosition(clamped, currentTile);
     const nextTile = direction ? getNeighborTile(currentTile, direction) : null;
+
     if (direction && nextTile) {
+      const spawn = getSpawnPositionAfterTravel(direction, clamped);
       (player as any).currentTile = { ...nextTile };
-      player.position = getSpawnPositionAfterTravel(direction, clamped);
+      fallbackPlayerTiles.set(player.id, { ...nextTile });
+      setPositionInPlace(player.position, spawn);
     } else {
       (player as any).currentTile = currentTile;
-      player.position = clamped;
+      fallbackPlayerTiles.set(player.id, { ...currentTile });
+      setPositionInPlace(player.position, clamped);
     }
   }
 
-  for (const resource of snapshot.resources) resource.position = clampPositionToTile(resource.position);
-  for (const creature of snapshot.creatures) creature.position = clampPositionToTile(creature.position);
-  for (const building of snapshot.buildings) building.position = clampPositionToTile(building.position);
+  for (const resource of snapshot.resources) setPositionInPlace(resource.position, clampPositionToTile(resource.position));
+  for (const creature of snapshot.creatures) setPositionInPlace(creature.position, clampPositionToTile(creature.position));
+  for (const building of snapshot.buildings) setPositionInPlace(building.position, clampPositionToTile(building.position));
   return snapshot;
 }
 
