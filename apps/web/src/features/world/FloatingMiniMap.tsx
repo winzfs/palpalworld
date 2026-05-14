@@ -1,10 +1,21 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import type { WorldSnapshot } from "@palpalworld/shared";
 import { MiniMapPanel } from "./MiniMapPanel";
 
 export function FloatingMiniMap({ snapshot }: { snapshot: WorldSnapshot | null }) {
+  const [mounted, setMounted] = useState(false);
   const player = snapshot?.players[0] ?? null;
 
-  return (
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  if (!mounted) return null;
+
+  return createPortal(
     <aside className="floating-minimap" aria-label="미니맵">
       <MiniMapPanel snapshot={snapshot} localPlayerId={player?.id ?? null} />
       <style>{`
@@ -16,10 +27,10 @@ export function FloatingMiniMap({ snapshot }: { snapshot: WorldSnapshot | null }
           width: 210px;
           max-height: min(58vh, 420px);
           overflow: auto;
-          z-index: 80;
+          z-index: 9999;
           border: 2px solid rgba(139, 111, 50, 0.95);
           border-radius: 12px;
-          background: rgba(20, 18, 28, 0.92);
+          background: rgba(20, 18, 28, 0.94);
           box-shadow: 0 0 0 2px rgba(0,0,0,.45), 0 18px 50px rgba(0,0,0,.35);
           backdrop-filter: blur(10px);
           padding: 8px;
@@ -55,6 +66,7 @@ export function FloatingMiniMap({ snapshot }: { snapshot: WorldSnapshot | null }
           }
         }
       `}</style>
-    </aside>
+    </aside>,
+    document.body,
   );
 }
