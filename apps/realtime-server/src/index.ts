@@ -101,8 +101,9 @@ function travelPlayerIfAtPortal(player: PlayerPublicState, forcedDirection?: Map
   const nextTile = getNeighborTile(currentTile, direction);
   if (!nextTile) return false;
 
+  const previousPosition = { ...player.position };
   (player as any).currentTile = { ...nextTile };
-  player.position = getSpawnPositionAfterTravel(direction);
+  player.position = getSpawnPositionAfterTravel(direction, previousPosition);
   lastTravelAt.set(player.id, now);
   return true;
 }
@@ -315,6 +316,12 @@ setInterval(() => {
     });
 
     player.position = nextPosition;
+
+    if (travelPlayerIfAtPortal(player)) {
+      lastInputs.set(playerId, { x: 0, y: 0 });
+      const playerSocket = io.sockets.sockets.get(playerId);
+      playerSocket?.emit("server:toast", { type: "success", message: "다른 맵 타일로 이동했습니다." });
+    }
 
     if (Math.abs(movement.x) > Math.abs(movement.y)) {
       player.direction = movement.x >= 0 ? "right" : "left";
