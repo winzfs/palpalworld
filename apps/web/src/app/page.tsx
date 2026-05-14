@@ -1,10 +1,10 @@
-import { GameClient } from "../features/game/GameClient";
+import { GameClientTileDemo } from "../features/game/GameClientTileDemo";
 import { FloatingMiniMap } from "../features/world/FloatingMiniMap";
 
 export default function HomePage() {
   return (
     <>
-      <GameClient />
+      <GameClientTileDemo />
       <FloatingMiniMap />
     </>
   );
