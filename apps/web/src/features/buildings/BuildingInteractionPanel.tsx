@@ -1,5 +1,7 @@
-import type { BuildingState } from "@palpalworld/shared";
+import { useState } from "react";
+import type { BuildingState, ItemStack } from "@palpalworld/shared";
 import { getCraftingStationByBuildingType, getProgressionBuilding, type CraftingStationId } from "../crafting/progressionCatalog";
+import { StorageBoxPanel } from "../storage/StorageBoxPanel";
 
 function getBuildingAction(buildingType: string) {
   const station = getCraftingStationByBuildingType(buildingType);
@@ -16,7 +18,7 @@ function getBuildingAction(buildingType: string) {
     case "cold_storage":
       return {
         title: "보관함 열기",
-        description: "아이템을 넣고 꺼내는 창고 UI로 연결할 예정입니다.",
+        description: "아이템을 넣고 꺼내는 보관함입니다.",
         stationId: null,
       };
     case "base_core":
@@ -40,6 +42,20 @@ function getBuildingAction(buildingType: string) {
   }
 }
 
+function addStack(stacks: ItemStack[], itemId: string, amount: number) {
+  const next = stacks.map((stack) => ({ ...stack }));
+  const existing = next.find((stack) => stack.itemId === itemId);
+  if (existing) existing.amount += amount;
+  else next.push({ itemId, amount });
+  return next.filter((stack) => stack.amount > 0);
+}
+
+function removeStack(stacks: ItemStack[], itemId: string, amount: number) {
+  return stacks
+    .map((stack) => stack.itemId === itemId ? { ...stack, amount: Math.max(0, stack.amount - amount) } : { ...stack })
+    .filter((stack) => stack.amount > 0);
+}
+
 export function BuildingInteractionPanel({
   building,
   onClose,
@@ -49,12 +65,41 @@ export function BuildingInteractionPanel({
   onClose: () => void;
   onOpenCrafting?: (stationId: CraftingStationId) => void;
 }) {
+  const [demoInventory, setDemoInventory] = useState(() => ({
+    ownerPlayerId: "demo-player",
+    items: [
+      { itemId: "wood", amount: 30 },
+      { itemId: "stone", amount: 24 },
+      { itemId: "fiber", amount: 18 },
+      { itemId: "berry", amount: 10 },
+    ],
+    itemInstances: [],
+  }));
+  const [storageItems, setStorageItems] = useState<ItemStack[]>([]);
+
   if (!building) return null;
 
   const definition = getProgressionBuilding(building.type);
   const action = getBuildingAction(building.type);
   const hpPercent = Math.max(0, Math.min(100, Math.round((building.hp / building.maxHp) * 100)));
   const canOpenCrafting = Boolean(action.stationId);
+  const isStorage = building.type === "storage_box" || building.type === "cold_storage";
+
+  const handleDeposit = (itemId: string, amount: number) => {
+    const owned = demoInventory.items.find((item) => item.itemId === itemId)?.amount ?? 0;
+    const nextAmount = Math.min(amount, owned);
+    if (nextAmount <= 0) return;
+    setDemoInventory((current) => ({ ...current, items: removeStack(current.items, itemId, nextAmount) }));
+    setStorageItems((current) => addStack(current, itemId, nextAmount));
+  };
+
+  const handleWithdraw = (itemId: string, amount: number) => {
+    const stored = storageItems.find((item) => item.itemId === itemId)?.amount ?? 0;
+    const nextAmount = Math.min(amount, stored);
+    if (nextAmount <= 0) return;
+    setStorageItems((current) => removeStack(current, itemId, nextAmount));
+    setDemoInventory((current) => ({ ...current, items: addStack(current.items, itemId, nextAmount) }));
+  };
 
   return (
     <div className="feature-panel feature-panel--building-interaction">
@@ -68,14 +113,26 @@ export function BuildingInteractionPanel({
         <span>내구도</span>
         <b>{building.hp} / {building.maxHp} ({hpPercent}%)</b>
       </div>
-      <button
-        className="building-interaction__action"
-        onClick={action.stationId ? () => onOpenCrafting?.(action.stationId) : undefined}
-        disabled={!canOpenCrafting}
-      >
-        {action.title}
-      </button>
-      <p className="feature-panel__hint">{action.description}</p>
+
+      {isStorage ? (
+        <StorageBoxPanel
+          inventory={demoInventory}
+          storageItems={storageItems}
+          onDeposit={handleDeposit}
+          onWithdraw={handleWithdraw}
+        />
+      ) : (
+        <>
+          <button
+            className="building-interaction__action"
+            onClick={action.stationId ? () => onOpenCrafting?.(action.stationId) : undefined}
+            disabled={!canOpenCrafting}
+          >
+            {action.title}
+          </button>
+          <p className="feature-panel__hint">{action.description}</p>
+        </>
+      )}
     </div>
   );
 }
