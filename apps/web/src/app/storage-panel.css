@@ -1,3 +1,7 @@
+.hud-menu-panel:has(.storage-menu-empty-marker) {
+  display: none !important;
+}
+
 .hud-menu-panel:has(.storage-box-panel) {
   left: 50%;
   top: 50%;
@@ -254,9 +258,9 @@
 }
 
 @media (max-width: 720px) {
-  .hud-menu-panel:has(.storage-box-panel) {
-    width: 0;
-    height: 0;
+  .hud-menu-panel:has(.storage-box-panel),
+  .hud-menu-panel:has(.storage-menu-empty-marker) {
+    display: none !important;
   }
 
   .storage-overlay-panel {
