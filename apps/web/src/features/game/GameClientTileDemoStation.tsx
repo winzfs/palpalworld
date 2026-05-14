@@ -14,6 +14,10 @@ import { addInventoryStack, readStoredInventory, removeInventoryStack, writeStor
 import { findInventoryEntryByKey } from "../inventory/inventoryUiModel";
 import { getItemLabel } from "../items/itemLabels";
 import { LogPanel } from "../logs/LogPanel";
+import { CaptureMinigameOverlay } from "../pets/CaptureMinigameOverlay";
+import { canStartCapture, createCaptureMinigameConfig, isCaptureOrbItemId, type CaptureMinigameConfig, type CaptureOrbItemId } from "../pets/captureRules";
+import { createPetItemId } from "../pets/petInventory";
+import { getPetSpeciesDefinition } from "../pets/petCatalog";
 import { MiniMapPanel } from "../world/MiniMapPanel";
 import { DEFAULT_PLAYER_TILE, clampPositionToTile, type MapTileRef } from "../../../../../packages/shared/src/worldTiles";
 import { createTileBasedDemoBuildings, createTileBasedDemoCreatures, createTileBasedDemoResources } from "./demoWorldSpawns";
@@ -23,6 +27,11 @@ import { addBuildingToTileIndex, createDemoTileIndex, getAliveTileCreatures, get
 type MenuTab = "status" | "objective" | "equipment" | "crafting" | "logs";
 type MiniMapSize = "small" | "medium" | "large";
 type QuickButtonId = "inventory" | "crafting";
+type ActiveCaptureState = {
+  creature: CreaturePublicState;
+  orbItemId: CaptureOrbItemId;
+  config: CaptureMinigameConfig;
+};
 
 const demoPlayerId = "demo-player";
 const joystickRadius = 56;
@@ -79,6 +88,10 @@ function clampCreaturePosition(position: Vector2): Vector2 {
 function clampHudButtonPosition(position: { x: number; y: number }) {
   if (typeof window === "undefined") return position;
   return { x: Math.max(4, Math.min(window.innerWidth - 48, position.x)), y: Math.max(4, Math.min(window.innerHeight - 48, position.y)) };
+}
+
+function getInventoryAmount(inventory: InventoryState | null, itemId: string) {
+  return inventory?.items.find((item) => item.itemId === itemId)?.amount ?? 0;
 }
 
 function moveDemoCreatures(creatures: CreaturePublicState[], deltaSeconds: number, now: number, playerPosition: Vector2) {
@@ -204,6 +217,8 @@ export function GameClientTileDemoStation() {
   const [selectedBuildingItemId, setSelectedBuildingItemId] = useState<string | null>(null);
   const [selectedBuilding, setSelectedBuilding] = useState<BuildingState | null>(null);
   const [selectedStationBuilding, setSelectedStationBuilding] = useState<BuildingState | null>(null);
+  const [captureOrbReady, setCaptureOrbReady] = useState<CaptureOrbItemId | null>(null);
+  const [activeCapture, setActiveCapture] = useState<ActiveCaptureState | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [inventoryOpen, setInventoryOpen] = useState(false);
   const [activeMenuTab, setActiveMenuTab] = useState<MenuTab>("crafting");
@@ -306,6 +321,7 @@ export function GameClientTileDemoStation() {
   }, [applyDemoSnapshot, getCurrentResources, updateInventory]);
 
   const handleDemoAttack = useCallback(() => {
+    if (activeCapture) return;
     const now = performance.now();
     if (now - lastDemoAttackAtRef.current < 380) return;
     lastDemoAttackAtRef.current = now;
@@ -314,6 +330,22 @@ export function GameClientTileDemoStation() {
       setChatLines((prev) => [...prev.slice(-5), "[demo] 현재 타일 공격 범위 안에 몬스터가 없습니다."]);
       return;
     }
+
+    if (captureOrbReady) {
+      if (getInventoryAmount(inventory, captureOrbReady) <= 0) {
+        setCaptureOrbReady(null);
+        setChatLines((prev) => [...prev.slice(-5), "[capture] 포획구가 부족합니다."]);
+        return;
+      }
+      if (!canStartCapture(target)) {
+        setChatLines((prev) => [...prev.slice(-5), "[capture] 체력이 30% 이하인 몬스터만 포획할 수 있습니다."]);
+        return;
+      }
+      setActiveCapture({ creature: { ...target }, orbItemId: captureOrbReady, config: createCaptureMinigameConfig(target, captureOrbReady) });
+      setChatLines((prev) => [...prev.slice(-5), `[capture] ${getPetSpeciesDefinition(target.speciesId).name} 포획 시도`]);
+      return;
+    }
+
     target.hp = Math.max(0, target.hp - 18);
     if (target.hp <= 0) {
       updateInventory((current) => addInventoryStack(current, "pal_essence", 1));
@@ -322,7 +354,31 @@ export function GameClientTileDemoStation() {
       setChatLines((prev) => [...prev.slice(-5), `[demo] ${target.speciesId}에게 18 피해`]);
     }
     applyDemoSnapshot(true);
-  }, [applyDemoSnapshot, getCurrentCreatures, updateInventory]);
+  }, [activeCapture, applyDemoSnapshot, captureOrbReady, getCurrentCreatures, inventory, updateInventory]);
+
+  const handleResolveCapture = useCallback((success: boolean) => {
+    if (!activeCapture) return;
+    const { creature, orbItemId } = activeCapture;
+    updateInventory((current) => {
+      const withoutOrb = removeInventoryStack(current, orbItemId, 1);
+      return success ? addInventoryStack(withoutOrb, createPetItemId(creature.speciesId), 1) : withoutOrb;
+    });
+    if (success) {
+      const liveCreature = getCurrentCreatures().find((candidate) => candidate.id === creature.id);
+      if (liveCreature) liveCreature.hp = 0;
+      setChatLines((prev) => [...prev.slice(-5), `[capture] ${getPetSpeciesDefinition(creature.speciesId).name} 포획 성공!`]);
+    } else {
+      setChatLines((prev) => [...prev.slice(-5), `[capture] ${getPetSpeciesDefinition(creature.speciesId).name} 포획 실패`]);
+    }
+    setActiveCapture(null);
+    setCaptureOrbReady(null);
+    applyDemoSnapshot(true);
+  }, [activeCapture, applyDemoSnapshot, getCurrentCreatures, updateInventory]);
+
+  const handleCancelCapture = useCallback(() => {
+    setActiveCapture(null);
+    setChatLines((prev) => [...prev.slice(-5), "[capture] 포획을 취소했습니다."]);
+  }, []);
 
   useEffect(() => {
     let animationFrame = 0;
@@ -373,6 +429,7 @@ export function GameClientTileDemoStation() {
     setSelectedBuildingItemId((current) => current === itemId ? null : itemId);
     setInventoryOpen(false);
     setMenuOpen(false);
+    setCaptureOrbReady(null);
     setChatLines((prev) => [...prev.slice(-5), `[build] ${building.name} 배치 모드`]);
   }, []);
 
@@ -380,6 +437,7 @@ export function GameClientTileDemoStation() {
     if (target.kind === "building") {
       const station = getCraftingStationByBuildingType(String(target.building.type));
       setSelectedBuildingItemId(null);
+      setCaptureOrbReady(null);
       setInventoryOpen(false);
       setMenuOpen(false);
       if (station) {
@@ -437,8 +495,14 @@ export function GameClientTileDemoStation() {
       handleSelectBuildingItem(entry.itemId);
       return;
     }
+    if (isCaptureOrbItemId(entry.itemId)) {
+      setSelectedBuildingItemId(null);
+      setCaptureOrbReady((current) => current === entry.itemId ? null : entry.itemId);
+      setChatLines((prev) => [...prev.slice(-5), `[capture] ${entry.label} ${captureOrbReady === entry.itemId ? "준비 해제" : "준비 완료"}`]);
+      return;
+    }
     setChatLines((prev) => [...prev.slice(-5), `[quick] ${entry.label} 사용`]);
-  }, [handleSelectBuildingItem, inventory, quickSlots]);
+  }, [captureOrbReady, handleSelectBuildingItem, inventory, quickSlots]);
 
   const handleSceneReady = useCallback((scene: GameWorldScene) => { sceneRef.current = scene; }, []);
   const handleInputChange = useCallback((input: GameSceneInput) => { inputRef.current = input; }, []);
@@ -475,6 +539,7 @@ export function GameClientTileDemoStation() {
           <button className="hud-minimap__size-button" onClick={cycleMinimapSize} aria-label="미니맵 크기 변경">{minimapSizeLabels[minimapSize]}</button>
           <MiniMapPanel snapshot={snapshot} localPlayerId={demoPlayerId} />
         </section>
+        {captureOrbReady ? <div className="capture-ready-badge">포획 준비: {getItemLabel(captureOrbReady)} · 체력 30% 이하 몬스터를 공격하세요</div> : null}
         {inventoryOpen ? (
           <section className="inventory-overlay-panel" aria-label="인벤토리">
             <button className="inventory-overlay-panel__close" onClick={() => setInventoryOpen(false)} aria-label="인벤토리 닫기">×</button>
@@ -511,6 +576,7 @@ export function GameClientTileDemoStation() {
             <div className="hud-menu-panel__body">{activeMenuContent}</div>
           </section>
         ) : null}
+        {activeCapture ? <CaptureMinigameOverlay creature={activeCapture.creature} config={activeCapture.config} onResolve={handleResolveCapture} onCancel={handleCancelCapture} /> : null}
         <QuickSlotBar inventory={inventory} quickSlots={quickSlots} onUseQuickSlot={handleUseQuickSlot} onClearQuickSlot={handleClearQuickSlot} />
         <MobileControls onInputChange={handleInputChange} onInteract={handleDemoInteract} />
       </section>
