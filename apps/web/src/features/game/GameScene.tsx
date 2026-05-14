@@ -155,6 +155,9 @@ export class GameWorldScene {
       if (moved) this.movingPlayerIds.add(player.id);
       this.previousPlayerPositions.set(player.id, { ...player.position });
     }
+    if (this.highlightedCreatureId && !normalizedSnapshot.creatures.some((creature) => creature.id === this.highlightedCreatureId && creature.hp > 0)) {
+      this.highlightedCreatureId = null;
+    }
     this.snapshot = normalizedSnapshot;
     this.localPlayerId = localPlayerId;
     this.localEquippedWeaponItemId = readStoredWeaponItemId();
@@ -206,7 +209,7 @@ export class GameWorldScene {
     this.pointerWorldPosition = position;
     if (!this.placementPreviewBuildingType) {
       const creature = this.getCreatureAt(position);
-      if (creature) { this.onWorldClick({ kind: "creature", creature }); this.emitPrimaryTap(); return; }
+      if (creature) { this.highlightedCreatureId = creature.id; this.onWorldClick({ kind: "creature", creature }); this.emitPrimaryTap(); return; }
       const building = this.getBuildingAt(position);
       if (building) { this.onWorldClick({ kind: "building", building }); return; }
     }
