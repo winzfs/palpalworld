@@ -3,6 +3,7 @@ import {
   DEFAULT_PLAYER_TILE,
   MAP_TILE_SIZE,
   clampPositionToTile,
+  getMapTile,
   isSameTile,
 } from "../../../../../packages/shared/src/worldTiles";
 
@@ -32,6 +33,7 @@ export function MiniMapPanel({
   const rawPlayer = snapshot?.players.find((player) => player.id === localPlayerId) ?? snapshot?.players[0] ?? null;
   const localPlayer = rawPlayer ? withPositionInsideTile(rawPlayer) : null;
   const currentTile = (localPlayer as any)?.currentTile ?? DEFAULT_PLAYER_TILE;
+  const tile = getMapTile(currentTile) ?? getMapTile(DEFAULT_PLAYER_TILE);
   const resources = (snapshot?.resources ?? [])
     .map(withPositionInsideTile)
     .filter((resource) => !(resource as any).currentTile || isSameTile((resource as any).currentTile, currentTile));
@@ -73,6 +75,7 @@ export function MiniMapPanel({
         />
       ))}
       <i className="minimap-dot minimap-dot--player" style={{ left: `${playerX}%`, top: `${playerY}%` }} title="현재 위치" />
+      <span className="minimap-region-name">{tile?.name ?? "현재 지역"}</span>
 
       <style>{`
         .minimap-map { position: relative; width: 100%; aspect-ratio: 1 / 1; min-height: 0; overflow: hidden; border: 0; border-radius: 10px; background: radial-gradient(circle at 50% 50%, rgba(34,197,94,.18), transparent 62%), linear-gradient(135deg, rgba(22,101,52,.55), rgba(15,23,42,.86)); box-shadow: inset 0 0 20px rgba(0,0,0,.35); }
@@ -82,6 +85,7 @@ export function MiniMapPanel({
         .minimap-dot--resource { background: #22c55e; z-index: 2; }
         .minimap-dot--creature { background: #ef4444; z-index: 3; }
         .minimap-dot--building { width: 8px; height: 8px; border-radius: 2px; background: #38bdf8; z-index: 4; }
+        .minimap-region-name { position: absolute; left: 50%; bottom: 4px; z-index: 7; max-width: calc(100% - 12px); padding: 2px 6px; transform: translateX(-50%); overflow: hidden; border-radius: 999px; background: rgba(0,0,0,.42); color: rgba(255,247,223,.88); font-size: 9px; font-weight: 900; line-height: 1.1; text-overflow: ellipsis; text-shadow: 0 1px 3px rgba(0,0,0,.85); white-space: nowrap; }
       `}</style>
     </div>
   );
