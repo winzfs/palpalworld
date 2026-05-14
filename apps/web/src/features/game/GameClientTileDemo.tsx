@@ -6,7 +6,9 @@ import { CharacterPanel } from "../character/CharacterPanel";
 import { CraftingPanel } from "../crafting/CraftingPanel";
 import { getBuildingItemId, getProgressionBuilding, getProgressionBuildingByItemId, getProgressionRecipe } from "../crafting/progressionCatalog";
 import { EquipmentPanel } from "../equipment/EquipmentPanel";
-import { InventoryPanel } from "../inventory/InventoryPanel";
+import { InventoryGridPanel } from "../inventory/InventoryGridPanel";
+import { QuickSlotBar } from "../inventory/QuickSlotBar";
+import { findInventoryEntryByKey } from "../inventory/inventoryUiModel";
 import { getItemLabel } from "../items/itemLabels";
 import { LogPanel } from "../logs/LogPanel";
 import { BuildingInteractionPanel } from "../buildings/BuildingInteractionPanel";
@@ -16,17 +18,17 @@ import { createTileBasedDemoBuildings, createTileBasedDemoCreatures, createTileB
 import { GameScene, type GameSceneInput, type GameWorldScene, type WorldClickTarget } from "./GameScene";
 import { addBuildingToTileIndex, createDemoTileIndex, getAliveTileCreatures, getAliveTileResources, getTileBuildings } from "./demoTileIndex";
 
-type MenuTab = "status" | "objective" | "inventory" | "equipment" | "crafting" | "building" | "logs";
+type MenuTab = "status" | "objective" | "equipment" | "crafting" | "building" | "logs";
 type MiniMapSize = "small" | "medium" | "large";
 type QuickButtonId = "inventory" | "crafting";
 
 const demoPlayerId = "demo-player";
 const joystickRadius = 56;
 const uiSnapshotIntervalMs = 250;
+const quickSlotCount = 5;
 const menuTabs: { id: MenuTab; label: string }[] = [
   { id: "status", label: "캐릭터" },
   { id: "objective", label: "목표" },
-  { id: "inventory", label: "가방" },
   { id: "equipment", label: "장비" },
   { id: "crafting", label: "제작" },
   { id: "building", label: "건물" },
@@ -38,9 +40,9 @@ const minimapSizeLabels: Record<MiniMapSize, string> = {
   medium: "M",
   large: "L",
 };
-const quickButtonDefaults: Record<QuickButtonId, { x: number; y: number; icon: string; label: string; tab: MenuTab }> = {
-  inventory: { x: 12, y: 112, icon: "🎒", label: "가방", tab: "inventory" },
-  crafting: { x: 12, y: 164, icon: "🛠", label: "제작", tab: "crafting" },
+const quickButtonDefaults: Record<QuickButtonId, { x: number; y: number; icon: string; label: string }> = {
+  inventory: { x: 12, y: 112, icon: "🎒", label: "가방" },
+  crafting: { x: 12, y: 164, icon: "🛠", label: "제작" },
 };
 
 function createClientNickname() {
@@ -207,8 +209,10 @@ export function GameClientTileDemo() {
   const [selectedBuildingItemId, setSelectedBuildingItemId] = useState<string | null>(null);
   const [selectedBuilding, setSelectedBuilding] = useState<BuildingState | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
-  const [activeMenuTab, setActiveMenuTab] = useState<MenuTab>("inventory");
+  const [inventoryOpen, setInventoryOpen] = useState(false);
+  const [activeMenuTab, setActiveMenuTab] = useState<MenuTab>("crafting");
   const [minimapSize, setMinimapSize] = useState<MiniMapSize>("medium");
+  const [quickSlots, setQuickSlots] = useState<(string | null)[]>(() => Array.from({ length: quickSlotCount }, () => null));
   const sceneRef = useRef<GameWorldScene | null>(null);
   const inputRef = useRef<GameSceneInput>({ x: 0, y: 0, primary: false, secondary: false });
   const demoPositionRef = useRef<Vector2>({ x: 1500, y: 1500 });
@@ -372,6 +376,7 @@ export function GameClientTileDemo() {
     if (!building) return;
     setSelectedBuilding(null);
     setSelectedBuildingItemId((current) => current === itemId ? null : itemId);
+    setInventoryOpen(false);
     setMenuOpen(false);
     setChatLines((prev) => [...prev.slice(-5), `[build] ${building.name} 배치 모드`]);
   }, []);
@@ -415,6 +420,24 @@ export function GameClientTileDemo() {
     });
   }, [applyDemoSnapshot, selectedBuildingItemId]);
 
+  const handleAssignQuickSlot = useCallback((slotIndex: number, entryKey: string | null) => {
+    setQuickSlots((current) => current.map((slot, index) => index === slotIndex ? entryKey : slot));
+  }, []);
+
+  const handleClearQuickSlot = useCallback((slotIndex: number) => {
+    setQuickSlots((current) => current.map((slot, index) => index === slotIndex ? null : slot));
+  }, []);
+
+  const handleUseQuickSlot = useCallback((slotIndex: number) => {
+    const entry = findInventoryEntryByKey(inventory, quickSlots[slotIndex]);
+    if (!entry) return;
+    if (entry.category === "building") {
+      handleSelectBuildingItem(entry.itemId);
+      return;
+    }
+    setChatLines((prev) => [...prev.slice(-5), `[quick] ${entry.label} 사용`]);
+  }, [handleSelectBuildingItem, inventory, quickSlots]);
+
   const handleSceneReady = useCallback((scene: GameWorldScene) => { sceneRef.current = scene; }, []);
   const handleInputChange = useCallback((input: GameSceneInput) => { inputRef.current = input; }, []);
   const objectiveText = useMemo(() => selectedBuildingItemId ? "배치 모드입니다. 설치할 필드 위치를 클릭하세요." : "타일마다 다른 자원과 몬스터가 배치됩니다.", [selectedBuildingItemId]);
@@ -426,14 +449,15 @@ export function GameClientTileDemo() {
     });
   }, []);
 
-  const openInventoryMenu = useCallback(() => {
-    setActiveMenuTab("inventory");
-    setMenuOpen(true);
+  const openInventoryPanel = useCallback(() => {
+    setInventoryOpen((value) => !value);
+    setMenuOpen(false);
   }, []);
 
   const openCraftingMenu = useCallback(() => {
     setActiveMenuTab("crafting");
     setMenuOpen(true);
+    setInventoryOpen(false);
   }, []);
 
   const activeMenuContent = useMemo<ReactNode>(() => {
@@ -442,8 +466,6 @@ export function GameClientTileDemo() {
         return <CharacterPanel nickname={nickname} connectionState="offline-demo" serverEndpoint="tile-demo" snapshot={snapshot} />;
       case "objective":
         return <p className="feature-panel__hint">{objectiveText}</p>;
-      case "inventory":
-        return <InventoryPanel inventory={inventory} selectedBuildingItemId={selectedBuildingItemId} onSelectBuildingItem={handleSelectBuildingItem} />;
       case "equipment":
         return <EquipmentPanel inventory={inventory} />;
       case "crafting":
@@ -466,17 +488,17 @@ export function GameClientTileDemo() {
       default:
         return null;
     }
-  }, [activeMenuTab, chatLines, handleCraft, handleCraftBuildingItem, handleSelectBuildingItem, inventory, nickname, objectiveText, selectedBuilding, selectedBuildingItemId, snapshot]);
+  }, [activeMenuTab, chatLines, handleCraft, handleCraftBuildingItem, inventory, nickname, objectiveText, selectedBuilding, snapshot]);
 
   return (
     <main className={`game-shell ${selectedBuildingItemId ? "game-shell--placing" : ""}`}>
       <GameScene onReady={handleSceneReady} onInputChange={handleInputChange} onInteract={handleDemoInteract} onWorldClick={handleWorldClick} placementBuildingType={placementBuildingType} />
       <section className="game-hud" aria-label="Game HUD">
-        <button className="hud-menu-button" onClick={() => setMenuOpen((value) => !value)} aria-expanded={menuOpen}>
+        <button className="hud-menu-button" onClick={() => { setMenuOpen((value) => !value); setInventoryOpen(false); }} aria-expanded={menuOpen}>
           ☰ 메뉴
         </button>
 
-        <FloatingQuickButton id="inventory" onOpen={openInventoryMenu} />
+        <FloatingQuickButton id="inventory" onOpen={openInventoryPanel} />
         <FloatingQuickButton id="crafting" onOpen={openCraftingMenu} />
 
         <section className={`hud-minimap hud-minimap--${minimapSize}`} aria-label="미니맵">
@@ -485,6 +507,19 @@ export function GameClientTileDemo() {
           </button>
           <MiniMapPanel snapshot={snapshot} localPlayerId={demoPlayerId} />
         </section>
+
+        {inventoryOpen ? (
+          <section className="inventory-overlay-panel" aria-label="인벤토리">
+            <button className="inventory-overlay-panel__close" onClick={() => setInventoryOpen(false)} aria-label="인벤토리 닫기">×</button>
+            <InventoryGridPanel
+              inventory={inventory}
+              quickSlots={quickSlots}
+              selectedBuildingItemId={selectedBuildingItemId}
+              onSelectBuildingItem={handleSelectBuildingItem}
+              onAssignQuickSlot={handleAssignQuickSlot}
+            />
+          </section>
+        ) : null}
 
         {menuOpen ? (
           <section className="hud-menu-panel" aria-label="게임 메뉴">
@@ -507,6 +542,7 @@ export function GameClientTileDemo() {
           </section>
         ) : null}
 
+        <QuickSlotBar inventory={inventory} quickSlots={quickSlots} onUseQuickSlot={handleUseQuickSlot} onClearQuickSlot={handleClearQuickSlot} />
         <MobileControls onInputChange={handleInputChange} onInteract={handleDemoInteract} />
       </section>
     </main>
