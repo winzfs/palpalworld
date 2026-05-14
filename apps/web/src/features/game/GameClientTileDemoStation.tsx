@@ -2,16 +2,18 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent, type ReactNode } from "react";
 import type { BuildingState, BuildingType, CreaturePublicState, Direction, InventoryState, ResourceNodeState, Vector2, WorldSnapshot } from "@palpalworld/shared";
+import { BuildingInteractionPanel } from "../buildings/BuildingInteractionPanel";
 import { CharacterPanel } from "../character/CharacterPanel";
 import { CraftingPanel } from "../crafting/CraftingPanel";
 import { getBuildingItemId, getCraftingStationByBuildingType, getProgressionBuilding, getProgressionBuildingByItemId, getProgressionRecipe } from "../crafting/progressionCatalog";
 import { EquipmentPanel } from "../equipment/EquipmentPanel";
+import { isEquippableItemId } from "../equipment/equipmentRules";
 import { InventoryGridPanel } from "../inventory/InventoryGridPanel";
 import { QuickSlotBar } from "../inventory/QuickSlotBar";
+import { addInventoryStack, readStoredInventory, removeInventoryStack, writeStoredInventory } from "../inventory/inventoryStore";
 import { findInventoryEntryByKey } from "../inventory/inventoryUiModel";
 import { getItemLabel } from "../items/itemLabels";
 import { LogPanel } from "../logs/LogPanel";
-import { BuildingInteractionPanel } from "../buildings/BuildingInteractionPanel";
 import { MiniMapPanel } from "../world/MiniMapPanel";
 import { DEFAULT_PLAYER_TILE, clampPositionToTile, type MapTileRef } from "../../../../../packages/shared/src/worldTiles";
 import { createTileBasedDemoBuildings, createTileBasedDemoCreatures, createTileBasedDemoResources } from "./demoWorldSpawns";
@@ -127,12 +129,21 @@ function createDemoInventory(): InventoryState {
   };
 }
 
-function addInventoryItem(inventory: InventoryState, itemId: string, amount: number): InventoryState {
-  const items = inventory.items.map((item) => ({ ...item }));
-  const existing = items.find((item) => item.itemId === itemId);
-  if (existing) existing.amount += amount;
-  else items.push({ itemId, amount });
-  return { ...inventory, items: items.filter((item) => item.amount > 0) };
+function addCraftedItem(inventory: InventoryState, itemId: string, amount: number): InventoryState {
+  if (!isEquippableItemId(itemId)) return addInventoryStack(inventory, itemId, amount);
+  const instances = [...inventory.itemInstances];
+  for (let index = 0; index < amount; index += 1) {
+    instances.push({
+      instanceId: `crafted-${itemId}-${Date.now()}-${Math.floor(Math.random() * 1_000_000)}-${index}`,
+      itemId,
+      ownerPlayerId: inventory.ownerPlayerId,
+      level: 1,
+      durability: 100,
+      traitIds: [],
+      locked: false,
+    });
+  }
+  return { ...inventory, itemInstances: instances };
 }
 
 function consumeInventoryItems(inventory: InventoryState, requirements: { itemId: string; amount: number }[]): InventoryState | null {
@@ -140,12 +151,7 @@ function consumeInventoryItems(inventory: InventoryState, requirements: { itemId
     const owned = inventory.items.find((item) => item.itemId === requirement.itemId)?.amount ?? 0;
     if (owned < requirement.amount) return null;
   }
-  const items = inventory.items.map((item) => ({ ...item }));
-  for (const requirement of requirements) {
-    const existing = items.find((item) => item.itemId === requirement.itemId);
-    if (existing) existing.amount -= requirement.amount;
-  }
-  return { ...inventory, items: items.filter((item) => item.amount > 0) };
+  return requirements.reduce((next, requirement) => removeInventoryStack(next, requirement.itemId, requirement.amount), inventory);
 }
 
 function findNearestResource(resources: ResourceNodeState[], position: Vector2, maxRange = 180) {
@@ -219,10 +225,22 @@ export function GameClientTileDemoStation() {
   const selectedPlacementBuilding = useMemo(() => selectedBuildingItemId ? getProgressionBuildingByItemId(selectedBuildingItemId) : null, [selectedBuildingItemId]);
   const placementBuildingType = selectedPlacementBuilding?.type as BuildingType | undefined;
   const selectedStation = selectedStationBuilding ? getCraftingStationByBuildingType(String(selectedStationBuilding.type)) : null;
-
   const getCurrentResources = useCallback(() => getAliveTileResources(demoTileIndexRef.current, demoTileRef.current), []);
   const getCurrentCreatures = useCallback(() => getAliveTileCreatures(demoTileIndexRef.current, demoTileRef.current), []);
   const getCurrentBuildings = useCallback(() => getTileBuildings(demoTileIndexRef.current, demoTileRef.current), []);
+
+  const commitInventory = useCallback((nextInventory: InventoryState) => {
+    const stored = writeStoredInventory(nextInventory);
+    setInventory(stored);
+    return stored;
+  }, []);
+
+  const updateInventory = useCallback((updater: (current: InventoryState) => InventoryState) => {
+    setInventory((current) => {
+      const base = current ?? readStoredInventory(createDemoInventory());
+      return writeStoredInventory(updater(base));
+    });
+  }, []);
 
   const applyDemoSnapshot = useCallback((forceUiUpdate = false) => {
     const nextSnapshot = createDemoSnapshot(nickname, demoPositionRef.current, demoDirectionRef.current, demoTileRef.current, getCurrentResources(), getCurrentCreatures(), getCurrentBuildings());
@@ -242,7 +260,16 @@ export function GameClientTileDemoStation() {
 
   useEffect(() => {
     setNickname(createClientNickname());
-    setInventory(createDemoInventory());
+    commitInventory(readStoredInventory(createDemoInventory()));
+  }, [commitInventory]);
+
+  useEffect(() => {
+    const handleInventoryChanged = (event: Event) => {
+      const customEvent = event as CustomEvent<{ inventory?: InventoryState }>;
+      if (customEvent.detail?.inventory) setInventory(customEvent.detail.inventory);
+    };
+    window.addEventListener("palpalworld:inventory-changed", handleInventoryChanged);
+    return () => window.removeEventListener("palpalworld:inventory-changed", handleInventoryChanged);
   }, []);
 
   useEffect(() => {
@@ -274,10 +301,10 @@ export function GameClientTileDemoStation() {
     }
     const gainAmount = resource.resourceType === "berry" ? 4 : resource.resourceType === "fiber" ? 5 : resource.resourceType === "ore" || resource.resourceType === "coal" ? 4 : 8;
     resource.remainingAmount = Math.max(0, resource.remainingAmount - 25);
-    setInventory((current) => addInventoryItem(current ?? createDemoInventory(), resource.resourceType, gainAmount));
+    updateInventory((current) => addInventoryStack(current, resource.resourceType, gainAmount));
     setChatLines((prev) => [...prev.slice(-5), `[demo] ${getItemLabel(resource.resourceType)} ${gainAmount}개 획득`]);
     applyDemoSnapshot(true);
-  }, [applyDemoSnapshot, getCurrentResources]);
+  }, [applyDemoSnapshot, getCurrentResources, updateInventory]);
 
   const handleDemoAttack = useCallback(() => {
     const now = performance.now();
@@ -290,13 +317,13 @@ export function GameClientTileDemoStation() {
     }
     target.hp = Math.max(0, target.hp - 18);
     if (target.hp <= 0) {
-      setInventory((current) => addInventoryItem(current ?? createDemoInventory(), "pal_essence", 1));
+      updateInventory((current) => addInventoryStack(current, "pal_essence", 1));
       setChatLines((prev) => [...prev.slice(-5), `[demo] ${target.speciesId} 처치! 펄 정수 획득`]);
     } else {
       setChatLines((prev) => [...prev.slice(-5), `[demo] ${target.speciesId}에게 18 피해`]);
     }
     applyDemoSnapshot(true);
-  }, [applyDemoSnapshot, getCurrentCreatures]);
+  }, [applyDemoSnapshot, getCurrentCreatures, updateInventory]);
 
   useEffect(() => {
     let animationFrame = 0;
@@ -319,34 +346,32 @@ export function GameClientTileDemoStation() {
       setChatLines((prev) => [...prev.slice(-5), `[demo] 알 수 없는 제작법: ${recipeId}`]);
       return;
     }
-    setInventory((current) => {
-      const base = current ?? createDemoInventory();
-      const consumed = consumeInventoryItems(base, recipe.inputs);
+    updateInventory((current) => {
+      const consumed = consumeInventoryItems(current, recipe.inputs);
       if (!consumed) {
         setChatLines((prev) => [...prev.slice(-5), `[demo] ${recipe.name} 재료 부족`]);
-        return base;
+        return current;
       }
-      const crafted = recipe.outputs.reduce((next, output) => addInventoryItem(next, output.itemId, output.amount), consumed);
+      const crafted = recipe.outputs.reduce((next, output) => addCraftedItem(next, output.itemId, output.amount), consumed);
       setChatLines((prev) => [...prev.slice(-5), `[demo] ${recipe.name} 제작 완료`]);
       return crafted;
     });
-  }, []);
+  }, [updateInventory]);
 
   const handleCraftBuildingItem = useCallback((buildingType: string) => {
     const building = getProgressionBuilding(buildingType);
     if (!building) return;
     const itemId = getBuildingItemId(building.type);
-    setInventory((current) => {
-      const base = current ?? createDemoInventory();
-      const consumed = consumeInventoryItems(base, building.requires);
+    updateInventory((current) => {
+      const consumed = consumeInventoryItems(current, building.requires);
       if (!consumed) {
         setChatLines((prev) => [...prev.slice(-5), `[demo] ${building.name} 재료 부족`]);
-        return base;
+        return current;
       }
       setChatLines((prev) => [...prev.slice(-5), `[demo] ${building.name} 제작 완료`]);
-      return addInventoryItem(consumed, itemId, 1);
+      return addInventoryStack(consumed, itemId, 1);
     });
-  }, []);
+  }, [updateInventory]);
 
   const handleSelectBuildingItem = useCallback((itemId: string) => {
     const building = getProgressionBuildingByItemId(itemId);
@@ -383,10 +408,9 @@ export function GameClientTileDemoStation() {
       setChatLines((prev) => [...prev.slice(-5), `[build] ${target.validity.reason}`]);
       return;
     }
-    setInventory((current) => {
-      const base = current ?? createDemoInventory();
-      const consumed = consumeInventoryItems(base, [{ itemId: selectedBuildingItemId, amount: 1 }]);
-      if (!consumed) return base;
+    updateInventory((current) => {
+      const consumed = consumeInventoryItems(current, [{ itemId: selectedBuildingItemId, amount: 1 }]);
+      if (!consumed) return current;
       const placedBuilding: BuildingState = {
         id: createPlacedBuildingId(building.type),
         type: building.type as BuildingType,
@@ -406,7 +430,7 @@ export function GameClientTileDemoStation() {
       applyDemoSnapshot(true);
       return consumed;
     });
-  }, [applyDemoSnapshot, selectedBuildingItemId]);
+  }, [applyDemoSnapshot, selectedBuildingItemId, updateInventory]);
 
   const handleAssignQuickSlot = useCallback((slotIndex: number, entryKey: string | null) => {
     setQuickSlots((current) => current.map((slot, index) => index === slotIndex ? entryKey : slot));
@@ -429,23 +453,9 @@ export function GameClientTileDemoStation() {
   const handleSceneReady = useCallback((scene: GameWorldScene) => { sceneRef.current = scene; }, []);
   const handleInputChange = useCallback((input: GameSceneInput) => { inputRef.current = input; }, []);
   const objectiveText = useMemo(() => selectedBuildingItemId ? "배치 모드입니다. 설치할 필드 위치를 클릭하세요." : "타일마다 다른 자원과 몬스터가 배치됩니다.", [selectedBuildingItemId]);
-
-  const cycleMinimapSize = useCallback(() => {
-    setMinimapSize((current) => minimapSizes[(minimapSizes.indexOf(current) + 1) % minimapSizes.length]);
-  }, []);
-
-  const openInventoryPanel = useCallback(() => {
-    setInventoryOpen((value) => !value);
-    setMenuOpen(false);
-    setSelectedStationBuilding(null);
-  }, []);
-
-  const openCraftingMenu = useCallback(() => {
-    setActiveMenuTab("crafting");
-    setMenuOpen(true);
-    setInventoryOpen(false);
-    setSelectedStationBuilding(null);
-  }, []);
+  const cycleMinimapSize = useCallback(() => setMinimapSize((current) => minimapSizes[(minimapSizes.indexOf(current) + 1) % minimapSizes.length]), []);
+  const openInventoryPanel = useCallback(() => { setInventoryOpen((value) => !value); setMenuOpen(false); setSelectedStationBuilding(null); }, []);
+  const openCraftingMenu = useCallback(() => { setActiveMenuTab("crafting"); setMenuOpen(true); setInventoryOpen(false); setSelectedStationBuilding(null); }, []);
 
   const activeMenuContent = useMemo<ReactNode>(() => {
     switch (activeMenuTab) {
@@ -461,6 +471,8 @@ export function GameClientTileDemoStation() {
         return selectedBuilding ? (
           <BuildingInteractionPanel
             building={selectedBuilding}
+            inventory={inventory}
+            onInventoryChange={commitInventory}
             onClose={() => setSelectedBuilding(null)}
             onOpenCrafting={() => {
               const station = getCraftingStationByBuildingType(String(selectedBuilding.type));
@@ -478,29 +490,25 @@ export function GameClientTileDemoStation() {
       default:
         return null;
     }
-  }, [activeMenuTab, chatLines, handleCraft, handleCraftBuildingItem, inventory, nickname, objectiveText, selectedBuilding, snapshot]);
+  }, [activeMenuTab, chatLines, commitInventory, handleCraft, handleCraftBuildingItem, inventory, nickname, objectiveText, selectedBuilding, snapshot]);
 
   return (
     <main className={`game-shell ${selectedBuildingItemId ? "game-shell--placing" : ""}`}>
       <GameScene onReady={handleSceneReady} onInputChange={handleInputChange} onInteract={handleDemoInteract} onWorldClick={handleWorldClick} placementBuildingType={placementBuildingType} />
       <section className="game-hud" aria-label="Game HUD">
         <button className="hud-menu-button" onClick={() => { setMenuOpen((value) => !value); setInventoryOpen(false); setSelectedStationBuilding(null); }} aria-expanded={menuOpen}>☰ 메뉴</button>
-
         <FloatingQuickButton id="inventory" onOpen={openInventoryPanel} />
         <FloatingQuickButton id="crafting" onOpen={openCraftingMenu} />
-
         <section className={`hud-minimap hud-minimap--${minimapSize}`} aria-label="미니맵">
           <button className="hud-minimap__size-button" onClick={cycleMinimapSize} aria-label="미니맵 크기 변경">{minimapSizeLabels[minimapSize]}</button>
           <MiniMapPanel snapshot={snapshot} localPlayerId={demoPlayerId} />
         </section>
-
         {inventoryOpen ? (
           <section className="inventory-overlay-panel" aria-label="인벤토리">
             <button className="inventory-overlay-panel__close" onClick={() => setInventoryOpen(false)} aria-label="인벤토리 닫기">×</button>
             <InventoryGridPanel inventory={inventory} quickSlots={quickSlots} selectedBuildingItemId={selectedBuildingItemId} onSelectBuildingItem={handleSelectBuildingItem} onAssignQuickSlot={handleAssignQuickSlot} />
           </section>
         ) : null}
-
         {selectedStationBuilding && selectedStation ? (
           <section className="station-overlay-panel" aria-label={`${selectedStation.name} 제작소`}>
             <header className="station-overlay-panel__header"><strong>{selectedStation.name}</strong><button onClick={() => setSelectedStationBuilding(null)}>닫기</button></header>
@@ -509,7 +517,6 @@ export function GameClientTileDemoStation() {
             </div>
           </section>
         ) : null}
-
         {menuOpen ? (
           <section className="hud-menu-panel" aria-label="게임 메뉴">
             <header className="hud-menu-panel__header"><strong>게임 메뉴</strong><button onClick={() => setMenuOpen(false)}>닫기</button></header>
@@ -519,7 +526,6 @@ export function GameClientTileDemoStation() {
             <div className="hud-menu-panel__body">{activeMenuContent}</div>
           </section>
         ) : null}
-
         <QuickSlotBar inventory={inventory} quickSlots={quickSlots} onUseQuickSlot={handleUseQuickSlot} onClearQuickSlot={handleClearQuickSlot} />
         <MobileControls onInputChange={handleInputChange} onInteract={handleDemoInteract} />
       </section>
@@ -537,8 +543,7 @@ function FloatingQuickButton({ id, onOpen }: { id: QuickButtonId; onOpen: () => 
       onPointerDown={(event) => { event.preventDefault(); dragRef.current = { pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, buttonX: position.x, buttonY: position.y, moved: false }; event.currentTarget.setPointerCapture(event.pointerId); }}
       onPointerMove={(event) => { const drag = dragRef.current; if (!drag || drag.pointerId !== event.pointerId) return; const dx = event.clientX - drag.startX; const dy = event.clientY - drag.startY; if (Math.hypot(dx, dy) > 4) drag.moved = true; setPosition(clampHudButtonPosition({ x: drag.buttonX + dx, y: drag.buttonY + dy })); }}
       onPointerUp={(event) => { const drag = dragRef.current; if (!drag || drag.pointerId !== event.pointerId) return; dragRef.current = null; event.currentTarget.releasePointerCapture(event.pointerId); if (!drag.moved) onOpen(); }}
-      onPointerCancel={() => { dragRef.current = null; }}
-    >
+      onPointerCancel={() => { dragRef.current = null; }}>
       <span>{config.icon}</span><small>{config.label}</small>
     </button>
   );
