@@ -1,4 +1,4 @@
-import type { BuildingState, ResourceNodeState } from "@palpalworld/shared";
+import type { BuildingState, CreaturePublicState, ResourceNodeState } from "@palpalworld/shared";
 import { PrimitiveRenderer } from "./PrimitiveRenderer";
 
 export class EnhancedPrimitiveRenderer extends PrimitiveRenderer {
@@ -12,6 +12,38 @@ export class EnhancedPrimitiveRenderer extends PrimitiveRenderer {
     else this.crystal(ctx, x, y, resource.resourceType);
     this.bar(ctx, x, y + 31, 48, ratio, "#facc15");
     this.text(ctx, `${resource.resourceType} ${resource.remainingAmount}`, x, y - 35);
+  }
+
+  override drawCreature(ctx: CanvasRenderingContext2D, creature: CreaturePublicState, x: number, y: number) {
+    const now = performance.now();
+    const seed = this.hash(creature.id);
+    const bob = Math.sin(now / 520 + seed) * 3;
+    const breathe = Math.sin(now / 330 + seed) * 2;
+    const wiggle = Math.sin(now / 210 + seed) * 3;
+    const yy = y + bob;
+
+    this.shadow(ctx, x, y + 18, 48 + Math.abs(breathe) * 2, 13);
+
+    if (creature.speciesId === "leafbun") this.leafbun(ctx, x, yy, wiggle, breathe);
+    else if (creature.speciesId === "droplet") this.droplet(ctx, x, yy, wiggle, breathe);
+    else if (creature.speciesId === "sparkit") this.sparkit(ctx, x, yy, wiggle, breathe, now);
+    else if (creature.speciesId === "rockturtle") this.rockturtle(ctx, x, yy, wiggle, breathe);
+    else if (creature.speciesId === "moleminer") this.moleminer(ctx, x, yy, wiggle, breathe);
+    else if (creature.speciesId === "mossboar") this.mossboar(ctx, x, yy, wiggle, breathe);
+    else this.genericCreature(ctx, x, yy, breathe);
+
+    if (creature.traitIds.length > 0) {
+      ctx.strokeStyle = "rgba(250, 204, 21, .9)";
+      ctx.lineWidth = 2;
+      ctx.setLineDash([5, 4]);
+      ctx.beginPath();
+      ctx.ellipse(x, yy + 2, 33, 27, 0, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+
+    this.bar(ctx, x, y + 34, 50, creature.hp / creature.maxHp, "#ef4444");
+    this.text(ctx, `${creature.speciesId} Lv.${creature.level}`, x, y - 43);
   }
 
   override drawBuilding(ctx: CanvasRenderingContext2D, building: BuildingState, x: number, y: number) {
@@ -28,6 +60,93 @@ export class EnhancedPrimitiveRenderer extends PrimitiveRenderer {
     else this.generic(ctx, x, y);
     this.bar(ctx, x, y + 40, 56, building.hp / building.maxHp, "#22c55e");
     this.text(ctx, building.type, x, y - 56);
+  }
+
+  private leafbun(ctx: CanvasRenderingContext2D, x: number, y: number, wiggle: number, breathe: number) {
+    ctx.strokeStyle = "#1f1308"; ctx.lineWidth = 3;
+    ctx.fillStyle = "#86efac";
+    ctx.beginPath(); ctx.ellipse(x - 12 + wiggle * .25, y - 27, 8, 22, -.45, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    ctx.beginPath(); ctx.ellipse(x + 12 + wiggle * .25, y - 27, 8, 22, .45, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = "#bbf7d0";
+    ctx.beginPath(); ctx.ellipse(x - 12, y - 29, 3, 13, -.45, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(x + 12, y - 29, 3, 13, .45, 0, Math.PI * 2); ctx.fill();
+    this.round(ctx, x - 23, y - 17, 46, 36 + breathe, 16, "#4ade80", "#14532d");
+    this.round(ctx, x - 18, y - 23, 36, 26, 14, "#86efac", "#14532d");
+    ctx.fillStyle = "#22c55e"; ctx.beginPath(); ctx.arc(x, y - 33, 7, 0, Math.PI * 2); ctx.fill();
+    this.face(ctx, x, y - 10); ctx.fillStyle = "#f9a8d4"; ctx.beginPath(); ctx.arc(x, y - 4, 3, 0, Math.PI * 2); ctx.fill();
+  }
+
+  private droplet(ctx: CanvasRenderingContext2D, x: number, y: number, wiggle: number, breathe: number) {
+    ctx.strokeStyle = "#075985"; ctx.lineWidth = 3;
+    const grad = ctx.createLinearGradient(x - 20, y - 30, x + 20, y + 25);
+    grad.addColorStop(0, "#bae6fd"); grad.addColorStop(.55, "#38bdf8"); grad.addColorStop(1, "#0284c7");
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.moveTo(x, y - 35 - breathe);
+    ctx.bezierCurveTo(x + 31 + wiggle, y - 8, x + 21, y + 24, x, y + 24);
+    ctx.bezierCurveTo(x - 21, y + 24, x - 31 + wiggle, y - 8, x, y - 35 - breathe);
+    ctx.fill(); ctx.stroke();
+    ctx.fillStyle = "rgba(255,255,255,.68)"; ctx.beginPath(); ctx.arc(x - 10, y - 13, 7, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = "rgba(255,255,255,.35)"; ctx.beginPath(); ctx.arc(x + 8, y + 3, 5, 0, Math.PI * 2); ctx.fill();
+    this.face(ctx, x, y - 4);
+  }
+
+  private sparkit(ctx: CanvasRenderingContext2D, x: number, y: number, wiggle: number, breathe: number, now: number) {
+    ctx.strokeStyle = "#1f1308"; ctx.lineWidth = 3;
+    this.round(ctx, x - 21, y - 18, 42, 40 + breathe, 15, "#facc15", "#1f1308");
+    ctx.fillStyle = "#f97316";
+    ctx.beginPath(); ctx.moveTo(x - 18, y - 16); ctx.lineTo(x - 37 - wiggle, y - 28); ctx.lineTo(x - 27, y - 4); ctx.closePath(); ctx.fill(); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(x + 18, y - 16); ctx.lineTo(x + 37 + wiggle, y - 28); ctx.lineTo(x + 27, y - 4); ctx.closePath(); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = "#fef08a"; ctx.beginPath(); ctx.arc(x - 7, y - 25, 6, 0, Math.PI * 2); ctx.arc(x + 8, y - 25, 6, 0, Math.PI * 2); ctx.fill();
+    this.face(ctx, x, y - 6);
+    if (Math.floor(now / 140) % 2 === 0) {
+      ctx.strokeStyle = "#fde047"; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(x + 23, y + 2); ctx.lineTo(x + 34, y - 8); ctx.lineTo(x + 29, y + 9); ctx.lineTo(x + 40, y - 2); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(x - 23, y + 2); ctx.lineTo(x - 34, y - 8); ctx.lineTo(x - 29, y + 9); ctx.lineTo(x - 40, y - 2); ctx.stroke();
+    }
+  }
+
+  private rockturtle(ctx: CanvasRenderingContext2D, x: number, y: number, wiggle: number, breathe: number) {
+    ctx.strokeStyle = "#1f2937"; ctx.lineWidth = 3;
+    ctx.fillStyle = "#64748b"; ctx.beginPath(); ctx.ellipse(x, y + 1, 34, 22 + breathe * .2, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = "#475569";
+    [[-18,-5,10],[-3,-11,12],[14,-4,11],[-3,5,9]].forEach(([ox,oy,r])=>{ctx.beginPath();ctx.arc(x+ox,y+oy,r,0,Math.PI*2);ctx.fill();ctx.stroke();});
+    this.round(ctx, x + 18, y - 12 + wiggle * .15, 22, 20, 7, "#94a3b8", "#1f2937");
+    this.face(ctx, x + 30, y - 5, .75);
+    ctx.fillStyle = "#334155"; ctx.beginPath(); ctx.arc(x - 27, y + 11, 6, 0, Math.PI * 2); ctx.arc(x + 4, y + 18, 6, 0, Math.PI * 2); ctx.fill();
+  }
+
+  private moleminer(ctx: CanvasRenderingContext2D, x: number, y: number, wiggle: number, breathe: number) {
+    ctx.strokeStyle = "#1f1308"; ctx.lineWidth = 3;
+    this.round(ctx, x - 24, y - 16, 48, 38 + breathe, 17, "#92400e", "#1f1308");
+    ctx.fillStyle = "#facc15"; ctx.beginPath(); ctx.moveTo(x - 13, y - 20); ctx.lineTo(x, y - 38 - Math.abs(wiggle)); ctx.lineTo(x + 13, y - 20); ctx.closePath(); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = "#fef3c7"; ctx.beginPath(); ctx.ellipse(x - 24 - wiggle, y + 4, 11, 6, -.15, 0, Math.PI * 2); ctx.ellipse(x + 24 + wiggle, y + 4, 11, 6, .15, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    ctx.strokeStyle = "#c2410c"; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(x - 31, y + 2); ctx.lineTo(x - 42, y - 3); ctx.moveTo(x + 31, y + 2); ctx.lineTo(x + 42, y - 3); ctx.stroke();
+    this.face(ctx, x, y - 6);
+  }
+
+  private mossboar(ctx: CanvasRenderingContext2D, x: number, y: number, wiggle: number, breathe: number) {
+    ctx.strokeStyle = "#1f1308"; ctx.lineWidth = 3;
+    ctx.fillStyle = "#166534"; ctx.beginPath(); ctx.ellipse(x, y, 36, 22 + breathe * .2, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = "#84cc16"; [[-19,-16,8],[-7,-21,9],[6,-18,8],[19,-13,7],[0,-4,6]].forEach(([ox,oy,r])=>{ctx.beginPath();ctx.arc(x+ox,y+oy,r,0,Math.PI*2);ctx.fill();});
+    ctx.fillStyle = "#fef3c7"; ctx.beginPath(); ctx.moveTo(x - 18, y + 5); ctx.lineTo(x - 35 - wiggle, y + 13); ctx.lineTo(x - 19, y + 15); ctx.closePath(); ctx.fill(); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(x + 18, y + 5); ctx.lineTo(x + 35 + wiggle, y + 13); ctx.lineTo(x + 19, y + 15); ctx.closePath(); ctx.fill(); ctx.stroke();
+    this.face(ctx, x, y - 5);
+    ctx.fillStyle = "#052e16"; ctx.beginPath(); ctx.arc(x - 18, y + 12, 5, 0, Math.PI * 2); ctx.arc(x + 18, y + 12, 5, 0, Math.PI * 2); ctx.fill();
+  }
+
+  private genericCreature(ctx: CanvasRenderingContext2D, x: number, y: number, breathe: number) {
+    this.round(ctx, x - 21, y - 18, 42, 38 + breathe, 14, "#a78bfa", "#312e81");
+    this.face(ctx, x, y - 5);
+  }
+
+  private face(ctx: CanvasRenderingContext2D, x: number, y: number, scale = 1) {
+    ctx.fillStyle = "#fff7df";
+    ctx.fillRect(x - 9 * scale, y - 5 * scale, 5 * scale, 5 * scale);
+    ctx.fillRect(x + 5 * scale, y - 5 * scale, 5 * scale, 5 * scale);
+    ctx.fillStyle = "#1f1308";
+    ctx.fillRect(x - 7.5 * scale, y - 3.5 * scale, 2.5 * scale, 2.5 * scale);
+    ctx.fillRect(x + 6.5 * scale, y - 3.5 * scale, 2.5 * scale, 2.5 * scale);
   }
 
   private tree(ctx: CanvasRenderingContext2D, x: number, y: number, hard: boolean) {
@@ -79,7 +198,9 @@ export class EnhancedPrimitiveRenderer extends PrimitiveRenderer {
 
   private diamond(ctx:CanvasRenderingContext2D,x:number,y:number,w:number,h:number){ctx.beginPath();ctx.moveTo(x,y-h/2);ctx.lineTo(x+w/2,y);ctx.lineTo(x,y+h/2);ctx.lineTo(x-w/2,y);ctx.closePath();ctx.fill();ctx.stroke();}
   private rect(ctx:CanvasRenderingContext2D,x:number,y:number,w:number,h:number,r:number,fill:string,stroke:string){ctx.fillStyle=fill;ctx.strokeStyle=stroke;ctx.lineWidth=3;ctx.beginPath();ctx.roundRect(x,y,w,h,r);ctx.fill();ctx.stroke();}
+  private round(ctx:CanvasRenderingContext2D,x:number,y:number,w:number,h:number,r:number,fill:string,stroke:string){this.rect(ctx,x,y,w,h,r,fill,stroke);}
   private shadow(ctx:CanvasRenderingContext2D,x:number,y:number,w:number,h:number){ctx.fillStyle="rgba(0,0,0,.26)";ctx.beginPath();ctx.ellipse(x,y,w/2,h/2,0,0,Math.PI*2);ctx.fill();}
   private bar(ctx:CanvasRenderingContext2D,x:number,y:number,w:number,ratio:number,fill:string){const r=Math.max(0,Math.min(1,ratio));ctx.fillStyle="rgba(0,0,0,.55)";ctx.fillRect(x-w/2,y,w,5);ctx.fillStyle=fill;ctx.fillRect(x-w/2,y,w*r,5);}
   private text(ctx:CanvasRenderingContext2D,text:string,x:number,y:number){ctx.font="12px system-ui";ctx.textAlign="center";ctx.lineWidth=3;ctx.strokeStyle="rgba(0,0,0,.75)";ctx.strokeText(text,x,y);ctx.fillStyle="#fff";ctx.fillText(text,x,y);}
+  private hash(text:string){let h=0;for(let i=0;i<text.length;i++)h=(h*31+text.charCodeAt(i))%9973;return h;}
 }
