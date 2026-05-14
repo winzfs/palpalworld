@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { BuildingState, InventoryState, ItemStack } from "@palpalworld/shared";
 import { getCraftingStationByBuildingType, getProgressionBuilding, type CraftingStationId } from "../crafting/progressionCatalog";
+import { addInventoryStack, createFallbackInventory, getInventoryAmount, readStoredInventory, removeInventoryStack, writeStoredInventory } from "../inventory/inventoryStore";
 import { StorageBoxPanel } from "../storage/StorageBoxPanel";
 import { addStorageStack, readStorageBoxItems, removeStorageStack, writeStorageBoxItems } from "../storage/storageStore";
 
@@ -43,33 +44,6 @@ function getBuildingAction(buildingType: string) {
   }
 }
 
-function addStack(stacks: ItemStack[], itemId: string, amount: number) {
-  const next = stacks.map((stack) => ({ ...stack }));
-  const existing = next.find((stack) => stack.itemId === itemId);
-  if (existing) existing.amount += amount;
-  else next.push({ itemId, amount });
-  return next.filter((stack) => stack.amount > 0);
-}
-
-function removeStack(stacks: ItemStack[], itemId: string, amount: number) {
-  return stacks
-    .map((stack) => stack.itemId === itemId ? { ...stack, amount: Math.max(0, stack.amount - amount) } : { ...stack })
-    .filter((stack) => stack.amount > 0);
-}
-
-function createFallbackInventory(): InventoryState {
-  return {
-    ownerPlayerId: "demo-player",
-    items: [
-      { itemId: "wood", amount: 30 },
-      { itemId: "stone", amount: 24 },
-      { itemId: "fiber", amount: 18 },
-      { itemId: "berry", amount: 10 },
-    ],
-    itemInstances: [],
-  };
-}
-
 export function BuildingInteractionPanel({
   building,
   inventory,
@@ -83,9 +57,22 @@ export function BuildingInteractionPanel({
   onClose: () => void;
   onOpenCrafting?: (stationId: CraftingStationId) => void;
 }) {
-  const [fallbackInventory, setFallbackInventory] = useState<InventoryState>(() => createFallbackInventory());
+  const [activeInventory, setActiveInventory] = useState<InventoryState>(() => readStoredInventory(inventory ?? createFallbackInventory()));
   const [storageItems, setStorageItems] = useState<ItemStack[]>(() => readStorageBoxItems(building));
-  const activeInventory = inventory ?? fallbackInventory;
+
+  useEffect(() => {
+    if (inventory) setActiveInventory(writeStoredInventory(inventory));
+  }, [inventory]);
+
+  useEffect(() => {
+    const handleInventoryChanged = (event: Event) => {
+      const customEvent = event as CustomEvent<{ inventory?: InventoryState }>;
+      if (customEvent.detail?.inventory) setActiveInventory(customEvent.detail.inventory);
+      else setActiveInventory(readStoredInventory(inventory ?? createFallbackInventory()));
+    };
+    window.addEventListener("palpalworld:inventory-changed", handleInventoryChanged);
+    return () => window.removeEventListener("palpalworld:inventory-changed", handleInventoryChanged);
+  }, [inventory]);
 
   useEffect(() => {
     setStorageItems(readStorageBoxItems(building));
@@ -100,15 +87,16 @@ export function BuildingInteractionPanel({
   const isStorage = building.type === "storage_box" || building.type === "cold_storage";
 
   const updateInventory = (nextInventory: InventoryState) => {
-    if (onInventoryChange) onInventoryChange(nextInventory);
-    else setFallbackInventory(nextInventory);
+    const storedInventory = writeStoredInventory(nextInventory);
+    setActiveInventory(storedInventory);
+    onInventoryChange?.(storedInventory);
   };
 
   const handleDeposit = (itemId: string, amount: number) => {
-    const owned = activeInventory.items.find((item) => item.itemId === itemId)?.amount ?? 0;
+    const owned = getInventoryAmount(activeInventory, itemId);
     const nextAmount = Math.min(amount, owned);
     if (nextAmount <= 0) return;
-    updateInventory({ ...activeInventory, items: removeStack(activeInventory.items, itemId, nextAmount) });
+    updateInventory(removeInventoryStack(activeInventory, itemId, nextAmount));
     setStorageItems((current) => {
       const next = addStorageStack(current, itemId, nextAmount);
       writeStorageBoxItems(building, next);
@@ -125,7 +113,7 @@ export function BuildingInteractionPanel({
       writeStorageBoxItems(building, next);
       return next;
     });
-    updateInventory({ ...activeInventory, items: addStack(activeInventory.items, itemId, nextAmount) });
+    updateInventory(addInventoryStack(activeInventory, itemId, nextAmount));
   };
 
   return (
