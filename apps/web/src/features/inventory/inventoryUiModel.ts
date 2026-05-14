@@ -3,7 +3,7 @@ import { getIconAsset } from "../assets/assetCatalog";
 import { getProgressionBuildingByItemId, isBuildingItemId } from "../crafting/progressionCatalog";
 import { getItemLabel } from "../items/itemLabels";
 
-export type InventoryCategory = "general" | "equipment" | "crafting" | "building";
+export type InventoryCategory = "general" | "usable" | "material" | "equipment" | "building";
 export type InventoryEntryKind = "stack" | "instance";
 
 export type InventoryEntry = {
@@ -23,12 +23,13 @@ export type InventoryEntry = {
 
 export const inventoryCategoryLabels: Record<InventoryCategory, string> = {
   general: "일반",
+  usable: "사용",
+  material: "재료",
   equipment: "장비",
-  crafting: "제작",
   building: "건설",
 };
 
-const craftingItemIds = new Set([
+const materialItemIds = new Set([
   "wood",
   "hardwood",
   "stone",
@@ -73,7 +74,8 @@ const usableItemIds = new Set([
 export function getInventoryEntryCategory(itemId: string, kind: InventoryEntryKind): InventoryCategory {
   if (kind === "instance" || equipmentItemIds.has(itemId)) return "equipment";
   if (isBuildingItemId(itemId)) return "building";
-  if (craftingItemIds.has(itemId)) return "crafting";
+  if (usableItemIds.has(itemId)) return "usable";
+  if (materialItemIds.has(itemId)) return "material";
   return "general";
 }
 
@@ -87,13 +89,13 @@ export function getInventoryItemLabel(itemId: string) {
 export function getInventoryItemDescription(entry: InventoryEntry) {
   if (entry.category === "building") return "필드에 배치할 수 있는 건설 아이템입니다. 선택하면 배치 모드로 전환됩니다.";
   if (entry.category === "equipment") return "장착하거나 퀵슬롯에 등록해 빠르게 사용할 수 있는 장비입니다.";
-  if (entry.category === "crafting") return "제작과 건설에 사용되는 재료입니다.";
-  if (usableItemIds.has(entry.itemId)) return "퀵슬롯에 등록해 빠르게 사용할 수 있는 소비/사용 아이템입니다.";
+  if (entry.category === "usable") return "음식, 회복 아이템, 포획구처럼 즉시 사용할 수 있는 아이템입니다. 퀵슬롯에 등록할 수 있습니다.";
+  if (entry.category === "material") return "제작과 건설에 사용되는 재료입니다. 직접 사용하지 않고 제작식에서 소모됩니다.";
   return "가방에 보관된 일반 아이템입니다.";
 }
 
-export function isQuickSlotEligible(itemId: string, category: InventoryCategory) {
-  return category === "equipment" || usableItemIds.has(itemId);
+export function isQuickSlotEligible(_itemId: string, category: InventoryCategory) {
+  return category === "equipment" || category === "usable" || category === "building";
 }
 
 export function buildInventoryEntries(inventory: InventoryState | null): InventoryEntry[] {
