@@ -5,6 +5,7 @@ import {
   WORLD,
   type BuildingState,
   type BuildingType,
+  type CreaturePublicState,
   type EntityId,
   type ResourceNodeState,
   type Vector2,
@@ -39,7 +40,8 @@ export type PlacementValidity = {
 
 export type WorldClickTarget =
   | { kind: "field"; position: Vector2; validity: PlacementValidity }
-  | { kind: "building"; building: BuildingState };
+  | { kind: "building"; building: BuildingState }
+  | { kind: "creature"; creature: CreaturePublicState };
 
 type ViewportBounds = {
   left: number;
@@ -146,6 +148,7 @@ export class GameWorldScene {
   private localEquippedWeaponItemId: string | null = null;
   private pointerWorldPosition: Vector2 | null = null;
   private hoverBuildingId: string | null = null;
+  private hoverCreatureId: string | null = null;
   private placementPreviewBuildingType: BuildingType | null = null;
   private onInputChange: (input: GameSceneInput) => void;
   private onInteract: () => void;
@@ -256,6 +259,17 @@ export class GameWorldScene {
     return nearest;
   }
 
+  private getCreatureAt(position: Vector2) {
+    let nearest: CreaturePublicState | null = null;
+    let nearestDistance = Number.POSITIVE_INFINITY;
+    for (const creature of this.getSceneCreatures()) {
+      if (creature.hp <= 0) continue;
+      const hitDistance = distance(creature.position, position);
+      if (hitDistance <= 46 && hitDistance < nearestDistance) { nearest = creature; nearestDistance = hitDistance; }
+    }
+    return nearest;
+  }
+
   private getCameraOffset() {
     const rect = this.root.getBoundingClientRect();
     const localPlayer = this.getLocalPlayer();
@@ -288,6 +302,8 @@ export class GameWorldScene {
     const position = this.screenToWorld(event.clientX, event.clientY);
     this.pointerWorldPosition = position;
     if (!this.placementPreviewBuildingType) {
+      const creature = this.getCreatureAt(position);
+      if (creature) { this.onWorldClick({ kind: "creature", creature }); return; }
       const building = this.getBuildingAt(position);
       if (building) { this.onWorldClick({ kind: "building", building }); return; }
     }
@@ -297,11 +313,12 @@ export class GameWorldScene {
   private handlePointerMove = (event: PointerEvent) => {
     const position = this.screenToWorld(event.clientX, event.clientY);
     this.pointerWorldPosition = position;
-    this.hoverBuildingId = this.placementPreviewBuildingType ? null : this.getBuildingAt(position)?.id ?? null;
-    if (!this.placementPreviewBuildingType) this.canvas.style.cursor = this.hoverBuildingId ? "pointer" : "default";
+    this.hoverCreatureId = this.placementPreviewBuildingType ? null : this.getCreatureAt(position)?.id ?? null;
+    this.hoverBuildingId = this.placementPreviewBuildingType || this.hoverCreatureId ? null : this.getBuildingAt(position)?.id ?? null;
+    if (!this.placementPreviewBuildingType) this.canvas.style.cursor = this.hoverCreatureId || this.hoverBuildingId ? "pointer" : "default";
   };
 
-  private handlePointerLeave = () => { this.pointerWorldPosition = null; this.hoverBuildingId = null; if (!this.placementPreviewBuildingType) this.canvas.style.cursor = "default"; };
+  private handlePointerLeave = () => { this.pointerWorldPosition = null; this.hoverBuildingId = null; this.hoverCreatureId = null; if (!this.placementPreviewBuildingType) this.canvas.style.cursor = "default"; };
 
   private handleKeyDown = (event: KeyboardEvent) => {
     const key = event.key.toLowerCase();
@@ -380,7 +397,17 @@ export class GameWorldScene {
   }
 
   private drawResources(ctx: CanvasRenderingContext2D, cameraX: number, cameraY: number, viewport: ViewportBounds) { for (const resource of this.getSceneResources()) if (isPositionInViewport(resource.position, viewport)) this.renderer.drawResource(ctx, resource, resource.position.x - cameraX, resource.position.y - cameraY); }
-  private drawCreatures(ctx: CanvasRenderingContext2D, cameraX: number, cameraY: number, viewport: ViewportBounds) { for (const creature of this.getSceneCreatures()) if (isPositionInViewport(creature.position, viewport)) this.renderer.drawCreature(ctx, creature, creature.position.x - cameraX, creature.position.y - cameraY); }
+  private drawCreatures(ctx: CanvasRenderingContext2D, cameraX: number, cameraY: number, viewport: ViewportBounds) {
+    for (const creature of this.getSceneCreatures()) {
+      if (!isPositionInViewport(creature.position, viewport)) continue;
+      const x = creature.position.x - cameraX;
+      const y = creature.position.y - cameraY;
+      this.renderer.drawCreature(ctx, creature, x, y);
+      if (creature.id === this.hoverCreatureId) {
+        ctx.save(); ctx.strokeStyle = "rgba(74, 222, 128, 0.95)"; ctx.lineWidth = 2; ctx.beginPath(); ctx.ellipse(x, y + 22, 26, 10, 0, 0, Math.PI * 2); ctx.stroke(); ctx.restore();
+      }
+    }
+  }
 
   private drawPlayers(ctx: CanvasRenderingContext2D, cameraX: number, cameraY: number, now: number, viewport: ViewportBounds) {
     if (!this.snapshot) return;
