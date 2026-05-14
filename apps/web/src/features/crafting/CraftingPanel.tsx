@@ -3,7 +3,6 @@ import type { InventoryState } from "@palpalworld/shared";
 import { getIconAsset } from "../assets/assetCatalog";
 import { getItemLabel } from "../items/itemLabels";
 import {
-  CRAFTING_STATIONS,
   getBuildableBuildingsByStation,
   getBuildingItemId,
   getCraftingStation,
@@ -114,7 +113,7 @@ function CraftQueueView({
             return (
               <div key={job.id} className="crafting-card crafting-card--queue">
                 <div className="crafting-card__main">
-                  <CraftIcon itemId={job.kind === "building" ? job.targetId : job.targetId} />
+                  <CraftIcon itemId={job.targetId} />
                   <span className="crafting-card__text">
                     <b>{job.name}</b>
                     <span>{job.outputsLabel}</span>
@@ -235,7 +234,7 @@ function StationCraftingSection({
                         <RequirementList inventory={inventory} stacks={building.requires} />
                         <button
                           className="crafting-card__button"
-                          onClick={() => onStartJob({ stationId: station.id, kind: "building", targetId: building.type, name: building.name, outputsLabel }, 2000)}
+                          onClick={() => onStartJob({ stationId: station.id, kind: "building", targetId: building.type, name: building.name, outputsLabel }, building.craftTimeMs)}
                           disabled={!affordable || queueFull}
                         >
                           제작
@@ -268,10 +267,10 @@ export function CraftingPanel({
 }) {
   const [now, setNow] = useState(() => Date.now());
   const [queueState, setQueueState] = useState<CraftQueueState>({});
-  const stations = useMemo(
-    () => stationId ? [getCraftingStation(stationId)].filter(Boolean) as CraftingStationDefinition[] : CRAFTING_STATIONS,
-    [stationId],
-  );
+  const stations = useMemo(() => {
+    const targetStation = getCraftingStation(stationId ?? "hand");
+    return targetStation ? [targetStation] : [];
+  }, [stationId]);
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 250);
@@ -314,7 +313,7 @@ export function CraftingPanel({
     <div className={compact ? "feature-panel feature-panel--crafting feature-panel--crafting-compact" : "feature-panel feature-panel--crafting"}>
       {!compact ? (
         <div className="feature-panel__hint">
-          제작은 제작소 데이터 기준으로 자동 분류됩니다. 제작 버튼을 누르면 큐에 등록되고 완료 후 수령할 수 있습니다.
+          손 제작은 건설물 없이 가능한 기본 제작만 표시합니다. 작업대, 모닥불, 화로 등은 설치 후 해당 건물을 상호작용해야 전용 제작 목록이 열립니다.
         </div>
       ) : null}
       {stations.map((station) => (
