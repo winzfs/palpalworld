@@ -26,7 +26,6 @@ type QuickButtonId = "inventory" | "crafting";
 
 const demoPlayerId = "demo-player";
 const joystickRadius = 56;
-const uiSnapshotIntervalMs = 250;
 const quickSlotCount = 5;
 const menuTabs: { id: MenuTab; label: string }[] = [
   { id: "status", label: "캐릭터" },
@@ -220,7 +219,6 @@ export function GameClientTileDemoStation() {
   const demoBuildingsRef = useRef<BuildingState[]>(createTileBasedDemoBuildings());
   const demoTileIndexRef = useRef(createDemoTileIndex(demoResourcesRef.current, demoCreaturesRef.current, demoBuildingsRef.current));
   const lastDemoAttackAtRef = useRef(0);
-  const lastUiSnapshotAtRef = useRef(0);
 
   const selectedPlacementBuilding = useMemo(() => selectedBuildingItemId ? getProgressionBuildingByItemId(selectedBuildingItemId) : null, [selectedBuildingItemId]);
   const placementBuildingType = selectedPlacementBuilding?.type as BuildingType | undefined;
@@ -251,11 +249,7 @@ export function GameClientTileDemoStation() {
       demoPositionRef.current.x = player.position.x;
       demoPositionRef.current.y = player.position.y;
     }
-    const now = performance.now();
-    if (forceUiUpdate || now - lastUiSnapshotAtRef.current >= uiSnapshotIntervalMs) {
-      lastUiSnapshotAtRef.current = now;
-      setSnapshot(nextSnapshot);
-    }
+    if (forceUiUpdate) setSnapshot(nextSnapshot);
   }, [getCurrentBuildings, getCurrentCreatures, getCurrentResources, nickname]);
 
   useEffect(() => {
