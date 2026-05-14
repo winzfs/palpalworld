@@ -7,7 +7,7 @@ import {
   type InventoryEntry,
 } from "./inventoryUiModel";
 
-const categories: InventoryCategory[] = ["general", "equipment", "crafting", "building"];
+const categories: InventoryCategory[] = ["general", "usable", "material", "equipment", "building"];
 const gridSlotCount = 36;
 
 export function InventoryGridPanel({
