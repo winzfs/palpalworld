@@ -35,13 +35,11 @@ function distance(a: Vector2, b: Vector2) {
 }
 
 function normalizeSnapshotToCurrentTile(snapshot: WorldSnapshot): WorldSnapshot {
-  return {
-    ...snapshot,
-    players: snapshot.players.map((player) => ({ ...player, position: clampPositionToTile(player.position) })),
-    resources: snapshot.resources.map((resource) => ({ ...resource, position: clampPositionToTile(resource.position) })),
-    creatures: snapshot.creatures.map((creature) => ({ ...creature, position: clampPositionToTile(creature.position) })),
-    buildings: snapshot.buildings.map((building) => ({ ...building, position: clampPositionToTile(building.position) })),
-  };
+  for (const player of snapshot.players) player.position = clampPositionToTile(player.position);
+  for (const resource of snapshot.resources) resource.position = clampPositionToTile(resource.position);
+  for (const creature of snapshot.creatures) creature.position = clampPositionToTile(creature.position);
+  for (const building of snapshot.buildings) building.position = clampPositionToTile(building.position);
+  return snapshot;
 }
 
 const portalLabels: Record<MapDirection, string> = {
