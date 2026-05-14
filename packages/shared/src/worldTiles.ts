@@ -192,6 +192,15 @@ export function getSpawnPositionAfterTravel(direction: MapDirection, previousPos
 }
 
 export function getEntityTileById(entityId: string): MapTileRef {
+  const parts = entityId.split("-");
+  if (parts.length >= 5) {
+    const regionId = parts[1] as RegionId;
+    const tileX = Number(parts[2]);
+    const tileY = Number(parts[3]);
+    const parsed = { regionId, tileX, tileY };
+    if (Number.isFinite(tileX) && Number.isFinite(tileY) && isTileInsideGrid(parsed)) return parsed;
+  }
+
   if (entityId.includes("fiber") || entityId.includes("leafbun-2")) return { regionId: "starter_meadow", tileX: 1, tileY: 0 };
   if (entityId.includes("berry") || entityId.includes("droplet")) return { regionId: "starter_meadow", tileX: 2, tileY: 1 };
   if (entityId.includes("ore") || entityId.includes("rockturtle")) return { regionId: "stone_hills", tileX: 1, tileY: 2 };
