@@ -1,0 +1,14 @@
+/* Main menu cleanup overrides. Building interactions are opened from field clicks, not from the main menu. */
+.hud-menu-tabs {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.hud-menu-tabs__button:nth-child(5) {
+  display: none;
+}
+
+@media (max-width: 720px) {
+  .hud-menu-tabs {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
