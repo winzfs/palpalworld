@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type { InventoryState } from "@palpalworld/shared";
+import { getIconAsset } from "../assets/assetCatalog";
 import { getItemLabel } from "../items/itemLabels";
 import {
   CRAFTING_STATIONS,
@@ -77,6 +78,15 @@ function RequirementList({ inventory, stacks }: { inventory: InventoryState | nu
   );
 }
 
+function CraftIcon({ itemId }: { itemId: string }) {
+  const icon = getIconAsset(itemId);
+  return (
+    <span className="crafting-card__icon" aria-hidden="true">
+      {icon ? <img src={icon.src} alt="" /> : <span>?</span>}
+    </span>
+  );
+}
+
 function CraftQueueView({
   station,
   jobs,
@@ -96,23 +106,28 @@ function CraftQueueView({
       {jobs.length === 0 ? (
         <div className="feature-panel__hint">진행 중인 제작이 없습니다.</div>
       ) : (
-        <div className="control-grid control-grid--wide">
+        <div className="crafting-queue-list">
           {jobs.map((job) => {
             const totalMs = Math.max(1, job.finishesAt - job.startedAt);
             const progress = Math.max(0, Math.min(100, Math.round(((now - job.startedAt) / totalMs) * 100)));
             const done = now >= job.finishesAt;
             return (
               <div key={job.id} className="crafting-card crafting-card--queue">
-                <b>{job.name}</b>
-                <span>{job.outputsLabel}</span>
-                <small>{done ? "제작 완료" : formatRemainingTime(job.finishesAt - now)}</small>
+                <div className="crafting-card__main">
+                  <CraftIcon itemId={job.kind === "building" ? job.targetId : job.targetId} />
+                  <span className="crafting-card__text">
+                    <b>{job.name}</b>
+                    <span>{job.outputsLabel}</span>
+                    <small>{done ? "제작 완료" : formatRemainingTime(job.finishesAt - now)}</small>
+                  </span>
+                </div>
                 <div className="crafting-queue__bar" aria-label={`제작 진행도 ${progress}%`}>
                   <span style={{ width: `${progress}%` }} />
                 </div>
                 {done ? (
-                  <button className="building-interaction__action" onClick={() => onClaim(job)}>수령</button>
+                  <button className="crafting-card__button" onClick={() => onClaim(job)}>수령</button>
                 ) : (
-                  <button className="draggable-panel__toggle" onClick={() => onCancel(job)}>취소</button>
+                  <button className="crafting-card__button crafting-card__button--ghost" onClick={() => onCancel(job)}>취소</button>
                 )}
               </div>
             );
@@ -148,9 +163,9 @@ function StationCraftingSection({
 
   return (
     <section className="crafting-station-section">
-      <div className="feature-panel__section-title">{station.name}</div>
-      <div className="feature-panel__hint">
-        {station.description} · 제작 큐 {station.queueSize}칸
+      <div className="crafting-station-section__intro">
+        <strong>{station.name}</strong>
+        <span>{station.description} · 제작 큐 {station.queueSize}칸</span>
       </div>
 
       <CraftQueueView station={station} jobs={queueJobs} now={now} onClaim={onClaimJob} onCancel={onCancelJob} />
@@ -169,22 +184,30 @@ function StationCraftingSection({
             {tierRecipes.length > 0 ? (
               <>
                 <div className="feature-panel__section-title">{tier} 제작</div>
-                <div className="control-grid control-grid--wide">
+                <div className="crafting-recipe-grid">
                   {tierRecipes.map((recipe) => {
                     const affordable = canAfford(inventory, recipe.inputs);
                     const outputsLabel = formatStacks(recipe.outputs);
+                    const outputItemId = recipe.outputs[0]?.itemId ?? recipe.id;
                     return (
-                      <button
-                        key={recipe.id}
-                        className="crafting-card"
-                        onClick={() => onStartJob({ stationId: station.id, kind: "recipe", targetId: recipe.id, name: recipe.name, outputsLabel }, recipe.craftTimeMs)}
-                        disabled={!affordable || queueFull}
-                      >
-                        <b>{recipe.name}</b>
-                        <span>{recipe.description}</span>
-                        <small>{categoryLabels[recipe.category]} · 시간 {formatCraftTime(recipe.craftTimeMs)} · 결과 {outputsLabel}</small>
+                      <article key={recipe.id} className={affordable && !queueFull ? "crafting-card" : "crafting-card crafting-card--disabled"}>
+                        <div className="crafting-card__main">
+                          <CraftIcon itemId={outputItemId} />
+                          <span className="crafting-card__text">
+                            <b>{recipe.name}</b>
+                            <span>{recipe.description}</span>
+                            <small>{categoryLabels[recipe.category]} · 시간 {formatCraftTime(recipe.craftTimeMs)} · 결과 {outputsLabel}</small>
+                          </span>
+                        </div>
                         <RequirementList inventory={inventory} stacks={recipe.inputs} />
-                      </button>
+                        <button
+                          className="crafting-card__button"
+                          onClick={() => onStartJob({ stationId: station.id, kind: "recipe", targetId: recipe.id, name: recipe.name, outputsLabel }, recipe.craftTimeMs)}
+                          disabled={!affordable || queueFull}
+                        >
+                          제작
+                        </button>
+                      </article>
                     );
                   })}
                 </div>
@@ -194,23 +217,30 @@ function StationCraftingSection({
             {tierBuildings.length > 0 ? (
               <>
                 <div className="feature-panel__section-title">{tier} 건설</div>
-                <div className="control-grid control-grid--wide">
+                <div className="crafting-recipe-grid">
                   {tierBuildings.map((building) => {
                     const affordable = canAfford(inventory, building.requires);
                     const itemId = getBuildingItemId(building.type);
                     const outputsLabel = `${getItemLabel(itemId)} 1`;
                     return (
-                      <button
-                        key={building.type}
-                        className="crafting-card"
-                        onClick={() => onStartJob({ stationId: station.id, kind: "building", targetId: building.type, name: building.name, outputsLabel }, 2000)}
-                        disabled={!affordable || queueFull}
-                      >
-                        <b>{building.name}</b>
-                        <span>{building.description}</span>
-                        <small>Lv.{building.unlockLevel} · {building.category} · 결과 {outputsLabel}</small>
+                      <article key={building.type} className={affordable && !queueFull ? "crafting-card" : "crafting-card crafting-card--disabled"}>
+                        <div className="crafting-card__main">
+                          <CraftIcon itemId={itemId} />
+                          <span className="crafting-card__text">
+                            <b>{building.name}</b>
+                            <span>{building.description}</span>
+                            <small>Lv.{building.unlockLevel} · {building.category} · 결과 {outputsLabel}</small>
+                          </span>
+                        </div>
                         <RequirementList inventory={inventory} stacks={building.requires} />
-                      </button>
+                        <button
+                          className="crafting-card__button"
+                          onClick={() => onStartJob({ stationId: station.id, kind: "building", targetId: building.type, name: building.name, outputsLabel }, 2000)}
+                          disabled={!affordable || queueFull}
+                        >
+                          제작
+                        </button>
+                      </article>
                     );
                   })}
                 </div>
@@ -281,7 +311,7 @@ export function CraftingPanel({
   };
 
   return (
-    <div className="feature-panel feature-panel--crafting">
+    <div className={compact ? "feature-panel feature-panel--crafting feature-panel--crafting-compact" : "feature-panel feature-panel--crafting"}>
       {!compact ? (
         <div className="feature-panel__hint">
           제작은 제작소 데이터 기준으로 자동 분류됩니다. 제작 버튼을 누르면 큐에 등록되고 완료 후 수령할 수 있습니다.
