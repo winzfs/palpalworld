@@ -26,45 +26,22 @@ import {
 import { SpriteRenderer } from "../rendering/SpriteRenderer";
 import { TileMapRenderer } from "../rendering/TileMapRenderer";
 
-export type GameSceneInput = {
-  x: number;
-  y: number;
-  primary: boolean;
-  secondary: boolean;
-};
-
-export type PlacementValidity = {
-  ok: boolean;
-  reason: string;
-};
-
+export type GameSceneInput = { x: number; y: number; primary: boolean; secondary: boolean };
+export type PlacementValidity = { ok: boolean; reason: string };
 export type WorldClickTarget =
   | { kind: "field"; position: Vector2; validity: PlacementValidity }
   | { kind: "building"; building: BuildingState }
   | { kind: "creature"; creature: CreaturePublicState };
 
-type ViewportBounds = {
-  left: number;
-  top: number;
-  right: number;
-  bottom: number;
-};
-
+type ViewportBounds = { left: number; top: number; right: number; bottom: number };
 type EquipmentChangedEvent = CustomEvent<{ weaponItemId?: string | null }>;
 
 const fallbackPlayerTiles = new Map<string, MapTileRef>();
 const cullPadding = 96;
 const equippedWeaponStorageKey = "palpalworld.demo.equippedWeaponItemId";
 
-function distance(a: Vector2, b: Vector2) {
-  return Math.hypot(a.x - b.x, a.y - b.y);
-}
-
-function getTileRef(entity: unknown) {
-  const candidate = (entity as { currentTile?: MapTileRef })?.currentTile;
-  return candidate ?? DEFAULT_PLAYER_TILE;
-}
-
+function distance(a: Vector2, b: Vector2) { return Math.hypot(a.x - b.x, a.y - b.y); }
+function getTileRef(entity: unknown) { return (entity as { currentTile?: MapTileRef })?.currentTile ?? DEFAULT_PLAYER_TILE; }
 function readStoredWeaponItemId() {
   if (typeof window === "undefined") return null;
   const directWeaponItemId = window.localStorage.getItem(equippedWeaponStorageKey);
@@ -80,25 +57,10 @@ function readStoredWeaponItemId() {
     if (!inventoryRaw) return null;
     const inventory = JSON.parse(inventoryRaw) as { itemInstances?: { instanceId: string; itemId: string }[] };
     return inventory.itemInstances?.find((item) => item.instanceId === weaponInstanceId)?.itemId ?? null;
-  } catch {
-    return null;
-  }
+  } catch { return null; }
 }
-
-function setPositionInPlace(target: Vector2, next: Vector2) {
-  target.x = next.x;
-  target.y = next.y;
-}
-
-function isPositionInViewport(position: Vector2, viewport: ViewportBounds, padding = cullPadding) {
-  return (
-    position.x >= viewport.left - padding &&
-    position.x <= viewport.right + padding &&
-    position.y >= viewport.top - padding &&
-    position.y <= viewport.bottom + padding
-  );
-}
-
+function setPositionInPlace(target: Vector2, next: Vector2) { target.x = next.x; target.y = next.y; }
+function isPositionInViewport(position: Vector2, viewport: ViewportBounds, padding = cullPadding) { return position.x >= viewport.left - padding && position.x <= viewport.right + padding && position.y >= viewport.top - padding && position.y <= viewport.bottom + padding; }
 function normalizeSnapshotToCurrentTile(snapshot: WorldSnapshot): WorldSnapshot {
   for (const player of snapshot.players) {
     const serverTile = getTileRef(player);
@@ -107,7 +69,6 @@ function normalizeSnapshotToCurrentTile(snapshot: WorldSnapshot): WorldSnapshot 
     const clamped = clampPositionToTile(player.position);
     const direction = getPortalDirectionAtPosition(clamped, currentTile);
     const nextTile = direction ? getNeighborTile(currentTile, direction) : null;
-
     if (direction && nextTile) {
       const spawn = getSpawnPositionAfterTravel(direction, clamped);
       (player as any).currentTile = { ...nextTile };
@@ -119,19 +80,13 @@ function normalizeSnapshotToCurrentTile(snapshot: WorldSnapshot): WorldSnapshot 
       setPositionInPlace(player.position, clamped);
     }
   }
-
   for (const resource of snapshot.resources) setPositionInPlace(resource.position, clampPositionToTile(resource.position));
   for (const creature of snapshot.creatures) setPositionInPlace(creature.position, clampPositionToTile(creature.position));
   for (const building of snapshot.buildings) setPositionInPlace(building.position, clampPositionToTile(building.position));
   return snapshot;
 }
 
-const portalLabels: Record<MapDirection, string> = {
-  north: "북쪽 포탈",
-  south: "남쪽 포탈",
-  west: "서쪽 포탈",
-  east: "동쪽 포탈",
-};
+const portalLabels: Record<MapDirection, string> = { north: "북쪽 포탈", south: "남쪽 포탈", west: "서쪽 포탈", east: "동쪽 포탈" };
 
 export class GameWorldScene {
   private root: HTMLDivElement;
@@ -149,6 +104,7 @@ export class GameWorldScene {
   private pointerWorldPosition: Vector2 | null = null;
   private hoverBuildingId: string | null = null;
   private hoverCreatureId: string | null = null;
+  private highlightedCreatureId: string | null = null;
   private placementPreviewBuildingType: BuildingType | null = null;
   private onInputChange: (input: GameSceneInput) => void;
   private onInteract: () => void;
@@ -167,7 +123,6 @@ export class GameWorldScene {
     this.context = this.canvas.getContext("2d") as CanvasRenderingContext2D;
     this.context.imageSmoothingEnabled = false;
     this.root.appendChild(this.canvas);
-
     window.addEventListener("resize", this.resize);
     window.addEventListener("keydown", this.handleKeyDown);
     window.addEventListener("keyup", this.handleKeyUp);
@@ -194,25 +149,20 @@ export class GameWorldScene {
   applySnapshot(snapshot: WorldSnapshot, localPlayerId: string | null) {
     const normalizedSnapshot = normalizeSnapshotToCurrentTile(snapshot);
     this.movingPlayerIds.clear();
-
     for (const player of normalizedSnapshot.players) {
       const previous = this.previousPlayerPositions.get(player.id);
       const moved = previous ? Math.hypot(player.position.x - previous.x, player.position.y - previous.y) > 0.15 : false;
       if (moved) this.movingPlayerIds.add(player.id);
       this.previousPlayerPositions.set(player.id, { ...player.position });
     }
-
     this.snapshot = normalizedSnapshot;
     this.localPlayerId = localPlayerId;
     this.localEquippedWeaponItemId = readStoredWeaponItemId();
     window.dispatchEvent(new CustomEvent("palpalworld:world_snapshot", { detail: { snapshot: normalizedSnapshot, localPlayerId } }));
   }
 
-  setPlacementPreviewBuildingType(buildingType: BuildingType | null) {
-    this.placementPreviewBuildingType = buildingType;
-    this.canvas.style.cursor = buildingType ? "none" : "default";
-  }
-
+  setPlacementPreviewBuildingType(buildingType: BuildingType | null) { this.placementPreviewBuildingType = buildingType; this.canvas.style.cursor = buildingType ? "none" : "default"; }
+  setHighlightedCreatureId(creatureId: string | null) { this.highlightedCreatureId = creatureId; }
   getNearestInteractableId(): EntityId | null {
     const localPlayer = this.getLocalPlayerPosition();
     if (!localPlayer || !this.snapshot) return null;
@@ -226,13 +176,8 @@ export class GameWorldScene {
     }
     return nearest?.id ?? null;
   }
-
   getLocalPlayerPosition() { return this.getLocalPlayer()?.position ?? null; }
-
-  private handleEquipmentChanged = (event: EquipmentChangedEvent) => {
-    this.localEquippedWeaponItemId = event.detail?.weaponItemId ?? readStoredWeaponItemId();
-  };
-
+  private handleEquipmentChanged = (event: EquipmentChangedEvent) => { this.localEquippedWeaponItemId = event.detail?.weaponItemId ?? readStoredWeaponItemId(); };
   private getLocalPlayer() { return this.snapshot?.players.find((player) => player.id === this.localPlayerId) ?? this.snapshot?.players[0] ?? null; }
   private getCurrentTile() { return getTileRef(this.getLocalPlayer()); }
   private getSceneResources() { return this.snapshot?.resources ?? []; }
@@ -248,77 +193,25 @@ export class GameWorldScene {
     for (const building of this.getSceneBuildings()) if (distance(building.position, position) < WORLD.tileSize) return { ok: false, reason: "이미 다른 건물이 있는 위치입니다." };
     return { ok: true, reason: "설치 가능" };
   }
-
-  private getBuildingAt(position: Vector2) {
-    let nearest: BuildingState | null = null;
-    let nearestDistance = Number.POSITIVE_INFINITY;
-    for (const building of this.getSceneBuildings()) {
-      const hitDistance = distance(building.position, position);
-      if (hitDistance <= 42 && hitDistance < nearestDistance) { nearest = building; nearestDistance = hitDistance; }
-    }
-    return nearest;
-  }
-
-  private getCreatureAt(position: Vector2) {
-    let nearest: CreaturePublicState | null = null;
-    let nearestDistance = Number.POSITIVE_INFINITY;
-    for (const creature of this.getSceneCreatures()) {
-      if (creature.hp <= 0) continue;
-      const hitDistance = distance(creature.position, position);
-      if (hitDistance <= 46 && hitDistance < nearestDistance) { nearest = creature; nearestDistance = hitDistance; }
-    }
-    return nearest;
-  }
-
-  private getCameraOffset() {
-    const rect = this.root.getBoundingClientRect();
-    const localPlayer = this.getLocalPlayer();
-    const target = localPlayer?.position ?? { x: rect.width / 2, y: rect.height / 2 };
-    return { x: Math.max(0, Math.min(Math.max(0, MAP_TILE_SIZE.width - rect.width), target.x - rect.width / 2)), y: Math.max(0, Math.min(Math.max(0, MAP_TILE_SIZE.height - rect.height), target.y - rect.height / 2)) };
-  }
-
-  private getViewportBounds(cameraX: number, cameraY: number): ViewportBounds {
-    const rect = this.root.getBoundingClientRect();
-    return { left: cameraX, top: cameraY, right: cameraX + rect.width, bottom: cameraY + rect.height };
-  }
-
-  private screenToWorld(clientX: number, clientY: number): Vector2 {
-    const rect = this.canvas.getBoundingClientRect();
-    const camera = this.getCameraOffset();
-    return clampPositionToTile({ x: clientX - rect.left + camera.x, y: clientY - rect.top + camera.y });
-  }
-
-  private resize = () => {
-    const dpr = Math.max(1, Math.min(window.devicePixelRatio || 1, 2));
-    const rect = this.root.getBoundingClientRect();
-    this.canvas.width = Math.floor(rect.width * dpr);
-    this.canvas.height = Math.floor(rect.height * dpr);
-    this.context.setTransform(dpr, 0, 0, dpr, 0, 0);
-    this.context.imageSmoothingEnabled = false;
-  };
-
-  private emitPrimaryTap() {
-    this.onInputChange({ x: 0, y: 0, primary: true, secondary: false });
-    window.setTimeout(() => this.onInputChange({ x: 0, y: 0, primary: false, secondary: false }), 90);
-  }
-
+  private getBuildingAt(position: Vector2) { let nearest: BuildingState | null = null; let nearestDistance = Number.POSITIVE_INFINITY; for (const building of this.getSceneBuildings()) { const hitDistance = distance(building.position, position); if (hitDistance <= 42 && hitDistance < nearestDistance) { nearest = building; nearestDistance = hitDistance; } } return nearest; }
+  private getCreatureAt(position: Vector2) { let nearest: CreaturePublicState | null = null; let nearestDistance = Number.POSITIVE_INFINITY; for (const creature of this.getSceneCreatures()) { if (creature.hp <= 0) continue; const hitDistance = distance(creature.position, position); if (hitDistance <= 46 && hitDistance < nearestDistance) { nearest = creature; nearestDistance = hitDistance; } } return nearest; }
+  private getCameraOffset() { const rect = this.root.getBoundingClientRect(); const localPlayer = this.getLocalPlayer(); const target = localPlayer?.position ?? { x: rect.width / 2, y: rect.height / 2 }; return { x: Math.max(0, Math.min(Math.max(0, MAP_TILE_SIZE.width - rect.width), target.x - rect.width / 2)), y: Math.max(0, Math.min(Math.max(0, MAP_TILE_SIZE.height - rect.height), target.y - rect.height / 2)) }; }
+  private getViewportBounds(cameraX: number, cameraY: number): ViewportBounds { const rect = this.root.getBoundingClientRect(); return { left: cameraX, top: cameraY, right: cameraX + rect.width, bottom: cameraY + rect.height }; }
+  private screenToWorld(clientX: number, clientY: number): Vector2 { const rect = this.canvas.getBoundingClientRect(); const camera = this.getCameraOffset(); return clampPositionToTile({ x: clientX - rect.left + camera.x, y: clientY - rect.top + camera.y }); }
+  private resize = () => { const dpr = Math.max(1, Math.min(window.devicePixelRatio || 1, 2)); const rect = this.root.getBoundingClientRect(); this.canvas.width = Math.floor(rect.width * dpr); this.canvas.height = Math.floor(rect.height * dpr); this.context.setTransform(dpr, 0, 0, dpr, 0, 0); this.context.imageSmoothingEnabled = false; };
+  private emitPrimaryTap() { this.onInputChange({ x: 0, y: 0, primary: true, secondary: false }); window.setTimeout(() => this.onInputChange({ x: 0, y: 0, primary: false, secondary: false }), 90); }
   private handlePointerDown = (event: PointerEvent) => {
     if (event.button !== 0) return;
     const position = this.screenToWorld(event.clientX, event.clientY);
     this.pointerWorldPosition = position;
     if (!this.placementPreviewBuildingType) {
       const creature = this.getCreatureAt(position);
-      if (creature) {
-        this.onWorldClick({ kind: "creature", creature });
-        this.emitPrimaryTap();
-        return;
-      }
+      if (creature) { this.onWorldClick({ kind: "creature", creature }); this.emitPrimaryTap(); return; }
       const building = this.getBuildingAt(position);
       if (building) { this.onWorldClick({ kind: "building", building }); return; }
     }
     this.onWorldClick({ kind: "field", position, validity: this.getPlacementValidity(position) });
   };
-
   private handlePointerMove = (event: PointerEvent) => {
     const position = this.screenToWorld(event.clientX, event.clientY);
     this.pointerWorldPosition = position;
@@ -326,28 +219,11 @@ export class GameWorldScene {
     this.hoverBuildingId = this.placementPreviewBuildingType || this.hoverCreatureId ? null : this.getBuildingAt(position)?.id ?? null;
     if (!this.placementPreviewBuildingType) this.canvas.style.cursor = this.hoverCreatureId || this.hoverBuildingId ? "pointer" : "default";
   };
-
   private handlePointerLeave = () => { this.pointerWorldPosition = null; this.hoverBuildingId = null; this.hoverCreatureId = null; if (!this.placementPreviewBuildingType) this.canvas.style.cursor = "default"; };
-
-  private handleKeyDown = (event: KeyboardEvent) => {
-    const key = event.key.toLowerCase();
-    if (key === "e" && !this.keys.has(key)) this.onInteract();
-    this.keys.add(key);
-    this.emitKeyboardInput();
-  };
-
+  private handleKeyDown = (event: KeyboardEvent) => { const key = event.key.toLowerCase(); if (key === "e" && !this.keys.has(key)) this.onInteract(); this.keys.add(key); this.emitKeyboardInput(); };
   private handleKeyUp = (event: KeyboardEvent) => { this.keys.delete(event.key.toLowerCase()); this.emitKeyboardInput(); };
-
-  private emitKeyboardInput() {
-    const left = this.keys.has("a") || this.keys.has("arrowleft");
-    const right = this.keys.has("d") || this.keys.has("arrowright");
-    const up = this.keys.has("w") || this.keys.has("arrowup");
-    const down = this.keys.has("s") || this.keys.has("arrowdown");
-    this.onInputChange({ x: Number(right) - Number(left), y: Number(down) - Number(up), primary: this.keys.has(" "), secondary: this.keys.has("e") });
-  }
-
+  private emitKeyboardInput() { const left = this.keys.has("a") || this.keys.has("arrowleft"); const right = this.keys.has("d") || this.keys.has("arrowright"); const up = this.keys.has("w") || this.keys.has("arrowup"); const down = this.keys.has("s") || this.keys.has("arrowdown"); this.onInputChange({ x: Number(right) - Number(left), y: Number(down) - Number(up), primary: this.keys.has(" "), secondary: this.keys.has("e") }); }
   private loop = () => { this.draw(); this.animationFrame = requestAnimationFrame(this.loop); };
-
   private draw() {
     const rect = this.root.getBoundingClientRect();
     const ctx = this.context;
@@ -364,47 +240,30 @@ export class GameWorldScene {
     this.drawInteractionHint(ctx, camera.x, camera.y);
     this.drawPlacementPreview(ctx, camera.x, camera.y);
   }
-
   private drawMapBoundaryAndPortals(ctx: CanvasRenderingContext2D, cameraX: number, cameraY: number) {
     const currentTile = this.getCurrentTile();
     const tile = getMapTile(currentTile);
     const x = -cameraX;
     const y = -cameraY;
-    ctx.save();
-    ctx.strokeStyle = "rgba(125, 211, 252, 0.42)";
-    ctx.lineWidth = 4;
-    ctx.setLineDash([12, 8]);
-    ctx.strokeRect(x, y, MAP_TILE_SIZE.width, MAP_TILE_SIZE.height);
-    ctx.restore();
+    ctx.save(); ctx.strokeStyle = "rgba(125, 211, 252, 0.42)"; ctx.lineWidth = 4; ctx.setLineDash([12, 8]); ctx.strokeRect(x, y, MAP_TILE_SIZE.width, MAP_TILE_SIZE.height); ctx.restore();
     if (!tile) return;
     const edge = MAP_TILE_SIZE.portalRadius;
-    ctx.save();
-    ctx.setLineDash([]);
-    ctx.fillStyle = "rgba(14, 165, 233, 0.18)";
-    ctx.strokeStyle = "rgba(125, 211, 252, 0.9)";
-    ctx.lineWidth = 2;
-    ctx.font = "13px system-ui";
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
+    ctx.save(); ctx.setLineDash([]); ctx.fillStyle = "rgba(14, 165, 233, 0.18)"; ctx.strokeStyle = "rgba(125, 211, 252, 0.9)"; ctx.lineWidth = 2; ctx.font = "13px system-ui"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
     if (tile.exits.north) { ctx.fillRect(x, y, MAP_TILE_SIZE.width, edge); ctx.strokeRect(x, y, MAP_TILE_SIZE.width, edge); ctx.fillStyle = "rgba(224, 242, 254, 0.95)"; ctx.fillText(portalLabels.north, x + MAP_TILE_SIZE.width / 2, y + edge / 2); ctx.fillStyle = "rgba(14, 165, 233, 0.18)"; }
     if (tile.exits.south) { ctx.fillRect(x, y + MAP_TILE_SIZE.height - edge, MAP_TILE_SIZE.width, edge); ctx.strokeRect(x, y + MAP_TILE_SIZE.height - edge, MAP_TILE_SIZE.width, edge); ctx.fillStyle = "rgba(224, 242, 254, 0.95)"; ctx.fillText(portalLabels.south, x + MAP_TILE_SIZE.width / 2, y + MAP_TILE_SIZE.height - edge / 2); ctx.fillStyle = "rgba(14, 165, 233, 0.18)"; }
     if (tile.exits.west) { ctx.fillRect(x, y, edge, MAP_TILE_SIZE.height); ctx.strokeRect(x, y, edge, MAP_TILE_SIZE.height); ctx.fillStyle = "rgba(224, 242, 254, 0.95)"; ctx.fillText(portalLabels.west, x + edge / 2, y + MAP_TILE_SIZE.height / 2); ctx.fillStyle = "rgba(14, 165, 233, 0.18)"; }
     if (tile.exits.east) { ctx.fillRect(x + MAP_TILE_SIZE.width - edge, y, edge, MAP_TILE_SIZE.height); ctx.strokeRect(x + MAP_TILE_SIZE.width - edge, y, edge, MAP_TILE_SIZE.height); ctx.fillStyle = "rgba(224, 242, 254, 0.95)"; ctx.fillText(portalLabels.east, x + MAP_TILE_SIZE.width - edge / 2, y + MAP_TILE_SIZE.height / 2); }
     ctx.restore();
   }
-
   private drawBuildings(ctx: CanvasRenderingContext2D, cameraX: number, cameraY: number, viewport: ViewportBounds) {
     for (const building of this.getSceneBuildings()) {
       if (!isPositionInViewport(building.position, viewport)) continue;
       const x = building.position.x - cameraX;
       const y = building.position.y - cameraY;
       this.renderer.drawBuilding(ctx, building, x, y);
-      if (building.id === this.hoverBuildingId) {
-        ctx.save(); ctx.strokeStyle = "rgba(250, 204, 21, 0.9)"; ctx.lineWidth = 2; ctx.beginPath(); ctx.ellipse(x, y + 24, 32, 12, 0, 0, Math.PI * 2); ctx.stroke(); ctx.restore();
-      }
+      if (building.id === this.hoverBuildingId) { ctx.save(); ctx.strokeStyle = "rgba(250, 204, 21, 0.9)"; ctx.lineWidth = 2; ctx.beginPath(); ctx.ellipse(x, y + 24, 32, 12, 0, 0, Math.PI * 2); ctx.stroke(); ctx.restore(); }
     }
   }
-
   private drawResources(ctx: CanvasRenderingContext2D, cameraX: number, cameraY: number, viewport: ViewportBounds) { for (const resource of this.getSceneResources()) if (isPositionInViewport(resource.position, viewport)) this.renderer.drawResource(ctx, resource, resource.position.x - cameraX, resource.position.y - cameraY); }
   private drawCreatures(ctx: CanvasRenderingContext2D, cameraX: number, cameraY: number, viewport: ViewportBounds) {
     for (const creature of this.getSceneCreatures()) {
@@ -412,12 +271,19 @@ export class GameWorldScene {
       const x = creature.position.x - cameraX;
       const y = creature.position.y - cameraY;
       this.renderer.drawCreature(ctx, creature, x, y);
-      if (creature.id === this.hoverCreatureId) {
-        ctx.save(); ctx.strokeStyle = "rgba(74, 222, 128, 0.95)"; ctx.lineWidth = 2; ctx.beginPath(); ctx.ellipse(x, y + 22, 26, 10, 0, 0, Math.PI * 2); ctx.stroke(); ctx.restore();
+      if (creature.id === this.highlightedCreatureId) {
+        const isCapture = creature.hp > 0 && creature.hp / creature.maxHp <= 0.3;
+        ctx.save();
+        ctx.strokeStyle = isCapture ? "rgba(74, 222, 128, 0.98)" : "rgba(248, 113, 113, 0.95)";
+        ctx.lineWidth = 3;
+        ctx.setLineDash(isCapture ? [8, 5] : []);
+        ctx.beginPath();
+        ctx.ellipse(x, y + 22, 29, 11, 0, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
       }
     }
   }
-
   private drawPlayers(ctx: CanvasRenderingContext2D, cameraX: number, cameraY: number, now: number, viewport: ViewportBounds) {
     if (!this.snapshot) return;
     const currentTile = this.getCurrentTile();
@@ -429,7 +295,6 @@ export class GameWorldScene {
       this.renderer.drawPlayer(ctx, player, player.position.x - cameraX, player.position.y - cameraY, isLocal, isMoving, now, weaponItemId);
     }
   }
-
   private drawPlacementPreview(ctx: CanvasRenderingContext2D, cameraX: number, cameraY: number) {
     if (!this.placementPreviewBuildingType || !this.pointerWorldPosition) return;
     const validity = this.getPlacementValidity(this.pointerWorldPosition);
@@ -441,7 +306,6 @@ export class GameWorldScene {
     ctx.save(); ctx.strokeStyle = `rgba(${accent}, 0.9)`; ctx.fillStyle = `rgba(${accent}, 0.16)`; ctx.lineWidth = 2; ctx.setLineDash([6, 4]); ctx.beginPath(); ctx.ellipse(x, y + 24, 30, 11, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke(); ctx.restore();
     ctx.save(); ctx.fillStyle = "rgba(15, 23, 42, 0.86)"; ctx.strokeStyle = `rgba(${accent}, 0.82)`; ctx.lineWidth = 1; ctx.beginPath(); ctx.roundRect(x - 82, y - 64, 164, 26, 8); ctx.fill(); ctx.stroke(); ctx.fillStyle = validity.ok ? "#bbf7d0" : "#fecaca"; ctx.font = "12px system-ui"; ctx.textAlign = "center"; ctx.fillText(validity.reason, x, y - 46); ctx.restore();
   }
-
   private drawInteractionHint(ctx: CanvasRenderingContext2D, cameraX: number, cameraY: number) {
     if (this.placementPreviewBuildingType) return;
     const nearestId = this.getNearestInteractableId();
@@ -453,10 +317,9 @@ export class GameWorldScene {
   }
 }
 
-export function GameScene({ onReady, onInputChange, onInteract, onWorldClick, placementBuildingType }: { onReady: (scene: GameWorldScene) => void; onInputChange: (input: GameSceneInput) => void; onInteract: () => void; onWorldClick: (target: WorldClickTarget) => void; placementBuildingType?: BuildingType | null }) {
+export function GameScene({ onReady, onInputChange, onInteract, onWorldClick, placementBuildingType, highlightedCreatureId }: { onReady: (scene: GameWorldScene) => void; onInputChange: (input: GameSceneInput) => void; onInteract: () => void; onWorldClick: (target: WorldClickTarget) => void; placementBuildingType?: BuildingType | null; highlightedCreatureId?: string | null }) {
   const rootRef = useRef<HTMLDivElement | null>(null);
   const sceneRef = useRef<GameWorldScene | null>(null);
-
   useEffect(() => {
     if (!rootRef.current) return;
     const scene = new GameWorldScene(rootRef.current, onInputChange, onInteract, onWorldClick);
@@ -464,8 +327,7 @@ export function GameScene({ onReady, onInputChange, onInteract, onWorldClick, pl
     onReady(scene);
     return () => { scene.destroy(); sceneRef.current = null; };
   }, [onInputChange, onInteract, onWorldClick, onReady]);
-
   useEffect(() => { sceneRef.current?.setPlacementPreviewBuildingType(placementBuildingType ?? null); }, [placementBuildingType]);
-
+  useEffect(() => { sceneRef.current?.setHighlightedCreatureId(highlightedCreatureId ?? null); }, [highlightedCreatureId]);
   return <div ref={rootRef} className="game-canvas-root" aria-label="Game canvas" />;
 }
