@@ -6,13 +6,12 @@
   max-height: min(680px, calc(100vh - 40px));
   transform: translate(-50%, -50%);
   display: block;
-  overflow: hidden;
-  padding: 10px;
-  border: 2px solid rgb(242 209 107 / 0.45);
-  border-radius: 16px;
-  background: rgb(13 12 24 / 0.82);
-  box-shadow: 0 24px 70px rgb(0 0 0 / 0.5), inset 0 0 0 1px rgb(255 255 255 / 0.08);
-  backdrop-filter: blur(12px);
+  overflow: visible;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
 }
 
 .hud-menu-panel:has(.storage-box-panel) > .hud-menu-panel__header,
@@ -75,10 +74,10 @@
 
 .storage-overlay-panel {
   pointer-events: auto;
-  position: absolute;
+  position: fixed;
   left: 50%;
   top: 50%;
-  z-index: 24;
+  z-index: 80;
   width: min(760px, calc(100vw - 24px));
   max-height: min(680px, calc(100vh - 40px));
   transform: translate(-50%, -50%);
@@ -86,7 +85,7 @@
   padding: 10px;
   border: 2px solid rgb(242 209 107 / 0.45);
   border-radius: 16px;
-  background: rgb(13 12 24 / 0.82);
+  background: rgb(13 12 24 / 0.88);
   box-shadow: 0 24px 70px rgb(0 0 0 / 0.5), inset 0 0 0 1px rgb(255 255 255 / 0.08);
   backdrop-filter: blur(12px);
 }
@@ -255,7 +254,11 @@
 }
 
 @media (max-width: 720px) {
-  .hud-menu-panel:has(.storage-box-panel),
+  .hud-menu-panel:has(.storage-box-panel) {
+    width: 0;
+    height: 0;
+  }
+
   .storage-overlay-panel {
     width: calc(100vw - 14px);
     max-height: calc(100vh - 120px - var(--safe-bottom));
