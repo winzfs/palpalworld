@@ -297,13 +297,22 @@ export class GameWorldScene {
     this.context.imageSmoothingEnabled = false;
   };
 
+  private emitPrimaryTap() {
+    this.onInputChange({ x: 0, y: 0, primary: true, secondary: false });
+    window.setTimeout(() => this.onInputChange({ x: 0, y: 0, primary: false, secondary: false }), 90);
+  }
+
   private handlePointerDown = (event: PointerEvent) => {
     if (event.button !== 0) return;
     const position = this.screenToWorld(event.clientX, event.clientY);
     this.pointerWorldPosition = position;
     if (!this.placementPreviewBuildingType) {
       const creature = this.getCreatureAt(position);
-      if (creature) { this.onWorldClick({ kind: "creature", creature }); return; }
+      if (creature) {
+        this.onWorldClick({ kind: "creature", creature });
+        this.emitPrimaryTap();
+        return;
+      }
       const building = this.getBuildingAt(position);
       if (building) { this.onWorldClick({ kind: "building", building }); return; }
     }
