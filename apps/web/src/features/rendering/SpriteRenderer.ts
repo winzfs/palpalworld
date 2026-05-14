@@ -9,6 +9,10 @@ function toSpriteDirection(direction: Direction | undefined): SpriteDirection {
   return "down";
 }
 
+function isDrawableImage(image: HTMLImageElement | null | undefined) {
+  return Boolean(image && image.complete && image.naturalWidth > 0 && image.naturalHeight > 0);
+}
+
 function drawSpriteSheetFrame(
   ctx: CanvasRenderingContext2D,
   image: HTMLImageElement,
@@ -36,7 +40,7 @@ export class SpriteRenderer {
   drawResource(ctx: CanvasRenderingContext2D, resource: ResourceNodeState, x: number, y: number) {
     const spriteSet = getResourceSpriteSet(resource.resourceType);
     const image = this.loader.getImage(spriteSet?.idle ?? null);
-    if (!image || !spriteSet) {
+    if (!spriteSet || !isDrawableImage(image)) {
       this.fallback.drawResource(ctx, resource, x, y);
       return;
     }
@@ -48,7 +52,7 @@ export class SpriteRenderer {
     const spriteSet = getCreatureSpriteSet(creature.speciesId);
     const asset = spriteSet?.idle.down ?? null;
     const image = this.loader.getImage(asset);
-    if (!image || !asset) {
+    if (!asset || !isDrawableImage(image)) {
       this.fallback.drawCreature(ctx, creature, x, y);
       return;
     }
@@ -59,7 +63,7 @@ export class SpriteRenderer {
   drawBuilding(ctx: CanvasRenderingContext2D, building: BuildingState, x: number, y: number) {
     const spriteSet = getBuildingSpriteSet(building.type);
     const image = this.loader.getImage(spriteSet?.idle ?? null);
-    if (!image || !spriteSet) {
+    if (!spriteSet || !isDrawableImage(image)) {
       this.fallback.drawBuilding(ctx, building, x, y);
       return;
     }
@@ -72,14 +76,19 @@ export class SpriteRenderer {
     const sheet = isMoving ? spriteSet.walk ?? spriteSet.idle : spriteSet.idle;
     const image = this.loader.getImage(sheet ?? null);
 
-    if (!image || !sheet) {
+    if (!sheet || !isDrawableImage(image)) {
       this.fallback.drawPlayer(ctx, player, x, y, isLocal);
       return;
     }
 
-    const frameIndex = sheet.frameCount <= 1 ? 0 : Math.floor(now / sheet.frameDurationMs) % sheet.frameCount;
-    const direction = toSpriteDirection(player.direction);
-    drawSpriteSheetFrame(ctx, image, sheet, direction, frameIndex, x, y, 1);
+    try {
+      const frameIndex = sheet.frameCount <= 1 ? 0 : Math.floor(now / sheet.frameDurationMs) % sheet.frameCount;
+      const direction = toSpriteDirection(player.direction);
+      drawSpriteSheetFrame(ctx, image, sheet, direction, frameIndex, x, y, 1);
+    } catch {
+      this.fallback.drawPlayer(ctx, player, x, y, isLocal);
+      return;
+    }
 
     if (isLocal) {
       ctx.strokeStyle = "rgba(250, 204, 21, 0.8)";
