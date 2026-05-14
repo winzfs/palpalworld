@@ -10,7 +10,16 @@ import {
   type Vector2,
   type WorldSnapshot,
 } from "@palpalworld/shared";
-import { MAP_TILE_SIZE, clampPositionToTile, getMapTile, getPortalPosition, type MapDirection } from "../../../../../packages/shared/src/worldTiles";
+import {
+  DEFAULT_PLAYER_TILE,
+  MAP_TILE_SIZE,
+  clampPositionToTile,
+  getMapTile,
+  getNeighborTile,
+  getPortalDirectionAtPosition,
+  getSpawnPositionAfterTravel,
+  type MapDirection,
+} from "../../../../../packages/shared/src/worldTiles";
 import { SpriteRenderer } from "../rendering/SpriteRenderer";
 import { TileMapRenderer } from "../rendering/TileMapRenderer";
 
@@ -34,8 +43,25 @@ function distance(a: Vector2, b: Vector2) {
   return Math.hypot(a.x - b.x, a.y - b.y);
 }
 
+function getTileRef(entity: unknown) {
+  return (entity as { currentTile?: typeof DEFAULT_PLAYER_TILE })?.currentTile ?? DEFAULT_PLAYER_TILE;
+}
+
 function normalizeSnapshotToCurrentTile(snapshot: WorldSnapshot): WorldSnapshot {
-  for (const player of snapshot.players) player.position = clampPositionToTile(player.position);
+  for (const player of snapshot.players) {
+    const currentTile = getTileRef(player);
+    const clamped = clampPositionToTile(player.position);
+    const direction = getPortalDirectionAtPosition(clamped, currentTile);
+    const nextTile = direction ? getNeighborTile(currentTile, direction) : null;
+    if (direction && nextTile) {
+      (player as any).currentTile = { ...nextTile };
+      player.position = getSpawnPositionAfterTravel(direction, clamped);
+    } else {
+      (player as any).currentTile = currentTile;
+      player.position = clamped;
+    }
+  }
+
   for (const resource of snapshot.resources) resource.position = clampPositionToTile(resource.position);
   for (const creature of snapshot.creatures) creature.position = clampPositionToTile(creature.position);
   for (const building of snapshot.buildings) building.position = clampPositionToTile(building.position);
@@ -268,20 +294,10 @@ export class GameWorldScene {
     const right = this.keys.has("d") || this.keys.has("arrowright");
     const up = this.keys.has("w") || this.keys.has("arrowup");
     const down = this.keys.has("s") || this.keys.has("arrowdown");
-    const localPlayer = this.getLocalPlayerPosition();
-    let x = Number(right) - Number(left);
-    let y = Number(down) - Number(up);
-
-    if (localPlayer) {
-      if (localPlayer.x <= 0 && x < 0) x = 0;
-      if (localPlayer.x >= MAP_TILE_SIZE.width && x > 0) x = 0;
-      if (localPlayer.y <= 0 && y < 0) y = 0;
-      if (localPlayer.y >= MAP_TILE_SIZE.height && y > 0) y = 0;
-    }
 
     this.onInputChange({
-      x,
-      y,
+      x: Number(right) - Number(left),
+      y: Number(down) - Number(up),
       primary: this.keys.has(" "),
       secondary: this.keys.has("e"),
     });
@@ -312,7 +328,7 @@ export class GameWorldScene {
 
   private drawMapBoundaryAndPortals(ctx: CanvasRenderingContext2D, cameraX: number, cameraY: number) {
     const localPlayer = this.getLocalPlayer();
-    const currentTile = (localPlayer as any)?.currentTile;
+    const currentTile = getTileRef(localPlayer);
     const tile = getMapTile(currentTile);
 
     const x = -cameraX;
@@ -326,28 +342,46 @@ export class GameWorldScene {
 
     if (!tile) return;
 
-    for (const direction of ["north", "south", "west", "east"] as MapDirection[]) {
-      if (!tile.exits[direction]) continue;
-      const portal = getPortalPosition(direction);
-      const px = portal.x - cameraX;
-      const py = portal.y - cameraY;
+    const edge = MAP_TILE_SIZE.portalRadius;
+    ctx.save();
+    ctx.setLineDash([]);
+    ctx.fillStyle = "rgba(14, 165, 233, 0.18)";
+    ctx.strokeStyle = "rgba(125, 211, 252, 0.9)";
+    ctx.lineWidth = 2;
+    ctx.font = "13px system-ui";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillStyle = "rgba(14, 165, 233, 0.18)";
 
-      ctx.save();
-      ctx.fillStyle = "rgba(14, 165, 233, 0.18)";
-      ctx.strokeStyle = "rgba(125, 211, 252, 0.95)";
-      ctx.lineWidth = 3;
-      ctx.beginPath();
-      ctx.arc(px, py, MAP_TILE_SIZE.portalRadius, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.stroke();
-
+    if (tile.exits.north) {
+      ctx.fillRect(x, y, MAP_TILE_SIZE.width, edge);
+      ctx.strokeRect(x, y, MAP_TILE_SIZE.width, edge);
       ctx.fillStyle = "rgba(224, 242, 254, 0.95)";
-      ctx.font = "13px system-ui";
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.fillText(portalLabels[direction], px, py);
-      ctx.restore();
+      ctx.fillText(portalLabels.north, x + MAP_TILE_SIZE.width / 2, y + edge / 2);
+      ctx.fillStyle = "rgba(14, 165, 233, 0.18)";
     }
+    if (tile.exits.south) {
+      ctx.fillRect(x, y + MAP_TILE_SIZE.height - edge, MAP_TILE_SIZE.width, edge);
+      ctx.strokeRect(x, y + MAP_TILE_SIZE.height - edge, MAP_TILE_SIZE.width, edge);
+      ctx.fillStyle = "rgba(224, 242, 254, 0.95)";
+      ctx.fillText(portalLabels.south, x + MAP_TILE_SIZE.width / 2, y + MAP_TILE_SIZE.height - edge / 2);
+      ctx.fillStyle = "rgba(14, 165, 233, 0.18)";
+    }
+    if (tile.exits.west) {
+      ctx.fillRect(x, y, edge, MAP_TILE_SIZE.height);
+      ctx.strokeRect(x, y, edge, MAP_TILE_SIZE.height);
+      ctx.fillStyle = "rgba(224, 242, 254, 0.95)";
+      ctx.fillText(portalLabels.west, x + edge / 2, y + MAP_TILE_SIZE.height / 2);
+      ctx.fillStyle = "rgba(14, 165, 233, 0.18)";
+    }
+    if (tile.exits.east) {
+      ctx.fillRect(x + MAP_TILE_SIZE.width - edge, y, edge, MAP_TILE_SIZE.height);
+      ctx.strokeRect(x + MAP_TILE_SIZE.width - edge, y, edge, MAP_TILE_SIZE.height);
+      ctx.fillStyle = "rgba(224, 242, 254, 0.95)";
+      ctx.fillText(portalLabels.east, x + MAP_TILE_SIZE.width - edge / 2, y + MAP_TILE_SIZE.height / 2);
+    }
+
+    ctx.restore();
   }
 
   private drawBuildings(ctx: CanvasRenderingContext2D, cameraX: number, cameraY: number) {
