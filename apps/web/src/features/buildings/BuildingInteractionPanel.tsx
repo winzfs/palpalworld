@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import type { BuildingState, InventoryState, ItemStack } from "@palpalworld/shared";
 import { getCraftingStationByBuildingType, getProgressionBuilding, type CraftingStationId } from "../crafting/progressionCatalog";
 import { addInventoryStack, createFallbackInventory, getInventoryAmount, readStoredInventory, removeInventoryStack, writeStoredInventory } from "../inventory/inventoryStore";
@@ -64,6 +65,11 @@ export function BuildingInteractionPanel({
 }) {
   const [activeInventory, setActiveInventory] = useState<InventoryState>(() => readStoredInventory(inventory ?? createFallbackInventory()));
   const [storageItems, setStorageItems] = useState<ItemStack[]>(() => readStorageBoxItems(building));
+  const [portalHost, setPortalHost] = useState<HTMLElement | null>(null);
+
+  useEffect(() => {
+    setPortalHost(document.body);
+  }, []);
 
   useEffect(() => {
     if (inventory) setActiveInventory(cloneInventoryForView(inventory));
@@ -121,7 +127,7 @@ export function BuildingInteractionPanel({
   };
 
   if (isStorageBuilding(building.type)) {
-    return (
+    const storageWindow = (
       <div className="storage-overlay-panel" aria-label="보관함">
         <button className="storage-overlay-panel__close" onClick={onClose} aria-label="보관함 닫기">×</button>
         <StorageBoxPanel
@@ -131,6 +137,13 @@ export function BuildingInteractionPanel({
           onWithdraw={handleWithdraw}
         />
       </div>
+    );
+
+    return (
+      <>
+        <span className="storage-menu-empty-marker" aria-hidden="true" />
+        {portalHost ? createPortal(storageWindow, portalHost) : storageWindow}
+      </>
     );
   }
 
