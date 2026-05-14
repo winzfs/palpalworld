@@ -1,18 +1,7 @@
 import type { EquipmentSlot, EquipmentState, InventoryState, ItemInstanceId } from "@palpalworld/shared";
 import { getIconAsset } from "../assets/assetCatalog";
 import { getItemLabel } from "../items/itemLabels";
-import { ItemSlot } from "../ui/ItemSlot";
-
-const equipmentSlots: { id: EquipmentSlot; label: string }[] = [
-  { id: "weapon", label: "무기" },
-  { id: "head", label: "머리" },
-  { id: "body", label: "몸" },
-  { id: "hands", label: "손" },
-  { id: "feet", label: "발" },
-  { id: "accessory1", label: "장신구 1" },
-  { id: "accessory2", label: "장신구 2" },
-  { id: "mountGear", label: "탈것 장비" },
-];
+import { EQUIPMENT_SLOTS, findItemInstance, getEquipmentSlotForItemId, getEquippableInstances } from "./equipmentRules";
 
 export function EquipmentPanel({
   inventory,
@@ -25,44 +14,62 @@ export function EquipmentPanel({
   onEquip?: (itemInstanceId: ItemInstanceId) => void;
   onUnequip?: (slot: EquipmentSlot) => void;
 }) {
-  const instances = inventory?.itemInstances ?? [];
   const equippedInstanceIds = new Set(Object.values(equipment?.slots ?? {}).filter(Boolean));
-  const availableInstances = instances.filter((item) => !equippedInstanceIds.has(item.instanceId));
+  const availableInstances = getEquippableInstances(inventory).filter((item) => !equippedInstanceIds.has(item.instanceId));
 
   return (
-    <div className="feature-panel feature-panel--equipment">
-      <div className="feature-panel__section-title">장비 슬롯</div>
-      <div className="equipment-grid">
-        {equipmentSlots.map((slot) => {
+    <div className="feature-panel feature-panel--equipment equipment-panel-diablo">
+      <div className="equipment-paperdoll">
+        {EQUIPMENT_SLOTS.map((slot) => {
           const equippedId = equipment?.slots[slot.id];
-          const equippedItem = equippedId ? instances.find((item) => item.instanceId === equippedId) : null;
+          const equippedItem = findItemInstance(inventory, equippedId);
           const icon = equippedItem ? getIconAsset(equippedItem.itemId) : null;
           return (
-            <ItemSlot
+            <button
               key={slot.id}
-              label={slot.label}
-              detail={equippedItem ? `${getItemLabel(equippedItem.itemId)} Lv.${equippedItem.level}` : "비어 있음"}
-              iconSrc={icon?.src}
-              selected={Boolean(equippedItem)}
+              className={equippedItem ? `equipment-slot equipment-slot--${slot.id} equipment-slot--filled` : `equipment-slot equipment-slot--${slot.id}`}
               onClick={equippedItem && onUnequip ? () => onUnequip(slot.id) : undefined}
-            />
+              disabled={!equippedItem || !onUnequip}
+              title={equippedItem ? `${slot.label}: ${getItemLabel(equippedItem.itemId)}` : slot.label}
+            >
+              <small>{slot.shortLabel}</small>
+              {icon ? <img src={icon.src} alt="" /> : <span className="equipment-slot__empty">＋</span>}
+              {equippedItem ? <b>Lv.{equippedItem.level}</b> : null}
+            </button>
           );
         })}
+        <div className="equipment-paperdoll__avatar">
+          <span>🧍</span>
+          <b>장비</b>
+          <small>슬롯 클릭 시 해제</small>
+        </div>
       </div>
 
       <div className="feature-panel__section-title">착용 가능 장비</div>
-      <div className="inventory-grid">
+      <div className="equipment-inventory-list">
         {availableInstances.length > 0 ? (
           availableInstances.map((item) => {
             const icon = getIconAsset(item.itemId);
+            const targetSlot = getEquipmentSlotForItemId(item.itemId);
             return (
-              <ItemSlot
+              <button
                 key={item.instanceId}
-                label={getItemLabel(item.itemId)}
-                detail={`Lv.${item.level}${item.traitIds.length > 0 ? ` · ${item.traitIds.join(", ")}` : ""}`}
-                iconSrc={icon?.src}
+                className="equipment-inventory-item"
                 onClick={onEquip ? () => onEquip(item.instanceId) : undefined}
-              />
+                disabled={!onEquip}
+              >
+                <span className="equipment-inventory-item__icon">
+                  {icon ? <img src={icon.src} alt="" /> : <span>?</span>}
+                </span>
+                <span className="equipment-inventory-item__text">
+                  <b>{getItemLabel(item.itemId)}</b>
+                  <small>
+                    {targetSlot ? EQUIPMENT_SLOTS.find((slot) => slot.id === targetSlot)?.label : "장비"} · Lv.{item.level}
+                    {item.traitIds.length > 0 ? ` · ${item.traitIds.join(", ")}` : ""}
+                  </small>
+                </span>
+                <em>착용</em>
+              </button>
             );
           })
         ) : (
@@ -70,7 +77,7 @@ export function EquipmentPanel({
         )}
       </div>
 
-      <div className="feature-panel__hint">장비를 누르면 착용하고, 장착 슬롯을 누르면 해제합니다.</div>
+      <div className="feature-panel__hint">장비를 누르면 알맞은 슬롯에 착용됩니다. 무기는 퀵슬롯에도 등록할 수 있습니다.</div>
     </div>
   );
 }
