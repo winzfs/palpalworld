@@ -101,11 +101,11 @@ export function getStarterTileName(tileX: number, tileY: number) {
 }
 
 function getCrossRegionExit(tile: MapTileRef, direction: MapDirection): MapTileRef | null {
-  if (tile.regionId === "starter_meadow" && direction === "east" && tile.tileX === 2 && tile.tileY === 1) {
-    return { regionId: "stone_hills", tileX: 0, tileY: 1 };
+  if (tile.regionId === "starter_meadow" && direction === "east" && tile.tileX === 2) {
+    return { regionId: "stone_hills", tileX: 0, tileY: Math.max(0, Math.min(REGION_THEMES.stone_hills.rows - 1, tile.tileY)) };
   }
-  if (tile.regionId === "stone_hills" && direction === "west" && tile.tileX === 0 && tile.tileY === 1) {
-    return { regionId: "starter_meadow", tileX: 2, tileY: 1 };
+  if (tile.regionId === "stone_hills" && direction === "west" && tile.tileX === 0) {
+    return { regionId: "starter_meadow", tileX: REGION_THEMES.starter_meadow.columns - 1, tileY: Math.max(0, Math.min(REGION_THEMES.starter_meadow.rows - 1, tile.tileY)) };
   }
   return null;
 }
@@ -174,20 +174,21 @@ export function getPortalPosition(direction: MapDirection): Vector2 {
 export function getPortalDirectionAtPosition(position: Vector2, currentTile: MapTileRef): MapDirection | null {
   const tile = getMapTile(currentTile);
   if (!tile) return null;
-  const directions: MapDirection[] = ["north", "south", "west", "east"];
-  for (const direction of directions) {
-    if (!tile.exits[direction]) continue;
-    const portal = getPortalPosition(direction);
-    if (Math.hypot(position.x - portal.x, position.y - portal.y) <= MAP_TILE_SIZE.portalRadius) return direction;
-  }
+  const edge = MAP_TILE_SIZE.portalRadius;
+  if (tile.exits.west && position.x <= edge) return "west";
+  if (tile.exits.east && position.x >= MAP_TILE_SIZE.width - edge) return "east";
+  if (tile.exits.north && position.y <= edge) return "north";
+  if (tile.exits.south && position.y >= MAP_TILE_SIZE.height - edge) return "south";
   return null;
 }
 
-export function getSpawnPositionAfterTravel(direction: MapDirection): Vector2 {
-  if (direction === "east") return { x: MAP_TILE_SIZE.portalMargin + 96, y: MAP_TILE_SIZE.height / 2 };
-  if (direction === "west") return { x: MAP_TILE_SIZE.width - MAP_TILE_SIZE.portalMargin - 96, y: MAP_TILE_SIZE.height / 2 };
-  if (direction === "south") return { x: MAP_TILE_SIZE.width / 2, y: MAP_TILE_SIZE.portalMargin + 96 };
-  return { x: MAP_TILE_SIZE.width / 2, y: MAP_TILE_SIZE.height - MAP_TILE_SIZE.portalMargin - 96 };
+export function getSpawnPositionAfterTravel(direction: MapDirection, previousPosition?: Vector2): Vector2 {
+  const x = previousPosition ? Math.max(MAP_TILE_SIZE.portalMargin + 96, Math.min(MAP_TILE_SIZE.width - MAP_TILE_SIZE.portalMargin - 96, previousPosition.x)) : MAP_TILE_SIZE.width / 2;
+  const y = previousPosition ? Math.max(MAP_TILE_SIZE.portalMargin + 96, Math.min(MAP_TILE_SIZE.height - MAP_TILE_SIZE.portalMargin - 96, previousPosition.y)) : MAP_TILE_SIZE.height / 2;
+  if (direction === "east") return { x: MAP_TILE_SIZE.portalMargin + 96, y };
+  if (direction === "west") return { x: MAP_TILE_SIZE.width - MAP_TILE_SIZE.portalMargin - 96, y };
+  if (direction === "south") return { x, y: MAP_TILE_SIZE.portalMargin + 96 };
+  return { x, y: MAP_TILE_SIZE.height - MAP_TILE_SIZE.portalMargin - 96 };
 }
 
 export function getEntityTileById(entityId: string): MapTileRef {
