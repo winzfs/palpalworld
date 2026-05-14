@@ -1,0 +1,11 @@
+{
+  "name": "PalPalWorld",
+  "customizations": {
+    "vscode": {
+      "settings": {
+        "npm.packageManager": "pnpm",
+        "npm.packageManagerWarning": false
+      }
+    }
+  }
+}
