@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
-import type { InventoryState } from "@palpalworld/shared";
+import { useEffect, useMemo, useRef, useState } from "react";
+import type { InventoryState, ItemStack } from "@palpalworld/shared";
 import { getIconAsset } from "../assets/assetCatalog";
 import { getItemLabel } from "../items/itemLabels";
 import {
@@ -25,13 +25,24 @@ const categoryLabels: Record<RecipeCategory, string> = {
   quest: "진행",
 };
 
-type CraftQueueJob = {
+type CraftableEntry = {
   id: string;
   stationId: CraftingStationId;
   kind: "recipe" | "building";
   targetId: string;
+  outputItemId: string;
   name: string;
-  outputsLabel: string;
+  tier: ProgressionTier;
+  category: RecipeCategory;
+  inputs: ItemStack[];
+  outputs: ItemStack[];
+  craftTimeMs: number;
+  description: string;
+  metaLabel: string;
+};
+
+type CraftQueueJob = CraftableEntry & {
+  jobId: string;
   startedAt: number;
   finishesAt: number;
 };
@@ -42,7 +53,7 @@ function getOwnedAmount(inventory: InventoryState | null, itemId: string) {
   return inventory?.items.find((item) => item.itemId === itemId)?.amount ?? 0;
 }
 
-function canAfford(inventory: InventoryState | null, stacks: { itemId: string; amount: number }[]) {
+function canAfford(inventory: InventoryState | null, stacks: ItemStack[]) {
   return stacks.every((stack) => getOwnedAmount(inventory, stack.itemId) >= stack.amount);
 }
 
@@ -57,11 +68,50 @@ function formatRemainingTime(ms: number) {
   return `${Math.ceil(ms / 1000)}초 남음`;
 }
 
-function formatStacks(stacks: { itemId: string; amount: number }[]) {
+function formatStacks(stacks: ItemStack[]) {
   return stacks.map((stack) => `${getItemLabel(stack.itemId)} ${stack.amount}`).join(" · ");
 }
 
-function RequirementList({ inventory, stacks }: { inventory: InventoryState | null; stacks: { itemId: string; amount: number }[] }) {
+function toCraftableEntries(station: CraftingStationDefinition): CraftableEntry[] {
+  const recipeEntries: CraftableEntry[] = getRecipesByStation(station.id).map((recipe) => ({
+    id: `recipe:${recipe.id}`,
+    stationId: station.id,
+    kind: "recipe",
+    targetId: recipe.id,
+    outputItemId: recipe.outputs[0]?.itemId ?? recipe.id,
+    name: recipe.name,
+    tier: recipe.tier,
+    category: recipe.category,
+    inputs: recipe.inputs,
+    outputs: recipe.outputs,
+    craftTimeMs: recipe.craftTimeMs,
+    description: recipe.description,
+    metaLabel: `${categoryLabels[recipe.category]} · 시간 ${formatCraftTime(recipe.craftTimeMs)} · 결과 ${formatStacks(recipe.outputs)}`,
+  }));
+
+  const buildingEntries: CraftableEntry[] = getBuildableBuildingsByStation(station.id).map((building) => {
+    const itemId = getBuildingItemId(building.type);
+    return {
+      id: `building:${building.type}`,
+      stationId: station.id,
+      kind: "building",
+      targetId: building.type,
+      outputItemId: itemId,
+      name: building.name,
+      tier: building.tier,
+      category: "building",
+      inputs: building.requires,
+      outputs: [{ itemId, amount: 1 }],
+      craftTimeMs: building.craftTimeMs,
+      description: building.description,
+      metaLabel: `건설 · 시간 ${formatCraftTime(building.craftTimeMs)} · 결과 ${getItemLabel(itemId)} 1`,
+    };
+  });
+
+  return [...recipeEntries, ...buildingEntries];
+}
+
+function RequirementList({ inventory, stacks }: { inventory: InventoryState | null; stacks: ItemStack[] }) {
   return (
     <span className="crafting-card__requirements">
       {stacks.map((stack) => {
@@ -86,6 +136,16 @@ function CraftIcon({ itemId }: { itemId: string }) {
   );
 }
 
+function ProgressBar({ startedAt, finishesAt, now }: { startedAt: number; finishesAt: number; now: number }) {
+  const totalMs = Math.max(1, finishesAt - startedAt);
+  const progress = Math.max(0, Math.min(100, Math.round(((now - startedAt) / totalMs) * 100)));
+  return (
+    <div className="crafting-queue__bar" aria-label={`제작 진행도 ${progress}%`}>
+      <span style={{ width: `${progress}%` }} />
+    </div>
+  );
+}
+
 function CraftQueueView({
   station,
   jobs,
@@ -106,22 +166,18 @@ function CraftQueueView({
       ) : (
         <div className="crafting-queue-list">
           {jobs.map((job) => {
-            const totalMs = Math.max(1, job.finishesAt - job.startedAt);
-            const progress = Math.max(0, Math.min(100, Math.round(((now - job.startedAt) / totalMs) * 100)));
             const done = now >= job.finishesAt;
             return (
-              <div key={job.id} className="crafting-card crafting-card--queue">
+              <div key={job.jobId} className="crafting-card crafting-card--queue">
                 <div className="crafting-card__main">
-                  <CraftIcon itemId={job.targetId} />
+                  <CraftIcon itemId={job.outputItemId} />
                   <span className="crafting-card__text">
                     <b>{job.name}</b>
-                    <span>{job.outputsLabel}</span>
+                    <span>{formatStacks(job.outputs)}</span>
                     <small>{done ? "제작 완료 · 자동 지급 중" : formatRemainingTime(job.finishesAt - now)}</small>
                   </span>
                 </div>
-                <div className="crafting-queue__bar" aria-label={`제작 진행도 ${progress}%`}>
-                  <span style={{ width: `${progress}%` }} />
-                </div>
+                <ProgressBar startedAt={job.startedAt} finishesAt={job.finishesAt} now={now} />
                 {!done ? (
                   <button className="crafting-card__button crafting-card__button--ghost" onClick={() => onCancel(job)}>취소</button>
                 ) : null}
@@ -146,103 +202,64 @@ function StationCraftingSection({
   inventory: InventoryState | null;
   queueJobs: CraftQueueJob[];
   now: number;
-  onStartJob: (job: Omit<CraftQueueJob, "id" | "startedAt" | "finishesAt">, craftTimeMs: number) => void;
+  onStartJob: (entry: CraftableEntry) => void;
   onCancelJob: (job: CraftQueueJob) => void;
 }) {
-  const recipes = getRecipesByStation(station.id);
-  const buildableBuildings = getBuildableBuildingsByStation(station.id);
-  const hasRecipes = recipes.length > 0;
-  const hasBuildings = buildableBuildings.length > 0;
-  const activeQueueCount = queueJobs.filter((job) => now < job.finishesAt).length;
-  const queueFull = activeQueueCount >= station.queueSize;
+  const entries = useMemo(() => toCraftableEntries(station), [station]);
+  const activeJobs = queueJobs.filter((job) => now < job.finishesAt);
+  const queueFull = activeJobs.length >= station.queueSize;
 
   return (
     <section className="crafting-station-section">
       <div className="crafting-station-section__intro">
         <strong>{station.name}</strong>
-        <span>{station.description} · 제작 큐 {station.queueSize}칸 · 완료 시 자동 지급됩니다.</span>
+        <span>{station.description} · 일반 아이템과 건설물 모두 같은 제작 큐로 처리됩니다.</span>
       </div>
 
       <CraftQueueView station={station} jobs={queueJobs} now={now} onCancel={onCancelJob} />
 
-      {!hasRecipes && !hasBuildings ? (
-        <div className="feature-panel__hint">이 제작소에는 아직 등록된 레시피가 없습니다.</div>
-      ) : null}
+      {entries.length === 0 ? <div className="feature-panel__hint">이 제작소에는 아직 등록된 레시피가 없습니다.</div> : null}
 
       {tiers.map((tier) => {
-        const tierRecipes = recipes.filter((recipe) => recipe.tier === tier);
-        const tierBuildings = buildableBuildings.filter((building) => building.tier === tier);
-        if (tierRecipes.length === 0 && tierBuildings.length === 0) return null;
+        const tierEntries = entries.filter((entry) => entry.tier === tier);
+        if (tierEntries.length === 0) return null;
 
         return (
           <section key={`${station.id}-${tier}`} className="crafting-tier">
-            {tierRecipes.length > 0 ? (
-              <>
-                <div className="feature-panel__section-title">{tier} 제작</div>
-                <div className="crafting-recipe-grid">
-                  {tierRecipes.map((recipe) => {
-                    const affordable = canAfford(inventory, recipe.inputs);
-                    const outputsLabel = formatStacks(recipe.outputs);
-                    const outputItemId = recipe.outputs[0]?.itemId ?? recipe.id;
-                    const disabled = !affordable || queueFull;
-                    return (
-                      <article key={recipe.id} className={disabled ? "crafting-card crafting-card--disabled" : "crafting-card"}>
-                        <div className="crafting-card__main">
-                          <CraftIcon itemId={outputItemId} />
-                          <span className="crafting-card__text">
-                            <b>{recipe.name}</b>
-                            <span>{recipe.description}</span>
-                            <small>{categoryLabels[recipe.category]} · 시간 {formatCraftTime(recipe.craftTimeMs)} · 결과 {outputsLabel}</small>
-                          </span>
-                        </div>
-                        <RequirementList inventory={inventory} stacks={recipe.inputs} />
-                        <button
-                          className="crafting-card__button"
-                          onClick={() => onStartJob({ stationId: station.id, kind: "recipe", targetId: recipe.id, name: recipe.name, outputsLabel }, recipe.craftTimeMs)}
-                          disabled={disabled}
-                        >
-                          {!affordable ? "재료 부족" : queueFull ? "큐 가득참" : "제작 시작"}
-                        </button>
-                      </article>
-                    );
-                  })}
-                </div>
-              </>
-            ) : null}
+            <div className="feature-panel__section-title">{tier} 제작</div>
+            <div className="crafting-recipe-grid">
+              {tierEntries.map((entry) => {
+                const affordable = canAfford(inventory, entry.inputs);
+                const runningJob = activeJobs.find((job) => job.id === entry.id);
+                const disabled = Boolean(runningJob) || !affordable || (queueFull && !runningJob);
+                const cardClassName = runningJob ? "crafting-card crafting-card--working" : disabled ? "crafting-card crafting-card--disabled" : "crafting-card";
+                const buttonLabel = runningJob
+                  ? `제작 중 · ${formatRemainingTime(runningJob.finishesAt - now)}`
+                  : !affordable
+                    ? "재료 부족"
+                    : queueFull
+                      ? "큐 가득참"
+                      : "제작 시작";
 
-            {tierBuildings.length > 0 ? (
-              <>
-                <div className="feature-panel__section-title">{tier} 건설</div>
-                <div className="crafting-recipe-grid">
-                  {tierBuildings.map((building) => {
-                    const affordable = canAfford(inventory, building.requires);
-                    const itemId = getBuildingItemId(building.type);
-                    const outputsLabel = `${getItemLabel(itemId)} 1`;
-                    const disabled = !affordable || queueFull;
-                    return (
-                      <article key={building.type} className={disabled ? "crafting-card crafting-card--disabled" : "crafting-card"}>
-                        <div className="crafting-card__main">
-                          <CraftIcon itemId={itemId} />
-                          <span className="crafting-card__text">
-                            <b>{building.name}</b>
-                            <span>{building.description}</span>
-                            <small>Lv.{building.unlockLevel} · {building.category} · 결과 {outputsLabel}</small>
-                          </span>
-                        </div>
-                        <RequirementList inventory={inventory} stacks={building.requires} />
-                        <button
-                          className="crafting-card__button"
-                          onClick={() => onStartJob({ stationId: station.id, kind: "building", targetId: building.type, name: building.name, outputsLabel }, building.craftTimeMs)}
-                          disabled={disabled}
-                        >
-                          {!affordable ? "재료 부족" : queueFull ? "큐 가득참" : "제작 시작"}
-                        </button>
-                      </article>
-                    );
-                  })}
-                </div>
-              </>
-            ) : null}
+                return (
+                  <article key={entry.id} className={cardClassName}>
+                    <div className="crafting-card__main">
+                      <CraftIcon itemId={entry.outputItemId} />
+                      <span className="crafting-card__text">
+                        <b>{entry.name}</b>
+                        <span>{entry.description}</span>
+                        <small>{entry.metaLabel}</small>
+                      </span>
+                    </div>
+                    <RequirementList inventory={inventory} stacks={entry.inputs} />
+                    {runningJob ? <ProgressBar startedAt={runningJob.startedAt} finishesAt={runningJob.finishesAt} now={now} /> : null}
+                    <button className="crafting-card__button" onClick={() => onStartJob(entry)} disabled={disabled}>
+                      {buttonLabel}
+                    </button>
+                  </article>
+                );
+              })}
+            </div>
           </section>
         );
       })}
@@ -265,67 +282,66 @@ export function CraftingPanel({
 }) {
   const [now, setNow] = useState(() => Date.now());
   const [queueState, setQueueState] = useState<CraftQueueState>({});
-  const [claimedJobIds, setClaimedJobIds] = useState<Set<string>>(() => new Set());
+  const onCraftRef = useRef(onCraft);
+  const onCraftBuildingItemRef = useRef(onCraftBuildingItem);
   const stations = useMemo(() => {
     const targetStation = getCraftingStation(stationId ?? "hand");
     return targetStation ? [targetStation] : [];
   }, [stationId]);
 
   useEffect(() => {
-    const timer = window.setInterval(() => setNow(Date.now()), 250);
+    onCraftRef.current = onCraft;
+    onCraftBuildingItemRef.current = onCraftBuildingItem;
+  }, [onCraft, onCraftBuildingItem]);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      const tickNow = Date.now();
+      setNow(tickNow);
+      setQueueState((current) => {
+        let changed = false;
+        const next: CraftQueueState = {};
+        for (const [stationKey, jobs] of Object.entries(current) as [CraftingStationId, CraftQueueJob[]][]) {
+          const remainingJobs: CraftQueueJob[] = [];
+          for (const job of jobs) {
+            if (tickNow >= job.finishesAt) {
+              changed = true;
+              if (job.kind === "recipe") onCraftRef.current(job.targetId);
+              else onCraftBuildingItemRef.current(job.targetId);
+            } else {
+              remainingJobs.push(job);
+            }
+          }
+          next[stationKey] = remainingJobs;
+        }
+        return changed ? next : current;
+      });
+    }, 250);
     return () => window.clearInterval(timer);
   }, []);
 
-  useEffect(() => {
-    const completedJobs = Object.values(queueState)
-      .flatMap((jobs) => jobs ?? [])
-      .filter((job) => now >= job.finishesAt && !claimedJobIds.has(job.id));
-
-    if (completedJobs.length === 0) return;
-
-    for (const job of completedJobs) {
-      if (job.kind === "recipe") onCraft(job.targetId);
-      else onCraftBuildingItem(job.targetId);
-    }
-
-    setClaimedJobIds((current) => {
-      const next = new Set(current);
-      completedJobs.forEach((job) => next.add(job.id));
-      return next;
-    });
-
-    setQueueState((current) => {
-      const next: CraftQueueState = {};
-      for (const [stationKey, jobs] of Object.entries(current) as [CraftingStationId, CraftQueueJob[]][]) {
-        next[stationKey] = jobs.filter((job) => !completedJobs.some((completed) => completed.id === job.id));
-      }
-      return next;
-    });
-  }, [claimedJobIds, now, onCraft, onCraftBuildingItem, queueState]);
-
-  const startJob = (jobInput: Omit<CraftQueueJob, "id" | "startedAt" | "finishesAt">, craftTimeMs: number) => {
-    const station = getCraftingStation(jobInput.stationId);
+  const startJob = (entry: CraftableEntry) => {
+    const station = getCraftingStation(entry.stationId);
     if (!station) return;
-
     setQueueState((current) => {
-      const jobs = current[jobInput.stationId] ?? [];
-      const activeJobs = jobs.filter((job) => Date.now() < job.finishesAt);
-      if (activeJobs.length >= station.queueSize) return current;
-      const startedAt = Date.now();
+      const jobs = current[entry.stationId] ?? [];
+      const tickNow = Date.now();
+      const activeJobs = jobs.filter((job) => tickNow < job.finishesAt);
+      if (activeJobs.length >= station.queueSize) return { ...current, [entry.stationId]: activeJobs };
       const job: CraftQueueJob = {
-        ...jobInput,
-        id: `${jobInput.kind}-${jobInput.targetId}-${startedAt}-${Math.floor(Math.random() * 1_000_000)}`,
-        startedAt,
-        finishesAt: startedAt + Math.max(250, craftTimeMs),
+        ...entry,
+        jobId: `${entry.id}-${tickNow}-${Math.floor(Math.random() * 1_000_000)}`,
+        startedAt: tickNow,
+        finishesAt: tickNow + Math.max(250, entry.craftTimeMs),
       };
-      return { ...current, [jobInput.stationId]: [...activeJobs, job] };
+      return { ...current, [entry.stationId]: [...activeJobs, job] };
     });
   };
 
   const removeJob = (job: CraftQueueJob) => {
     setQueueState((current) => ({
       ...current,
-      [job.stationId]: (current[job.stationId] ?? []).filter((queuedJob) => queuedJob.id !== job.id),
+      [job.stationId]: (current[job.stationId] ?? []).filter((queuedJob) => queuedJob.jobId !== job.jobId),
     }));
   };
 
