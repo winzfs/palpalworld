@@ -3,6 +3,7 @@ import "./globals.css";
 import "./hud-menu.css";
 import "./equipment-panel.css";
 import "./storage-panel.css";
+import "./capture-panel.css";
 import "./menu-overrides.css";
 
 export const metadata: Metadata = {
