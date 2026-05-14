@@ -20,7 +20,7 @@ import { createTileBasedDemoBuildings, createTileBasedDemoCreatures, createTileB
 import { GameScene, type GameSceneInput, type GameWorldScene, type WorldClickTarget } from "./GameScene";
 import { addBuildingToTileIndex, createDemoTileIndex, getAliveTileCreatures, getAliveTileResources, getTileBuildings } from "./demoTileIndex";
 
-type MenuTab = "status" | "objective" | "equipment" | "crafting" | "building" | "logs";
+type MenuTab = "status" | "objective" | "equipment" | "crafting" | "logs";
 type MiniMapSize = "small" | "medium" | "large";
 type QuickButtonId = "inventory" | "crafting";
 
@@ -33,7 +33,6 @@ const menuTabs: { id: MenuTab; label: string }[] = [
   { id: "objective", label: "목표" },
   { id: "equipment", label: "장비" },
   { id: "crafting", label: "제작" },
-  { id: "building", label: "건물" },
   { id: "logs", label: "로그" },
 ];
 const minimapSizes: MiniMapSize[] = ["small", "medium", "large"];
@@ -348,14 +347,10 @@ export function GameClientTileDemoStation() {
     }
     updateInventory((current) => {
       const consumed = consumeInventoryItems(current, recipe.inputs);
-      if (!consumed) {
-        setChatLines((prev) => [...prev.slice(-5), `[demo] ${recipe.name} 재료 부족`]);
-        return current;
-      }
-      const crafted = recipe.outputs.reduce((next, output) => addCraftedItem(next, output.itemId, output.amount), consumed);
-      setChatLines((prev) => [...prev.slice(-5), `[demo] ${recipe.name} 제작 완료`]);
-      return crafted;
+      if (!consumed) return current;
+      return recipe.outputs.reduce((next, output) => addCraftedItem(next, output.itemId, output.amount), consumed);
     });
+    setChatLines((prev) => [...prev.slice(-5), `[demo] ${recipe.name} 제작 완료`]);
   }, [updateInventory]);
 
   const handleCraftBuildingItem = useCallback((buildingType: string) => {
@@ -364,13 +359,10 @@ export function GameClientTileDemoStation() {
     const itemId = getBuildingItemId(building.type);
     updateInventory((current) => {
       const consumed = consumeInventoryItems(current, building.requires);
-      if (!consumed) {
-        setChatLines((prev) => [...prev.slice(-5), `[demo] ${building.name} 재료 부족`]);
-        return current;
-      }
-      setChatLines((prev) => [...prev.slice(-5), `[demo] ${building.name} 제작 완료`]);
+      if (!consumed) return current;
       return addInventoryStack(consumed, itemId, 1);
     });
+    setChatLines((prev) => [...prev.slice(-5), `[demo] ${building.name} 제작 완료`]);
   }, [updateInventory]);
 
   const handleSelectBuildingItem = useCallback((itemId: string) => {
@@ -397,8 +389,7 @@ export function GameClientTileDemoStation() {
       } else {
         setSelectedStationBuilding(null);
         setSelectedBuilding(target.building);
-        setActiveMenuTab("building");
-        setMenuOpen(true);
+        setChatLines((prev) => [...prev.slice(-5), `[build] ${String(target.building.type)} 상호작용`]);
       }
       return;
     }
@@ -425,7 +416,6 @@ export function GameClientTileDemoStation() {
       setSelectedBuildingItemId(null);
       setSelectedBuilding(null);
       setSelectedStationBuilding(getCraftingStationByBuildingType(String(placedBuilding.type)) ? placedBuilding : null);
-      setMenuOpen(false);
       setChatLines((prev) => [...prev.slice(-5), `[demo] ${building.name} 설치 완료`]);
       applyDemoSnapshot(true);
       return consumed;
@@ -454,8 +444,8 @@ export function GameClientTileDemoStation() {
   const handleInputChange = useCallback((input: GameSceneInput) => { inputRef.current = input; }, []);
   const objectiveText = useMemo(() => selectedBuildingItemId ? "배치 모드입니다. 설치할 필드 위치를 클릭하세요." : "타일마다 다른 자원과 몬스터가 배치됩니다.", [selectedBuildingItemId]);
   const cycleMinimapSize = useCallback(() => setMinimapSize((current) => minimapSizes[(minimapSizes.indexOf(current) + 1) % minimapSizes.length]), []);
-  const openInventoryPanel = useCallback(() => { setInventoryOpen((value) => !value); setMenuOpen(false); setSelectedStationBuilding(null); }, []);
-  const openCraftingMenu = useCallback(() => { setActiveMenuTab("crafting"); setMenuOpen(true); setInventoryOpen(false); setSelectedStationBuilding(null); }, []);
+  const openInventoryPanel = useCallback(() => { setInventoryOpen((value) => !value); setMenuOpen(false); setSelectedStationBuilding(null); setSelectedBuilding(null); }, []);
+  const openCraftingMenu = useCallback(() => { setActiveMenuTab("crafting"); setMenuOpen(true); setInventoryOpen(false); setSelectedStationBuilding(null); setSelectedBuilding(null); }, []);
 
   const activeMenuContent = useMemo<ReactNode>(() => {
     switch (activeMenuTab) {
@@ -467,36 +457,18 @@ export function GameClientTileDemoStation() {
         return <EquipmentPanel inventory={inventory} />;
       case "crafting":
         return <CraftingPanel inventory={inventory} onCraft={handleCraft} onCraftBuildingItem={handleCraftBuildingItem} />;
-      case "building":
-        return selectedBuilding ? (
-          <BuildingInteractionPanel
-            building={selectedBuilding}
-            inventory={inventory}
-            onInventoryChange={commitInventory}
-            onClose={() => setSelectedBuilding(null)}
-            onOpenCrafting={() => {
-              const station = getCraftingStationByBuildingType(String(selectedBuilding.type));
-              if (station) {
-                setSelectedStationBuilding(selectedBuilding);
-                setMenuOpen(false);
-              } else {
-                setActiveMenuTab("crafting");
-              }
-            }}
-          />
-        ) : <div className="feature-panel feature-panel__hint">필드의 건설물을 클릭하면 이곳에 상호작용 메뉴가 표시됩니다.</div>;
       case "logs":
         return <LogPanel lines={chatLines} />;
       default:
         return null;
     }
-  }, [activeMenuTab, chatLines, commitInventory, handleCraft, handleCraftBuildingItem, inventory, nickname, objectiveText, selectedBuilding, snapshot]);
+  }, [activeMenuTab, chatLines, handleCraft, handleCraftBuildingItem, inventory, nickname, objectiveText, snapshot]);
 
   return (
     <main className={`game-shell ${selectedBuildingItemId ? "game-shell--placing" : ""}`}>
       <GameScene onReady={handleSceneReady} onInputChange={handleInputChange} onInteract={handleDemoInteract} onWorldClick={handleWorldClick} placementBuildingType={placementBuildingType} />
       <section className="game-hud" aria-label="Game HUD">
-        <button className="hud-menu-button" onClick={() => { setMenuOpen((value) => !value); setInventoryOpen(false); setSelectedStationBuilding(null); }} aria-expanded={menuOpen}>☰ 메뉴</button>
+        <button className="hud-menu-button" onClick={() => { setMenuOpen((value) => !value); setInventoryOpen(false); setSelectedStationBuilding(null); setSelectedBuilding(null); }} aria-expanded={menuOpen}>☰ 메뉴</button>
         <FloatingQuickButton id="inventory" onOpen={openInventoryPanel} />
         <FloatingQuickButton id="crafting" onOpen={openCraftingMenu} />
         <section className={`hud-minimap hud-minimap--${minimapSize}`} aria-label="미니맵">
@@ -508,6 +480,19 @@ export function GameClientTileDemoStation() {
             <button className="inventory-overlay-panel__close" onClick={() => setInventoryOpen(false)} aria-label="인벤토리 닫기">×</button>
             <InventoryGridPanel inventory={inventory} quickSlots={quickSlots} selectedBuildingItemId={selectedBuildingItemId} onSelectBuildingItem={handleSelectBuildingItem} onAssignQuickSlot={handleAssignQuickSlot} />
           </section>
+        ) : null}
+        {selectedBuilding ? (
+          <BuildingInteractionPanel
+            building={selectedBuilding}
+            inventory={inventory}
+            onInventoryChange={commitInventory}
+            onClose={() => setSelectedBuilding(null)}
+            onOpenCrafting={() => {
+              const station = getCraftingStationByBuildingType(String(selectedBuilding.type));
+              if (station) setSelectedStationBuilding(selectedBuilding);
+              setSelectedBuilding(null);
+            }}
+          />
         ) : null}
         {selectedStationBuilding && selectedStation ? (
           <section className="station-overlay-panel" aria-label={`${selectedStation.name} 제작소`}>
@@ -552,4 +537,95 @@ function FloatingQuickButton({ id, onOpen }: { id: QuickButtonId; onOpen: () => 
 function MobileControls({ onInputChange, onInteract }: { onInputChange: (input: GameSceneInput) => void; onInteract: () => void }) {
   const [stick, setStick] = useState({ x: 0, y: 0 });
   const pointerIdRef = useRef<number | null>(null);
-  const activeInput... (truncated due to context)
+  const activeInputRef = useRef<GameSceneInput>({ x: 0, y: 0, primary: false, secondary: false });
+
+  const emitInput = useCallback((patch: Partial<GameSceneInput>) => {
+    const next = { ...activeInputRef.current, ...patch };
+    activeInputRef.current = next;
+    onInputChange(next);
+  }, [onInputChange]);
+
+  const updateStickFromPointer = useCallback((event: PointerEvent<HTMLDivElement>) => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    const centerX = rect.left + rect.width / 2;
+    const centerY = rect.top + rect.height / 2;
+    const rawX = event.clientX - centerX;
+    const rawY = event.clientY - centerY;
+    const distance = Math.hypot(rawX, rawY);
+    const clampedDistance = Math.min(distance, joystickRadius);
+    const angle = Math.atan2(rawY, rawX);
+    const visual = {
+      x: Math.cos(angle) * clampedDistance,
+      y: Math.sin(angle) * clampedDistance,
+    };
+    setStick(visual);
+    emitInput({
+      x: distance === 0 ? 0 : visual.x / joystickRadius,
+      y: distance === 0 ? 0 : visual.y / joystickRadius,
+    });
+  }, [emitInput]);
+
+  const stopMovement = useCallback(() => {
+    pointerIdRef.current = null;
+    setStick({ x: 0, y: 0 });
+    emitInput({ x: 0, y: 0 });
+  }, [emitInput]);
+
+  return (
+    <>
+      <div className="mobile-control-hint">왼쪽 이동 · 오른쪽 행동</div>
+      <div
+        className="mobile-joystick"
+        role="application"
+        aria-label="이동 조이스틱"
+        onPointerDown={(event) => {
+          event.preventDefault();
+          pointerIdRef.current = event.pointerId;
+          event.currentTarget.setPointerCapture(event.pointerId);
+          updateStickFromPointer(event);
+        }}
+        onPointerMove={(event) => {
+          if (pointerIdRef.current !== event.pointerId) return;
+          event.preventDefault();
+          updateStickFromPointer(event);
+        }}
+        onPointerUp={(event) => {
+          if (pointerIdRef.current !== event.pointerId) return;
+          event.preventDefault();
+          event.currentTarget.releasePointerCapture(event.pointerId);
+          stopMovement();
+        }}
+        onPointerCancel={stopMovement}
+      >
+        <div className="joystick-base">
+          <div className="joystick-cross joystick-cross--horizontal" />
+          <div className="joystick-cross joystick-cross--vertical" />
+          <div className="joystick-stick" style={{ transform: `translate(calc(-50% + ${stick.x}px), calc(-50% + ${stick.y}px))` }} />
+        </div>
+      </div>
+      <div className="mobile-actions" aria-label="행동 버튼">
+        <button
+          className="mobile-action mobile-action--primary"
+          onPointerDown={(event) => {
+            event.preventDefault();
+            emitInput({ primary: true });
+          }}
+          onPointerUp={(event) => {
+            event.preventDefault();
+            emitInput({ primary: false });
+          }}
+          onPointerCancel={() => emitInput({ primary: false })}
+        >
+          공격
+        </button>
+        <button
+          className="mobile-action mobile-action--secondary"
+          onPointerDown={(event) => event.preventDefault()}
+          onClick={onInteract}
+        >
+          채집
+        </button>
+      </div>
+    </>
+  );
+}
