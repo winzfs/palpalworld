@@ -103,17 +103,9 @@
   transition: width 0.18s ease;
 }
 
-.hud-minimap--small {
-  width: 96px;
-}
-
-.hud-minimap--medium {
-  width: 132px;
-}
-
-.hud-minimap--large {
-  width: 176px;
-}
+.hud-minimap--small { width: 96px; }
+.hud-minimap--medium { width: 132px; }
+.hud-minimap--large { width: 176px; }
 
 .hud-minimap__size-button {
   position: absolute;
@@ -132,9 +124,7 @@
   cursor: pointer;
 }
 
-.hud-minimap__size-button:active {
-  transform: scale(0.94);
-}
+.hud-minimap__size-button:active { transform: scale(0.94); }
 
 .hud-menu-panel {
   position: absolute;
@@ -206,7 +196,8 @@
   padding: 10px;
 }
 
-.inventory-overlay-panel {
+.inventory-overlay-panel,
+.station-overlay-panel {
   pointer-events: auto;
   position: absolute;
   left: 50%;
@@ -214,7 +205,6 @@
   z-index: 22;
   width: min(760px, calc(100vw - 24px));
   max-height: min(680px, calc(100vh - 40px));
-  padding: 10px;
   transform: translate(-50%, -50%);
   border: 2px solid rgb(242 209 107 / 0.45);
   border-radius: 16px;
@@ -223,11 +213,12 @@
   backdrop-filter: blur(12px);
 }
 
-.inventory-overlay-panel__close {
-  position: absolute;
-  right: 8px;
-  top: 8px;
-  z-index: 3;
+.inventory-overlay-panel {
+  padding: 10px;
+}
+
+.inventory-overlay-panel__close,
+.station-overlay-panel__header button {
   width: 26px;
   height: 26px;
   border: 1px solid rgb(255 255 255 / 0.22);
@@ -236,6 +227,45 @@
   color: var(--jrpg-text);
   font-weight: 950;
   cursor: pointer;
+}
+
+.inventory-overlay-panel__close {
+  position: absolute;
+  right: 8px;
+  top: 8px;
+  z-index: 3;
+}
+
+.station-overlay-panel {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  overflow: hidden;
+}
+
+.station-overlay-panel__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 42px;
+  padding: 8px 10px;
+  border-bottom: 1px solid rgb(250 204 21 / 0.24);
+  background: linear-gradient(rgb(58 45 28 / 0.88), rgb(22 18 28 / 0.88));
+  color: var(--jrpg-gold);
+}
+
+.station-overlay-panel__header strong {
+  overflow: hidden;
+  font-size: 14px;
+  font-weight: 950;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.station-overlay-panel__body {
+  min-height: 0;
+  overflow: auto;
+  padding: 10px;
 }
 
 .inventory-grid-panel {
@@ -302,10 +332,7 @@
   cursor: pointer;
 }
 
-.inventory-grid-slot:disabled {
-  opacity: 0.38;
-  cursor: default;
-}
+.inventory-grid-slot:disabled { opacity: 0.38; cursor: default; }
 
 .inventory-grid-slot--selected {
   border-color: var(--jrpg-border-bright);
@@ -362,32 +389,11 @@
   background: rgb(20 18 28 / 0.82);
 }
 
-.inventory-detail-card__icon img {
-  width: 42px;
-  height: 42px;
-  image-rendering: pixelated;
-}
-
-.inventory-detail-card strong {
-  color: var(--jrpg-text);
-  font-size: 15px;
-}
-
-.inventory-detail-card small {
-  color: var(--jrpg-gold);
-  font-size: 11px;
-  font-weight: 900;
-}
-
-.inventory-detail-card p {
-  margin: 0;
-  line-height: 1.45;
-}
-
-.inventory-detail-card__actions {
-  display: grid;
-  gap: 8px;
-}
+.inventory-detail-card__icon img { width: 42px; height: 42px; image-rendering: pixelated; }
+.inventory-detail-card strong { color: var(--jrpg-text); font-size: 15px; }
+.inventory-detail-card small { color: var(--jrpg-gold); font-size: 11px; font-weight: 900; }
+.inventory-detail-card p { margin: 0; line-height: 1.45; }
+.inventory-detail-card__actions { display: grid; gap: 8px; }
 
 .inventory-detail-card__actions > button,
 .inventory-quick-assign__slot {
@@ -400,27 +406,164 @@
   cursor: pointer;
 }
 
-.inventory-quick-assign {
-  display: grid;
-  gap: 5px;
-}
-
+.inventory-quick-assign { display: grid; gap: 5px; }
 .inventory-quick-assign span,
 .inventory-detail-card__hint,
-.inventory-detail-card__empty {
-  color: var(--jrpg-muted);
-  font-size: 11px;
+.inventory-detail-card__empty { color: var(--jrpg-muted); font-size: 11px; }
+.inventory-quick-assign div { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; }
+.inventory-quick-assign__slot--active { border-color: var(--jrpg-border-bright); color: var(--jrpg-gold); }
+
+.crafting-station-section,
+.feature-panel--crafting {
+  display: grid;
+  gap: 10px;
 }
 
-.inventory-quick-assign div {
+.crafting-station-section__intro {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  gap: 3px;
+  padding: 8px 10px;
+  border: 1px solid rgb(242 209 107 / 0.18);
+  border-radius: 10px;
+  background: rgb(0 0 0 / 0.2);
+}
+
+.crafting-station-section__intro strong {
+  color: var(--jrpg-gold);
+  font-size: 14px;
+}
+
+.crafting-station-section__intro span {
+  color: var(--jrpg-muted);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.crafting-recipe-grid,
+.crafting-queue-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.crafting-card {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+  padding: 9px;
+  border: 1px solid rgb(242 209 107 / 0.24);
+  border-radius: 10px;
+  background: rgb(20 18 28 / 0.72);
+  color: var(--jrpg-text);
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.04);
+}
+
+.crafting-card--disabled {
+  opacity: 0.58;
+}
+
+.crafting-card__main {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+}
+
+.crafting-card__icon {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border: 1px solid rgb(242 209 107 / 0.25);
+  border-radius: 9px;
+  background: rgb(0 0 0 / 0.24);
+}
+
+.crafting-card__icon img {
+  width: 34px;
+  height: 34px;
+  image-rendering: pixelated;
+  object-fit: contain;
+}
+
+.crafting-card__text {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.crafting-card__text b {
+  overflow: hidden;
+  color: var(--jrpg-text);
+  font-size: 13px;
+  font-weight: 950;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.crafting-card__text span,
+.crafting-card__text small {
+  color: var(--jrpg-muted);
+  font-size: 10px;
+  line-height: 1.3;
+}
+
+.crafting-card__requirements {
+  display: flex;
+  flex-wrap: wrap;
   gap: 4px;
 }
 
-.inventory-quick-assign__slot--active {
-  border-color: var(--jrpg-border-bright);
-  color: var(--jrpg-gold);
+.crafting-card__requirement {
+  padding: 2px 5px;
+  border-radius: 999px;
+  border: 1px solid rgb(255 255 255 / 0.12);
+  background: rgb(0 0 0 / 0.22);
+  font-size: 9px;
+  font-weight: 800;
+}
+
+.crafting-card__requirement--enough {
+  color: #bbf7d0;
+  border-color: rgb(34 197 94 / 0.35);
+}
+
+.crafting-card__requirement--missing {
+  color: #fecaca;
+  border-color: rgb(239 68 68 / 0.42);
+}
+
+.crafting-card__button {
+  min-height: 30px;
+  border: 1px solid rgb(242 209 107 / 0.38);
+  border-radius: 8px;
+  background: linear-gradient(#4f3d1f, #241b14);
+  color: var(--jrpg-text);
+  font-size: 11px;
+  font-weight: 950;
+  cursor: pointer;
+}
+
+.crafting-card__button--ghost {
+  background: rgb(0 0 0 / 0.24);
+  color: var(--jrpg-muted);
+}
+
+.crafting-queue__bar {
+  position: relative;
+  height: 8px;
+  overflow: hidden;
+  border: 1px solid rgb(125 211 252 / 0.28);
+  border-radius: 999px;
+  background: rgb(0 0 0 / 0.36);
+}
+
+.crafting-queue__bar span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--jrpg-blue), var(--jrpg-gold));
+  transition: width 0.2s linear;
 }
 
 .quick-slot-bar {
@@ -448,36 +591,10 @@
   cursor: pointer;
 }
 
-.quick-slot--empty {
-  opacity: 0.58;
-}
-
-.quick-slot em {
-  position: absolute;
-  left: 3px;
-  top: 2px;
-  color: rgb(255 247 223 / 0.72);
-  font-size: 8px;
-  font-style: normal;
-  font-weight: 950;
-}
-
-.quick-slot img {
-  width: 28px;
-  height: 28px;
-  image-rendering: pixelated;
-  object-fit: contain;
-}
-
-.quick-slot b {
-  position: absolute;
-  right: 3px;
-  bottom: 1px;
-  color: #fff7df;
-  font-size: 9px;
-  font-weight: 950;
-  text-shadow: 0 1px 3px rgb(0 0 0 / 0.9);
-}
+.quick-slot--empty { opacity: 0.58; }
+.quick-slot em { position: absolute; left: 3px; top: 2px; color: rgb(255 247 223 / 0.72); font-size: 8px; font-style: normal; font-weight: 950; }
+.quick-slot img { width: 28px; height: 28px; image-rendering: pixelated; object-fit: contain; }
+.quick-slot b { position: absolute; right: 3px; bottom: 1px; color: #fff7df; font-size: 9px; font-weight: 950; text-shadow: 0 1px 3px rgb(0 0 0 / 0.9); }
 
 @media (max-width: 720px) {
   .hud-menu-button {
@@ -489,20 +606,9 @@
     font-size: 11px;
   }
 
-  .hud-quick-button {
-    width: 38px;
-    height: 38px;
-    border-radius: 10px;
-    opacity: 0.72;
-  }
-
-  .hud-quick-button span {
-    font-size: 16px;
-  }
-
-  .hud-quick-button small {
-    font-size: 7px;
-  }
+  .hud-quick-button { width: 38px; height: 38px; border-radius: 10px; opacity: 0.72; }
+  .hud-quick-button span { font-size: 16px; }
+  .hud-quick-button small { font-size: 7px; }
 
   .hud-minimap {
     right: calc(8px + var(--safe-right));
@@ -511,17 +617,9 @@
     border-radius: 8px;
   }
 
-  .hud-minimap--small {
-    width: 78px;
-  }
-
-  .hud-minimap--medium {
-    width: 104px;
-  }
-
-  .hud-minimap--large {
-    width: 136px;
-  }
+  .hud-minimap--small { width: 78px; }
+  .hud-minimap--medium { width: 104px; }
+  .hud-minimap--large { width: 136px; }
 
   .hud-minimap__size-button {
     right: 5px;
@@ -542,117 +640,77 @@
     border-radius: 10px;
   }
 
-  .hud-menu-panel__header {
-    padding: 6px 8px;
-    font-size: 12px;
-  }
+  .hud-menu-panel__header { padding: 6px 8px; font-size: 12px; }
+  .hud-menu-panel__header button { min-height: 24px; padding: 3px 7px; font-size: 10px; }
+  .hud-menu-tabs { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; padding: 6px; }
+  .hud-menu-tabs__button { min-height: 25px; padding: 4px 5px; border-radius: 6px; font-size: 9px; }
+  .hud-menu-panel__body { padding: 6px; }
 
-  .hud-menu-panel__header button {
-    min-height: 24px;
-    padding: 3px 7px;
-    font-size: 10px;
-  }
-
-  .hud-menu-tabs {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 4px;
-    padding: 6px;
-  }
-
-  .hud-menu-tabs__button {
-    min-height: 25px;
-    padding: 4px 5px;
-    border-radius: 6px;
-    font-size: 9px;
-  }
-
-  .hud-menu-panel__body {
-    padding: 6px;
-  }
-
-  .inventory-overlay-panel {
+  .inventory-overlay-panel,
+  .station-overlay-panel {
     width: calc(100vw - 14px);
     max-height: calc(100vh - 120px - var(--safe-bottom));
-    padding: 7px;
     border-width: 1px;
     border-radius: 12px;
   }
 
-  .inventory-grid-panel__tabs {
-    grid-template-columns: repeat(5, minmax(0, 1fr));
-    gap: 4px;
-  }
+  .inventory-overlay-panel { padding: 7px; }
+  .station-overlay-panel__header { min-height: 36px; padding: 6px 8px; }
+  .station-overlay-panel__header strong { font-size: 12px; }
+  .station-overlay-panel__body { padding: 7px; }
 
-  .inventory-grid-panel__tab {
-    min-height: 26px;
-    font-size: 9px;
-  }
+  .inventory-grid-panel__tabs { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 4px; }
+  .inventory-grid-panel__tab { min-height: 26px; font-size: 9px; }
+  .inventory-grid-panel__content { grid-template-columns: 1fr; }
+  .inventory-grid-panel__slots { grid-template-columns: repeat(6, minmax(34px, 1fr)); gap: 4px; max-height: 42vh; }
 
-  .inventory-grid-panel__content {
+  .inventory-detail-card { padding: 7px; gap: 5px; font-size: 10px; }
+  .inventory-detail-card__icon { display: none; }
+  .inventory-detail-card strong { font-size: 12px; }
+
+  .crafting-recipe-grid,
+  .crafting-queue-list {
     grid-template-columns: 1fr;
+    gap: 6px;
   }
 
-  .inventory-grid-panel__slots {
-    grid-template-columns: repeat(6, minmax(34px, 1fr));
-    gap: 4px;
-    max-height: 42vh;
-  }
-
-  .inventory-detail-card {
+  .crafting-card {
     padding: 7px;
     gap: 5px;
-    font-size: 10px;
-  }
-
-  .inventory-detail-card__icon {
-    display: none;
-  }
-
-  .inventory-detail-card strong {
-    font-size: 12px;
-  }
-
-  .quick-slot-bar {
-    right: calc(10px + var(--safe-right));
-    bottom: calc(96px + var(--safe-bottom));
-    gap: 5px;
-  }
-
-  .quick-slot {
-    width: 36px;
-    height: 36px;
     border-radius: 8px;
   }
 
-  .quick-slot img {
-    width: 24px;
-    height: 24px;
+  .crafting-card__main {
+    grid-template-columns: 38px minmax(0, 1fr);
+    gap: 6px;
   }
+
+  .crafting-card__icon {
+    width: 38px;
+    height: 38px;
+    border-radius: 8px;
+  }
+
+  .crafting-card__icon img {
+    width: 29px;
+    height: 29px;
+  }
+
+  .crafting-card__text b { font-size: 11px; }
+  .crafting-card__text span,
+  .crafting-card__text small { font-size: 9px; }
+  .crafting-card__button { min-height: 27px; font-size: 10px; }
+
+  .quick-slot-bar { right: calc(10px + var(--safe-right)); bottom: calc(96px + var(--safe-bottom)); gap: 5px; }
+  .quick-slot { width: 36px; height: 36px; border-radius: 8px; }
+  .quick-slot img { width: 24px; height: 24px; }
 }
 
 @media (max-width: 420px) {
-  .hud-minimap--medium {
-    width: 92px;
-  }
-
-  .hud-minimap--large {
-    width: 122px;
-  }
-
-  .hud-menu-panel {
-    max-height: calc(100vh - 160px - var(--safe-top) - var(--safe-bottom));
-  }
-
-  .inventory-grid-panel__tabs {
-    gap: 3px;
-  }
-
-  .inventory-grid-panel__tab {
-    padding: 0 2px;
-    font-size: 8px;
-  }
-
-  .inventory-grid-panel__slots {
-    grid-template-columns: repeat(5, minmax(34px, 1fr));
-  }
+  .hud-minimap--medium { width: 92px; }
+  .hud-minimap--large { width: 122px; }
+  .hud-menu-panel { max-height: calc(100vh - 160px - var(--safe-top) - var(--safe-bottom)); }
+  .inventory-grid-panel__tabs { gap: 3px; }
+  .inventory-grid-panel__tab { padding: 0 2px; font-size: 8px; }
+  .inventory-grid-panel__slots { grid-template-columns: repeat(5, minmax(34px, 1fr)); }
 }
