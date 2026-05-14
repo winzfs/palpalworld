@@ -53,7 +53,7 @@ function formatCraftTime(ms: number) {
 }
 
 function formatRemainingTime(ms: number) {
-  if (ms <= 0) return "완료";
+  if (ms <= 0) return "완료 처리 중";
   return `${Math.ceil(ms / 1000)}초 남음`;
 }
 
@@ -90,18 +90,17 @@ function CraftQueueView({
   station,
   jobs,
   now,
-  onClaim,
   onCancel,
 }: {
   station: CraftingStationDefinition;
   jobs: CraftQueueJob[];
   now: number;
-  onClaim: (job: CraftQueueJob) => void;
   onCancel: (job: CraftQueueJob) => void;
 }) {
+  const activeJobs = jobs.filter((job) => now < job.finishesAt);
   return (
     <section className="crafting-queue">
-      <div className="feature-panel__section-title">제작 큐 {jobs.length}/{station.queueSize}</div>
+      <div className="feature-panel__section-title">제작 큐 {activeJobs.length}/{station.queueSize}</div>
       {jobs.length === 0 ? (
         <div className="feature-panel__hint">진행 중인 제작이 없습니다.</div>
       ) : (
@@ -117,17 +116,15 @@ function CraftQueueView({
                   <span className="crafting-card__text">
                     <b>{job.name}</b>
                     <span>{job.outputsLabel}</span>
-                    <small>{done ? "제작 완료" : formatRemainingTime(job.finishesAt - now)}</small>
+                    <small>{done ? "제작 완료 · 자동 지급 중" : formatRemainingTime(job.finishesAt - now)}</small>
                   </span>
                 </div>
                 <div className="crafting-queue__bar" aria-label={`제작 진행도 ${progress}%`}>
                   <span style={{ width: `${progress}%` }} />
                 </div>
-                {done ? (
-                  <button className="crafting-card__button" onClick={() => onClaim(job)}>수령</button>
-                ) : (
+                {!done ? (
                   <button className="crafting-card__button crafting-card__button--ghost" onClick={() => onCancel(job)}>취소</button>
-                )}
+                ) : null}
               </div>
             );
           })}
@@ -143,7 +140,6 @@ function StationCraftingSection({
   queueJobs,
   now,
   onStartJob,
-  onClaimJob,
   onCancelJob,
 }: {
   station: CraftingStationDefinition;
@@ -151,23 +147,23 @@ function StationCraftingSection({
   queueJobs: CraftQueueJob[];
   now: number;
   onStartJob: (job: Omit<CraftQueueJob, "id" | "startedAt" | "finishesAt">, craftTimeMs: number) => void;
-  onClaimJob: (job: CraftQueueJob) => void;
   onCancelJob: (job: CraftQueueJob) => void;
 }) {
   const recipes = getRecipesByStation(station.id);
   const buildableBuildings = getBuildableBuildingsByStation(station.id);
   const hasRecipes = recipes.length > 0;
   const hasBuildings = buildableBuildings.length > 0;
-  const queueFull = queueJobs.length >= station.queueSize;
+  const activeQueueCount = queueJobs.filter((job) => now < job.finishesAt).length;
+  const queueFull = activeQueueCount >= station.queueSize;
 
   return (
     <section className="crafting-station-section">
       <div className="crafting-station-section__intro">
         <strong>{station.name}</strong>
-        <span>{station.description} · 제작 큐 {station.queueSize}칸</span>
+        <span>{station.description} · 제작 큐 {station.queueSize}칸 · 완료 시 자동 지급됩니다.</span>
       </div>
 
-      <CraftQueueView station={station} jobs={queueJobs} now={now} onClaim={onClaimJob} onCancel={onCancelJob} />
+      <CraftQueueView station={station} jobs={queueJobs} now={now} onCancel={onCancelJob} />
 
       {!hasRecipes && !hasBuildings ? (
         <div className="feature-panel__hint">이 제작소에는 아직 등록된 레시피가 없습니다.</div>
@@ -188,8 +184,9 @@ function StationCraftingSection({
                     const affordable = canAfford(inventory, recipe.inputs);
                     const outputsLabel = formatStacks(recipe.outputs);
                     const outputItemId = recipe.outputs[0]?.itemId ?? recipe.id;
+                    const disabled = !affordable || queueFull;
                     return (
-                      <article key={recipe.id} className={affordable && !queueFull ? "crafting-card" : "crafting-card crafting-card--disabled"}>
+                      <article key={recipe.id} className={disabled ? "crafting-card crafting-card--disabled" : "crafting-card"}>
                         <div className="crafting-card__main">
                           <CraftIcon itemId={outputItemId} />
                           <span className="crafting-card__text">
@@ -202,9 +199,9 @@ function StationCraftingSection({
                         <button
                           className="crafting-card__button"
                           onClick={() => onStartJob({ stationId: station.id, kind: "recipe", targetId: recipe.id, name: recipe.name, outputsLabel }, recipe.craftTimeMs)}
-                          disabled={!affordable || queueFull}
+                          disabled={disabled}
                         >
-                          제작
+                          {!affordable ? "재료 부족" : queueFull ? "큐 가득참" : "제작 시작"}
                         </button>
                       </article>
                     );
@@ -221,8 +218,9 @@ function StationCraftingSection({
                     const affordable = canAfford(inventory, building.requires);
                     const itemId = getBuildingItemId(building.type);
                     const outputsLabel = `${getItemLabel(itemId)} 1`;
+                    const disabled = !affordable || queueFull;
                     return (
-                      <article key={building.type} className={affordable && !queueFull ? "crafting-card" : "crafting-card crafting-card--disabled"}>
+                      <article key={building.type} className={disabled ? "crafting-card crafting-card--disabled" : "crafting-card"}>
                         <div className="crafting-card__main">
                           <CraftIcon itemId={itemId} />
                           <span className="crafting-card__text">
@@ -235,9 +233,9 @@ function StationCraftingSection({
                         <button
                           className="crafting-card__button"
                           onClick={() => onStartJob({ stationId: station.id, kind: "building", targetId: building.type, name: building.name, outputsLabel }, building.craftTimeMs)}
-                          disabled={!affordable || queueFull}
+                          disabled={disabled}
                         >
-                          제작
+                          {!affordable ? "재료 부족" : queueFull ? "큐 가득참" : "제작 시작"}
                         </button>
                       </article>
                     );
@@ -267,6 +265,7 @@ export function CraftingPanel({
 }) {
   const [now, setNow] = useState(() => Date.now());
   const [queueState, setQueueState] = useState<CraftQueueState>({});
+  const [claimedJobIds, setClaimedJobIds] = useState<Set<string>>(() => new Set());
   const stations = useMemo(() => {
     const targetStation = getCraftingStation(stationId ?? "hand");
     return targetStation ? [targetStation] : [];
@@ -277,21 +276,49 @@ export function CraftingPanel({
     return () => window.clearInterval(timer);
   }, []);
 
+  useEffect(() => {
+    const completedJobs = Object.values(queueState)
+      .flatMap((jobs) => jobs ?? [])
+      .filter((job) => now >= job.finishesAt && !claimedJobIds.has(job.id));
+
+    if (completedJobs.length === 0) return;
+
+    for (const job of completedJobs) {
+      if (job.kind === "recipe") onCraft(job.targetId);
+      else onCraftBuildingItem(job.targetId);
+    }
+
+    setClaimedJobIds((current) => {
+      const next = new Set(current);
+      completedJobs.forEach((job) => next.add(job.id));
+      return next;
+    });
+
+    setQueueState((current) => {
+      const next: CraftQueueState = {};
+      for (const [stationKey, jobs] of Object.entries(current) as [CraftingStationId, CraftQueueJob[]][]) {
+        next[stationKey] = jobs.filter((job) => !completedJobs.some((completed) => completed.id === job.id));
+      }
+      return next;
+    });
+  }, [claimedJobIds, now, onCraft, onCraftBuildingItem, queueState]);
+
   const startJob = (jobInput: Omit<CraftQueueJob, "id" | "startedAt" | "finishesAt">, craftTimeMs: number) => {
     const station = getCraftingStation(jobInput.stationId);
     if (!station) return;
 
     setQueueState((current) => {
       const jobs = current[jobInput.stationId] ?? [];
-      if (jobs.length >= station.queueSize) return current;
+      const activeJobs = jobs.filter((job) => Date.now() < job.finishesAt);
+      if (activeJobs.length >= station.queueSize) return current;
       const startedAt = Date.now();
       const job: CraftQueueJob = {
         ...jobInput,
-        id: `${jobInput.kind}-${jobInput.targetId}-${startedAt}`,
+        id: `${jobInput.kind}-${jobInput.targetId}-${startedAt}-${Math.floor(Math.random() * 1_000_000)}`,
         startedAt,
-        finishesAt: startedAt + Math.max(0, craftTimeMs),
+        finishesAt: startedAt + Math.max(250, craftTimeMs),
       };
-      return { ...current, [jobInput.stationId]: [...jobs, job] };
+      return { ...current, [jobInput.stationId]: [...activeJobs, job] };
     });
   };
 
@@ -300,13 +327,6 @@ export function CraftingPanel({
       ...current,
       [job.stationId]: (current[job.stationId] ?? []).filter((queuedJob) => queuedJob.id !== job.id),
     }));
-  };
-
-  const claimJob = (job: CraftQueueJob) => {
-    if (Date.now() < job.finishesAt) return;
-    removeJob(job);
-    if (job.kind === "recipe") onCraft(job.targetId);
-    else onCraftBuildingItem(job.targetId);
   };
 
   return (
@@ -324,7 +344,6 @@ export function CraftingPanel({
           queueJobs={queueState[station.id] ?? []}
           now={now}
           onStartJob={startJob}
-          onClaimJob={claimJob}
           onCancelJob={removeJob}
         />
       ))}
