@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent, type ReactNode } from "react";
-import type { BuildingState, BuildingType, CreaturePublicState, InventoryState, PlayerDirection, ResourceNodeState, Vector2, WorldSnapshot } from "@palpalworld/shared";
+import type { BuildingState, BuildingType, CreaturePublicState, Direction, InventoryState, ResourceNodeState, Vector2, WorldSnapshot } from "@palpalworld/shared";
 import { CharacterPanel } from "../character/CharacterPanel";
 import { CraftingPanel } from "../crafting/CraftingPanel";
 import { getBuildingItemId, getProgressionBuilding, getProgressionBuildingByItemId, getProgressionRecipe } from "../crafting/progressionCatalog";
@@ -36,7 +36,7 @@ function createClientNickname() {
   return nextNickname;
 }
 
-function directionFromMovement(input: Vector2, fallback: PlayerDirection): PlayerDirection {
+function directionFromMovement(input: Vector2, fallback: Direction): Direction {
   if (Math.abs(input.x) < 0.08 && Math.abs(input.y) < 0.08) return fallback;
   if (Math.abs(input.x) >= Math.abs(input.y)) return input.x >= 0 ? "right" : "left";
   return input.y >= 0 ? "down" : "up";
@@ -118,7 +118,7 @@ function findNearestCreature(creatures: CreaturePublicState[], position: Vector2
   return nearest && nearestDistance <= maxRange ? nearest : null;
 }
 
-function createDemoSnapshot(nickname: string, position: Vector2, direction: PlayerDirection, currentTile: MapTileRef, resources: ResourceNodeState[], creatures: CreaturePublicState[], buildings: BuildingState[]): WorldSnapshot {
+function createDemoSnapshot(nickname: string, position: Vector2, direction: Direction, currentTile: MapTileRef, resources: ResourceNodeState[], creatures: CreaturePublicState[], buildings: BuildingState[]): WorldSnapshot {
   return {
     worldId: "offline-demo",
     serverTime: Date.now(),
@@ -139,7 +139,7 @@ export function GameClientTileDemo() {
   const sceneRef = useRef<GameWorldScene | null>(null);
   const inputRef = useRef<GameSceneInput>({ x: 0, y: 0, primary: false, secondary: false });
   const demoPositionRef = useRef<Vector2>({ x: 1500, y: 1500 });
-  const demoDirectionRef = useRef<PlayerDirection>("down");
+  const demoDirectionRef = useRef<Direction>("down");
   const demoTileRef = useRef<MapTileRef>({ ...DEFAULT_PLAYER_TILE });
   const demoResourcesRef = useRef<ResourceNodeState[]>(createTileBasedDemoResources());
   const demoCreaturesRef = useRef<CreaturePublicState[]>(createTileBasedDemoCreatures());
