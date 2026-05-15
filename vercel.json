@@ -4,6 +4,6 @@
   "outputDirectory": "apps/web/.next",
   "framework": "nextjs",
   "git": {
-    "deploymentEnabled": false
+    "deploymentEnabled": true
   }
 }
