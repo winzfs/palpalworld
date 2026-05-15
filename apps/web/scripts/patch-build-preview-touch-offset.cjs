@@ -30,9 +30,6 @@ const placementHelpers = `
     const camera = this.getCameraOffset();
     const isoCamera = worldCameraToIsoBuildCamera(camera.x, camera.y, width, height);
     return screenToIsoBuildGrid(lifted.x - camera.x, lifted.y - camera.y, isoCamera.x, isoCamera.y);
-  }
-  private getBuildPartTouchPlacementWorld(position: Vector2): Vector2 {
-    return buildGridToWorld(this.getBuildPartTouchPlacementGrid(position));
   }`;
 
 if (!source.includes("getBuildPartTouchPlacementGrid")) {
@@ -44,48 +41,61 @@ ${placementHelpers}`,
   );
 }
 
-// The build part is drawn on an iso lattice, but the player's allowed build
-// range should be based on the actual touched/clicked world point. Otherwise
-// distance checks compare the player against an unrelated iso anchor and valid
-// placements only work near a few map positions.
+replaceOnce(
+  '  private getBuildPartTouchPlacementWorld(position: Vector2): Vector2 {\n    return buildGridToWorld(this.getBuildPartTouchPlacementGrid(position));\n  }',
+  '',
+  "remove double-conversion helper",
+);
+
+// Keep build range based on the actual touched/clicked world point. The saved
+// build grid is handled separately by getBuildPartTouchPlacementGrid().
 replaceOnce(
   '    const grid = worldToBuildGrid(position);\n    const snapped = buildGridToWorld(grid);\n    const visualCenter = buildGridToIsoCenter(grid.gridX, grid.gridY);\n    if (visualCenter.x < 0 || visualCenter.x > MAP_TILE_SIZE.width || visualCenter.y < 0 || visualCenter.y > MAP_TILE_SIZE.height) return { ok: false, reason: "타일 밖에는 설치할 수 없습니다." };\n    if (distance(localPlayer, visualCenter) > WORLD.buildRange) return { ok: false, reason: "너무 멀리 설치할 수 없습니다." };',
   '    const grid = worldToBuildGrid(position);\n    const snapped = buildGridToWorld(grid);\n    const placementPoint = clampPositionToTile(position);\n    if (placementPoint.x < 0 || placementPoint.x > MAP_TILE_SIZE.width || placementPoint.y < 0 || placementPoint.y > MAP_TILE_SIZE.height) return { ok: false, reason: "타일 밖에는 설치할 수 없습니다." };\n    if (distance(localPlayer, placementPoint) > WORLD.buildRange) return { ok: false, reason: "너무 멀리 설치할 수 없습니다." };',
   "validity uses touched world point",
 );
 
-// Also handle a fresh prebuild source where the validity block has not yet been
-// changed to visualCenter by the previous version of this patch.
 replaceOnce(
   '    const grid = worldToBuildGrid(position);\n    const snapped = buildGridToWorld(grid);\n    if (snapped.x < 0 || snapped.x > MAP_TILE_SIZE.width || snapped.y < 0 || snapped.y > MAP_TILE_SIZE.height) return { ok: false, reason: "타일 밖에는 설치할 수 없습니다." };\n    if (distance(localPlayer, snapped) > WORLD.buildRange) return { ok: false, reason: "너무 멀리 설치할 수 없습니다." };',
   '    const grid = worldToBuildGrid(position);\n    const snapped = buildGridToWorld(grid);\n    const placementPoint = clampPositionToTile(position);\n    if (placementPoint.x < 0 || placementPoint.x > MAP_TILE_SIZE.width || placementPoint.y < 0 || placementPoint.y > MAP_TILE_SIZE.height) return { ok: false, reason: "타일 밖에는 설치할 수 없습니다." };\n    if (distance(localPlayer, placementPoint) > WORLD.buildRange) return { ok: false, reason: "너무 멀리 설치할 수 없습니다." };',
   "fresh validity uses touched world point",
 );
 
-// Preview must use the same isometric inverse grid as the renderer. Using
-// worldToBuildGrid here makes the preview jump to a different diamond lattice
-// cell because build parts are drawn with buildGridToIsoCenter().
+// Preview grid: iso inverse from the real screen/touch position.
 replaceOnce(
   '    const previewPosition = this.buildPartDragPosition ?? this.pointerWorldPosition;\n    const liftedPreviewPosition = this.getBuildPartTouchPlacementPosition(previewPosition);\n    const grid = worldToBuildGrid(liftedPreviewPosition);\n    const isoPos = buildGridToIsoCenter(grid.gridX, grid.gridY);\n    const snapped = buildGridToWorld(grid);\n    const validity = this.getBuildPartPlacementValidity(snapped);\n    this.buildPartRenderer.drawPreview(ctx, this.selectedBuildPartId, isoPos.x - isoCamX, isoPos.y - isoCamY, this.selectedBuildPartRotation, validity.ok, this.buildPartDragPointerId !== null ? 0.52 : 0.42, this.selectedBuildFloorLevel);',
   '    const previewPosition = this.buildPartDragPosition ?? this.pointerWorldPosition;\n    const grid = this.getBuildPartTouchPlacementGrid(previewPosition);\n    const isoPos = buildGridToIsoCenter(grid.gridX, grid.gridY);\n    const snapped = buildGridToWorld(grid);\n    const validity = this.getBuildPartPlacementValidity(this.getBuildPartTouchPlacementPosition(previewPosition));\n    this.buildPartRenderer.drawPreview(ctx, this.selectedBuildPartId, isoPos.x - isoCamX, isoPos.y - isoCamY, this.selectedBuildPartRotation, validity.ok, this.buildPartDragPointerId !== null ? 0.52 : 0.42, this.selectedBuildFloorLevel);',
   "preview uses iso inverse grid",
 );
-
 replaceOnce(
   '    const previewPosition = this.buildPartDragPosition ?? this.pointerWorldPosition;\n    const grid = worldToBuildGrid(previewPosition);\n    const isoPos = buildGridToIsoCenter(grid.gridX, grid.gridY);\n    const snapped = buildGridToWorld(grid);\n    const validity = this.getBuildPartPlacementValidity(snapped);\n    this.buildPartRenderer.drawPreview(ctx, this.selectedBuildPartId, isoPos.x - isoCamX, isoPos.y - isoCamY, this.selectedBuildPartRotation, validity.ok, this.buildPartDragPointerId !== null ? 0.52 : 0.42, this.selectedBuildFloorLevel);',
   '    const previewPosition = this.buildPartDragPosition ?? this.pointerWorldPosition;\n    const grid = this.getBuildPartTouchPlacementGrid(previewPosition);\n    const isoPos = buildGridToIsoCenter(grid.gridX, grid.gridY);\n    const snapped = buildGridToWorld(grid);\n    const validity = this.getBuildPartPlacementValidity(this.getBuildPartTouchPlacementPosition(previewPosition));\n    this.buildPartRenderer.drawPreview(ctx, this.selectedBuildPartId, isoPos.x - isoCamX, isoPos.y - isoCamY, this.selectedBuildPartRotation, validity.ok, this.buildPartDragPointerId !== null ? 0.52 : 0.42, this.selectedBuildFloorLevel);',
   "fresh preview uses iso inverse grid",
 );
 
+// Override commit to accept the already-computed iso grid directly. This avoids
+// iso grid -> buildGridToWorld -> worldToBuildGrid double conversion, which made
+// parts install only around a few anchor-aligned positions.
+replaceOnce(
+  '  private commitBuildPartPlacement(position: Vector2) {\n    if (!this.selectedBuildPartId) return;\n    const validity = this.getBuildPartPlacementValidity(position);\n    if (!validity.ok) return;\n    const grid = worldToBuildGrid(position);\n    const placedPart = createPlacedBuildPart({\n      partId: this.selectedBuildPartId,\n      ownerPlayerId: this.localPlayerId ?? "demo-player",\n      currentTile: this.getCurrentTile(),\n      gridX: grid.gridX,\n      gridY: grid.gridY,\n      floorLevel: this.selectedBuildFloorLevel,\n      rotation: this.selectedBuildPartRotation,\n      existingParts: this.placedBuildParts,\n      houseId: this.selectedHouseId,\n    });\n    this.selectedPlacedBuildPartId = placedPart.id;\n    this.selectedHouseId = placedPart.houseId ?? null;\n    this.placedBuildParts = writeStoredBuildParts([...this.placedBuildParts, placedPart]);\n  }',
+  '  private commitBuildPartPlacement(position: Vector2, gridOverride?: { gridX: number; gridY: number }) {\n    if (!this.selectedBuildPartId) return;\n    const validity = this.getBuildPartPlacementValidity(position);\n    if (!validity.ok) return;\n    const grid = gridOverride ?? worldToBuildGrid(position);\n    const placedPart = createPlacedBuildPart({\n      partId: this.selectedBuildPartId,\n      ownerPlayerId: this.localPlayerId ?? "demo-player",\n      currentTile: this.getCurrentTile(),\n      gridX: grid.gridX,\n      gridY: grid.gridY,\n      floorLevel: this.selectedBuildFloorLevel,\n      rotation: this.selectedBuildPartRotation,\n      existingParts: this.placedBuildParts,\n      houseId: this.selectedHouseId,\n    });\n    this.selectedPlacedBuildPartId = placedPart.id;\n    this.selectedHouseId = placedPart.houseId ?? null;\n    this.placedBuildParts = writeStoredBuildParts([...this.placedBuildParts, placedPart]);\n  }',
+  "commit accepts iso grid override",
+);
+
+replaceOnce(
+  '      this.commitBuildPartPlacement(this.getBuildPartTouchPlacementWorld(position));',
+  '      this.commitBuildPartPlacement(this.getBuildPartTouchPlacementPosition(position), this.getBuildPartTouchPlacementGrid(position));',
+  "commit direct iso grid",
+);
 replaceOnce(
   '      this.commitBuildPartPlacement(this.getBuildPartTouchPlacementPosition(position));',
-  '      this.commitBuildPartPlacement(this.getBuildPartTouchPlacementWorld(position));',
-  "commit iso preview position",
+  '      this.commitBuildPartPlacement(this.getBuildPartTouchPlacementPosition(position), this.getBuildPartTouchPlacementGrid(position));',
+  "commit touch position direct iso grid",
 );
 replaceOnce(
   '      this.commitBuildPartPlacement(position);',
-  '      this.commitBuildPartPlacement(this.getBuildPartTouchPlacementWorld(position));',
-  "fresh commit iso preview position",
+  '      this.commitBuildPartPlacement(this.getBuildPartTouchPlacementPosition(position), this.getBuildPartTouchPlacementGrid(position));',
+  "fresh commit direct iso grid",
 );
 
 if (changed) fs.writeFileSync(target, source);
