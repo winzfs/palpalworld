@@ -44,14 +44,22 @@ ${placementHelpers}`,
   );
 }
 
-// Build-part logical storage remains grid-based, but the visible build lattice
-// lives in iso/world space. Range and tile-bound checks must therefore use the
-// rendered iso center, not buildGridToWorld(grid), otherwise valid visible cells
-// are incorrectly rejected after moving the player/camera.
+// The build part is drawn on an iso lattice, but the player's allowed build
+// range should be based on the actual touched/clicked world point. Otherwise
+// distance checks compare the player against an unrelated iso anchor and valid
+// placements only work near a few map positions.
+replaceOnce(
+  '    const grid = worldToBuildGrid(position);\n    const snapped = buildGridToWorld(grid);\n    const visualCenter = buildGridToIsoCenter(grid.gridX, grid.gridY);\n    if (visualCenter.x < 0 || visualCenter.x > MAP_TILE_SIZE.width || visualCenter.y < 0 || visualCenter.y > MAP_TILE_SIZE.height) return { ok: false, reason: "타일 밖에는 설치할 수 없습니다." };\n    if (distance(localPlayer, visualCenter) > WORLD.buildRange) return { ok: false, reason: "너무 멀리 설치할 수 없습니다." };',
+  '    const grid = worldToBuildGrid(position);\n    const snapped = buildGridToWorld(grid);\n    const placementPoint = clampPositionToTile(position);\n    if (placementPoint.x < 0 || placementPoint.x > MAP_TILE_SIZE.width || placementPoint.y < 0 || placementPoint.y > MAP_TILE_SIZE.height) return { ok: false, reason: "타일 밖에는 설치할 수 없습니다." };\n    if (distance(localPlayer, placementPoint) > WORLD.buildRange) return { ok: false, reason: "너무 멀리 설치할 수 없습니다." };',
+  "validity uses touched world point",
+);
+
+// Also handle a fresh prebuild source where the validity block has not yet been
+// changed to visualCenter by the previous version of this patch.
 replaceOnce(
   '    const grid = worldToBuildGrid(position);\n    const snapped = buildGridToWorld(grid);\n    if (snapped.x < 0 || snapped.x > MAP_TILE_SIZE.width || snapped.y < 0 || snapped.y > MAP_TILE_SIZE.height) return { ok: false, reason: "타일 밖에는 설치할 수 없습니다." };\n    if (distance(localPlayer, snapped) > WORLD.buildRange) return { ok: false, reason: "너무 멀리 설치할 수 없습니다." };',
-  '    const grid = worldToBuildGrid(position);\n    const snapped = buildGridToWorld(grid);\n    const visualCenter = buildGridToIsoCenter(grid.gridX, grid.gridY);\n    if (visualCenter.x < 0 || visualCenter.x > MAP_TILE_SIZE.width || visualCenter.y < 0 || visualCenter.y > MAP_TILE_SIZE.height) return { ok: false, reason: "타일 밖에는 설치할 수 없습니다." };\n    if (distance(localPlayer, visualCenter) > WORLD.buildRange) return { ok: false, reason: "너무 멀리 설치할 수 없습니다." };',
-  "validity uses iso visual center",
+  '    const grid = worldToBuildGrid(position);\n    const snapped = buildGridToWorld(grid);\n    const placementPoint = clampPositionToTile(position);\n    if (placementPoint.x < 0 || placementPoint.x > MAP_TILE_SIZE.width || placementPoint.y < 0 || placementPoint.y > MAP_TILE_SIZE.height) return { ok: false, reason: "타일 밖에는 설치할 수 없습니다." };\n    if (distance(localPlayer, placementPoint) > WORLD.buildRange) return { ok: false, reason: "너무 멀리 설치할 수 없습니다." };',
+  "fresh validity uses touched world point",
 );
 
 // Preview must use the same isometric inverse grid as the renderer. Using
@@ -59,13 +67,13 @@ replaceOnce(
 // cell because build parts are drawn with buildGridToIsoCenter().
 replaceOnce(
   '    const previewPosition = this.buildPartDragPosition ?? this.pointerWorldPosition;\n    const liftedPreviewPosition = this.getBuildPartTouchPlacementPosition(previewPosition);\n    const grid = worldToBuildGrid(liftedPreviewPosition);\n    const isoPos = buildGridToIsoCenter(grid.gridX, grid.gridY);\n    const snapped = buildGridToWorld(grid);\n    const validity = this.getBuildPartPlacementValidity(snapped);\n    this.buildPartRenderer.drawPreview(ctx, this.selectedBuildPartId, isoPos.x - isoCamX, isoPos.y - isoCamY, this.selectedBuildPartRotation, validity.ok, this.buildPartDragPointerId !== null ? 0.52 : 0.42, this.selectedBuildFloorLevel);',
-  '    const previewPosition = this.buildPartDragPosition ?? this.pointerWorldPosition;\n    const grid = this.getBuildPartTouchPlacementGrid(previewPosition);\n    const isoPos = buildGridToIsoCenter(grid.gridX, grid.gridY);\n    const snapped = buildGridToWorld(grid);\n    const validity = this.getBuildPartPlacementValidity(snapped);\n    this.buildPartRenderer.drawPreview(ctx, this.selectedBuildPartId, isoPos.x - isoCamX, isoPos.y - isoCamY, this.selectedBuildPartRotation, validity.ok, this.buildPartDragPointerId !== null ? 0.52 : 0.42, this.selectedBuildFloorLevel);',
+  '    const previewPosition = this.buildPartDragPosition ?? this.pointerWorldPosition;\n    const grid = this.getBuildPartTouchPlacementGrid(previewPosition);\n    const isoPos = buildGridToIsoCenter(grid.gridX, grid.gridY);\n    const snapped = buildGridToWorld(grid);\n    const validity = this.getBuildPartPlacementValidity(this.getBuildPartTouchPlacementPosition(previewPosition));\n    this.buildPartRenderer.drawPreview(ctx, this.selectedBuildPartId, isoPos.x - isoCamX, isoPos.y - isoCamY, this.selectedBuildPartRotation, validity.ok, this.buildPartDragPointerId !== null ? 0.52 : 0.42, this.selectedBuildFloorLevel);',
   "preview uses iso inverse grid",
 );
 
 replaceOnce(
   '    const previewPosition = this.buildPartDragPosition ?? this.pointerWorldPosition;\n    const grid = worldToBuildGrid(previewPosition);\n    const isoPos = buildGridToIsoCenter(grid.gridX, grid.gridY);\n    const snapped = buildGridToWorld(grid);\n    const validity = this.getBuildPartPlacementValidity(snapped);\n    this.buildPartRenderer.drawPreview(ctx, this.selectedBuildPartId, isoPos.x - isoCamX, isoPos.y - isoCamY, this.selectedBuildPartRotation, validity.ok, this.buildPartDragPointerId !== null ? 0.52 : 0.42, this.selectedBuildFloorLevel);',
-  '    const previewPosition = this.buildPartDragPosition ?? this.pointerWorldPosition;\n    const grid = this.getBuildPartTouchPlacementGrid(previewPosition);\n    const isoPos = buildGridToIsoCenter(grid.gridX, grid.gridY);\n    const snapped = buildGridToWorld(grid);\n    const validity = this.getBuildPartPlacementValidity(snapped);\n    this.buildPartRenderer.drawPreview(ctx, this.selectedBuildPartId, isoPos.x - isoCamX, isoPos.y - isoCamY, this.selectedBuildPartRotation, validity.ok, this.buildPartDragPointerId !== null ? 0.52 : 0.42, this.selectedBuildFloorLevel);',
+  '    const previewPosition = this.buildPartDragPosition ?? this.pointerWorldPosition;\n    const grid = this.getBuildPartTouchPlacementGrid(previewPosition);\n    const isoPos = buildGridToIsoCenter(grid.gridX, grid.gridY);\n    const snapped = buildGridToWorld(grid);\n    const validity = this.getBuildPartPlacementValidity(this.getBuildPartTouchPlacementPosition(previewPosition));\n    this.buildPartRenderer.drawPreview(ctx, this.selectedBuildPartId, isoPos.x - isoCamX, isoPos.y - isoCamY, this.selectedBuildPartRotation, validity.ok, this.buildPartDragPointerId !== null ? 0.52 : 0.42, this.selectedBuildFloorLevel);',
   "fresh preview uses iso inverse grid",
 );
 
