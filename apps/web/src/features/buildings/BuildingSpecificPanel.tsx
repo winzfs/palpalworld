@@ -1,8 +1,15 @@
-import { useMemo, useState } from "react";
-import type { BuildingState, InventoryState, ItemStack } from "@palpalworld/shared";
+import { useCallback, useEffect, useState } from "react";
+import type { BuildingState, InventoryState } from "@palpalworld/shared";
 import { addInventoryStack, getInventoryAmount, removeInventoryStack } from "../inventory/inventoryStore";
 import { getItemLabel } from "../items/itemLabels";
 import { getProgressionBuilding } from "../crafting/progressionCatalog";
+import {
+  fetchWorldBuildingState,
+  getBuildingStateClient,
+  isBuildingStateSyncEnabled,
+  subscribeWorldBuildingState,
+  upsertWorldBuildingState,
+} from "../multiplayer/supabaseBuildingStates";
 
 type BuildingSpecificPanelProps = {
   building: BuildingState;
@@ -83,6 +90,80 @@ function writeBaseCoreState(buildingId: string, state: BaseCoreState) {
   writeJson(`${baseCoreStoragePrefix}${buildingId}`, state);
 }
 
+function normalizeState<T extends Record<string, unknown>>(fallback: T, value: Record<string, unknown> | null | undefined): T {
+  return { ...fallback, ...(value ?? {}) } as T;
+}
+
+function useSyncedBuildingState<T extends Record<string, unknown>>({
+  building,
+  fallback,
+  readLocal,
+  writeLocal,
+}: {
+  building: BuildingState;
+  fallback: T;
+  readLocal: (buildingId: string) => T;
+  writeLocal: (buildingId: string, state: T) => void;
+}) {
+  const [state, setState] = useState<T>(() => readLocal(building.id));
+  const [syncStatus, setSyncStatus] = useState(isBuildingStateSyncEnabled() ? "동기화 연결 중" : "로컬 저장");
+
+  useEffect(() => {
+    let cancelled = false;
+    const client = getBuildingStateClient();
+    const localState = readLocal(building.id);
+    setState(localState);
+
+    if (!client || !isBuildingStateSyncEnabled()) {
+      setSyncStatus("로컬 저장");
+      return;
+    }
+
+    setSyncStatus("동기화 연결 중");
+    void fetchWorldBuildingState<T>(client, building.id).then((remoteState) => {
+      if (cancelled) return;
+      if (remoteState) {
+        const next = normalizeState(fallback, remoteState);
+        setState(next);
+        writeLocal(building.id, next);
+        setSyncStatus("Supabase 동기화됨");
+      } else {
+        void upsertWorldBuildingState(client, building.id, building.ownerPlayerId ?? null, localState);
+        setSyncStatus("Supabase 동기화됨");
+      }
+    });
+
+    const channel = subscribeWorldBuildingState(client, building.id, (remoteState) => {
+      const next = normalizeState(fallback, remoteState);
+      setState(next);
+      writeLocal(building.id, next);
+      setSyncStatus("Supabase 동기화됨");
+    });
+
+    return () => {
+      cancelled = true;
+      client.removeChannel(channel);
+    };
+  }, [building.id, building.ownerPlayerId, fallback, readLocal, writeLocal]);
+
+  const saveState = useCallback((nextState: T) => {
+    setState(nextState);
+    writeLocal(building.id, nextState);
+
+    const client = getBuildingStateClient();
+    if (client && isBuildingStateSyncEnabled()) {
+      setSyncStatus("Supabase 저장 중");
+      void upsertWorldBuildingState(client, building.id, building.ownerPlayerId ?? null, nextState).then(() => {
+        setSyncStatus("Supabase 동기화됨");
+      });
+    } else {
+      setSyncStatus("로컬 저장");
+    }
+  }, [building.id, building.ownerPlayerId, writeLocal]);
+
+  return { state, setState: saveState, syncStatus };
+}
+
 function formatRemaining(ms: number) {
   const seconds = Math.max(0, Math.ceil(ms / 1000));
   if (seconds <= 0) return "완료";
@@ -92,24 +173,21 @@ function formatRemaining(ms: number) {
   return rest > 0 ? `${minutes}분 ${rest}초` : `${minutes}분`;
 }
 
-function mergeStacks(items: ItemStack[], stack: ItemStack) {
-  const next = items.map((item) => ({ ...item }));
-  const found = next.find((item) => item.itemId === stack.itemId);
-  if (found) found.amount += stack.amount;
-  else next.push({ ...stack });
-  return next;
-}
-
-function addInventoryStacks(inventory: InventoryState, stacks: ItemStack[]) {
-  return stacks.reduce((next, stack) => addInventoryStack(next, stack.itemId, stack.amount), inventory);
-}
-
 function getBuildingDisplayName(building: BuildingState) {
   return getProgressionBuilding(String(building.type))?.name ?? String(building.type);
 }
 
+function SyncStatusLine({ status }: { status: string }) {
+  return <p className="feature-panel__hint">상태 저장: {status}</p>;
+}
+
+const farmFallback: FarmState = { cropType: null, plantedAt: 0, harvests: 0 };
+const baseCoreFallback: BaseCoreState = { baseName: "나의 거점", spawnBound: false, workerSlots: 0 };
+const generatorFallback: GeneratorState = { storedPower: 0, lastChargedAt: 0 };
+const guardTowerFallback: GuardTowerState = { mode: "watch" };
+
 function FarmPlotPanel({ building, inventory, onInventoryChange }: BuildingSpecificPanelProps) {
-  const [farmState, setFarmState] = useState(() => readFarmState(building.id));
+  const { state: farmState, setState: setFarmState, syncStatus } = useSyncedBuildingState<FarmState>({ building, fallback: farmFallback, readLocal: readFarmState, writeLocal: writeFarmState });
   const now = Date.now();
   const growMs = farmState.cropType === "herb" ? 90_000 : 60_000;
   const progress = farmState.cropType ? Math.min(100, Math.floor(((now - farmState.plantedAt) / growMs) * 100)) : 0;
@@ -121,25 +199,19 @@ function FarmPlotPanel({ building, inventory, onInventoryChange }: BuildingSpeci
     if (farmState.cropType) return;
     if (getInventoryAmount(inventory, requiredItemId) <= 0) return;
     onInventoryChange(removeInventoryStack(inventory, requiredItemId, 1));
-    const nextState = { cropType, plantedAt: Date.now(), harvests: farmState.harvests };
-    setFarmState(nextState);
-    writeFarmState(building.id, nextState);
+    setFarmState({ cropType, plantedAt: Date.now(), harvests: farmState.harvests });
   };
 
   const harvest = () => {
     if (!farmState.cropType || !ready) return;
     const outputAmount = farmState.cropType === "herb" ? 4 : 8;
     onInventoryChange(addInventoryStack(inventory, farmState.cropType, outputAmount));
-    const nextState = { cropType: null, plantedAt: 0, harvests: farmState.harvests + 1 };
-    setFarmState(nextState);
-    writeFarmState(building.id, nextState);
+    setFarmState({ cropType: null, plantedAt: 0, harvests: farmState.harvests + 1 });
   };
 
   const cancelCrop = () => {
     if (!farmState.cropType) return;
-    const nextState = { cropType: null, plantedAt: 0, harvests: farmState.harvests };
-    setFarmState(nextState);
-    writeFarmState(building.id, nextState);
+    setFarmState({ cropType: null, plantedAt: 0, harvests: farmState.harvests });
   };
 
   return (
@@ -164,24 +236,25 @@ function FarmPlotPanel({ building, inventory, onInventoryChange }: BuildingSpeci
           <button className="building-interaction__action" disabled={getInventoryAmount(inventory, "herb") <= 0} onClick={() => plant("herb")}>약초 심기</button>
         </div>
       )}
+      <SyncStatusLine status={syncStatus} />
     </div>
   );
 }
 
 function BaseCorePanel({ building }: BuildingSpecificPanelProps) {
-  const [baseState, setBaseState] = useState(() => readBaseCoreState(building.id));
+  const { state: baseState, setState: setBaseState, syncStatus } = useSyncedBuildingState<BaseCoreState>({ building, fallback: baseCoreFallback, readLocal: readBaseCoreState, writeLocal: writeBaseCoreState });
   const [draftName, setDraftName] = useState(baseState.baseName);
 
+  useEffect(() => {
+    setDraftName(baseState.baseName);
+  }, [baseState.baseName]);
+
   const saveName = () => {
-    const next = { ...baseState, baseName: draftName.trim() || "나의 거점" };
-    setBaseState(next);
-    writeBaseCoreState(building.id, next);
+    setBaseState({ ...baseState, baseName: draftName.trim() || "나의 거점" });
   };
 
   const bindSpawn = () => {
-    const next = { ...baseState, spawnBound: true };
-    setBaseState(next);
-    writeBaseCoreState(building.id, next);
+    setBaseState({ ...baseState, spawnBound: true });
     if (typeof window !== "undefined") {
       window.localStorage.setItem("palpalworld.base.spawnBuildingId", building.id);
       window.localStorage.setItem("palpalworld.base.spawnPosition", JSON.stringify(building.position));
@@ -189,9 +262,7 @@ function BaseCorePanel({ building }: BuildingSpecificPanelProps) {
   };
 
   const addWorkerSlot = () => {
-    const next = { ...baseState, workerSlots: Math.min(6, baseState.workerSlots + 1) };
-    setBaseState(next);
-    writeBaseCoreState(building.id, next);
+    setBaseState({ ...baseState, workerSlots: Math.min(6, baseState.workerSlots + 1) });
   };
 
   return (
@@ -211,27 +282,24 @@ function BaseCorePanel({ building }: BuildingSpecificPanelProps) {
         <button className="building-interaction__action" disabled={baseState.workerSlots >= 6} onClick={addWorkerSlot}>작업 슬롯 확장</button>
       </div>
       <p className="feature-panel__hint">추후 거점 몬스터 배치, 공유 권한, 자동화 전력망을 이 코어에 연결할 수 있습니다.</p>
+      <SyncStatusLine status={syncStatus} />
     </div>
   );
 }
 
 function GeneratorPanel({ building, inventory, onInventoryChange }: BuildingSpecificPanelProps) {
-  const [generatorState, setGeneratorState] = useState(() => readGeneratorState(building.id));
+  const { state: generatorState, setState: setGeneratorState, syncStatus } = useSyncedBuildingState<GeneratorState>({ building, fallback: generatorFallback, readLocal: readGeneratorState, writeLocal: writeGeneratorState });
   const chargeWithCoal = () => {
     if (getInventoryAmount(inventory, "coal") <= 0) return;
     onInventoryChange(removeInventoryStack(inventory, "coal", 1));
-    const next = {
+    setGeneratorState({
       storedPower: Math.min(100, generatorState.storedPower + 25),
       lastChargedAt: Date.now(),
-    };
-    setGeneratorState(next);
-    writeGeneratorState(building.id, next);
+    });
   };
 
   const consumePower = () => {
-    const next = { ...generatorState, storedPower: Math.max(0, generatorState.storedPower - 10) };
-    setGeneratorState(next);
-    writeGeneratorState(building.id, next);
+    setGeneratorState({ ...generatorState, storedPower: Math.max(0, generatorState.storedPower - 10) });
   };
 
   return (
@@ -246,16 +314,15 @@ function GeneratorPanel({ building, inventory, onInventoryChange }: BuildingSpec
         <button className="building-specific-panel__ghost-button" disabled={generatorState.storedPower <= 0} onClick={consumePower}>전력 테스트</button>
       </div>
       <p className="feature-panel__hint">현재는 전력 저장량을 관리합니다. 다음 단계에서 냉장고, 조립대, 자동화 시설과 연결할 수 있습니다.</p>
+      <SyncStatusLine status={syncStatus} />
     </div>
   );
 }
 
 function GuardTowerPanel({ building }: BuildingSpecificPanelProps) {
-  const [towerState, setTowerState] = useState(() => readGuardTowerState(building.id));
+  const { state: towerState, setState: setTowerState, syncStatus } = useSyncedBuildingState<GuardTowerState>({ building, fallback: guardTowerFallback, readLocal: readGuardTowerState, writeLocal: writeGuardTowerState });
   const updateMode = (mode: GuardTowerState["mode"]) => {
-    const next = { mode };
-    setTowerState(next);
-    writeGuardTowerState(building.id, next);
+    setTowerState({ mode });
   };
 
   return (
@@ -270,6 +337,7 @@ function GuardTowerPanel({ building }: BuildingSpecificPanelProps) {
         <button className="building-interaction__action" onClick={() => updateMode("defense")}>방어</button>
       </div>
       <p className="feature-panel__hint">현재는 감시탑 상태를 저장합니다. 이후 몬스터 접근 알림, 거점 습격, 자동 사격으로 확장할 수 있습니다.</p>
+      <SyncStatusLine status={syncStatus} />
     </div>
   );
 }
