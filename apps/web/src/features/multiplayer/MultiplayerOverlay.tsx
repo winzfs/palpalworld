@@ -62,6 +62,11 @@ type ChatPanelDragState = {
   panelY: number;
 };
 
+type SmoothRemotePlayer = {
+  player: PlayerPublicState;
+  lastSeenAt: number;
+};
+
 const emotes = ["👋", "❤️", "⚔️", "🆘"];
 const chatBubbleVisibleMs = 12_000;
 const chatPanelStorageKey = "palpalworld.ui.chatPanelPosition";
@@ -74,6 +79,36 @@ const chatPanelCollapsedHeight = 48;
 function getViewportSize() {
   if (typeof window === "undefined") return { width: 1280, height: 720 };
   return { width: window.innerWidth, height: window.innerHeight };
+}
+
+function cloneRemotePlayer(player: PlayerPublicState): PlayerPublicState {
+  return {
+    ...player,
+    position: { x: player.position.x, y: player.position.y },
+    currentTile: { ...(player.currentTile as MapTileRef) },
+  } as PlayerPublicState;
+}
+
+function distanceBetweenPlayers(a: PlayerPublicState, b: PlayerPublicState) {
+  return Math.hypot(a.position.x - b.position.x, a.position.y - b.position.y);
+}
+
+function interpolateRemotePlayer(current: PlayerPublicState, target: PlayerPublicState) {
+  const currentTile = current.currentTile as MapTileRef;
+  const targetTile = target.currentTile as MapTileRef;
+  if (!isSameTile(currentTile, targetTile) || distanceBetweenPlayers(current, target) > 520) {
+    return cloneRemotePlayer(target);
+  }
+
+  const alpha = 0.22;
+  return {
+    ...target,
+    position: {
+      x: current.position.x + (target.position.x - current.position.x) * alpha,
+      y: current.position.y + (target.position.y - current.position.y) * alpha,
+    },
+    currentTile: { ...targetTile },
+  } as PlayerPublicState;
 }
 
 function clampChatPanelPosition(position: ChatPanelPosition, collapsed = false): ChatPanelPosition {
@@ -181,6 +216,7 @@ export function MultiplayerOverlay() {
   const [playerId] = useState(() => getOrCreateMultiplayerPlayerId());
   const [camera, setCamera] = useState<CameraState | null>(null);
   const [onlinePlayers, setOnlinePlayers] = useState<PlayerPublicState[]>([]);
+  const [smoothOnlinePlayers, setSmoothOnlinePlayers] = useState<PlayerPublicState[]>([]);
   const [chatMessages, setChatMessages] = useState<WorldChatMessageRow[]>([]);
   const [chatInput, setChatInput] = useState("");
   const [chatCollapsed, setChatCollapsed] = useState(readStoredChatCollapsed);
@@ -191,6 +227,7 @@ export function MultiplayerOverlay() {
   const latestCreaturesRef = useRef<CreaturePublicState[]>([]);
   const latestResourcesRef = useRef<ResourceNodeState[]>([]);
   const onlinePlayersRef = useRef<PlayerPublicState[]>([]);
+  const smoothPlayersRef = useRef(new Map<string, SmoothRemotePlayer>());
   const localBuildingIdsRef = useRef(new Set<string>());
   const publishedBuildingIdsRef = useRef(new Set<string>());
   const lastCreaturePublishAtRef = useRef(0);
@@ -318,8 +355,41 @@ export function MultiplayerOverlay() {
   }, [client, enabled, refreshPlayers]);
 
   useEffect(() => {
-    window.dispatchEvent(new CustomEvent("palpalworld:remote-players", { detail: { players: onlinePlayers } }));
-  }, [onlinePlayers]);
+    let animationFrame = 0;
+    const tick = () => {
+      const now = performance.now();
+      const targets = onlinePlayersRef.current;
+      const targetIds = new Set(targets.map((player) => player.id));
+      const smoothMap = smoothPlayersRef.current;
+
+      for (const target of targets) {
+        const existing = smoothMap.get(target.id);
+        if (!existing) {
+          smoothMap.set(target.id, { player: cloneRemotePlayer(target), lastSeenAt: now });
+          continue;
+        }
+        smoothMap.set(target.id, {
+          player: interpolateRemotePlayer(existing.player, target),
+          lastSeenAt: now,
+        });
+      }
+
+      for (const [id, entry] of smoothMap) {
+        if (!targetIds.has(id) && now - entry.lastSeenAt > 6_500) {
+          smoothMap.delete(id);
+        }
+      }
+
+      setSmoothOnlinePlayers(Array.from(smoothMap.values()).map((entry) => entry.player));
+      animationFrame = requestAnimationFrame(tick);
+    };
+    animationFrame = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(animationFrame);
+  }, []);
+
+  useEffect(() => {
+    window.dispatchEvent(new CustomEvent("palpalworld:remote-players", { detail: { players: smoothOnlinePlayers } }));
+  }, [smoothOnlinePlayers]);
 
   useEffect(() => {
     if (!client || !enabled) return;
@@ -462,8 +532,8 @@ export function MultiplayerOverlay() {
 
   const visiblePlayers = useMemo(() => {
     if (!camera) return [];
-    return onlinePlayers.filter((player) => isSameTile(player.currentTile as MapTileRef, camera.currentTile));
-  }, [camera, onlinePlayers]);
+    return smoothOnlinePlayers.filter((player) => isSameTile(player.currentTile as MapTileRef, camera.currentTile));
+  }, [camera, smoothOnlinePlayers]);
 
   const bubbleMessages = useMemo(() => chatMessages.filter(isFreshMessage).slice(-8), [chatMessages]);
   const latestChatMessage = chatMessages[chatMessages.length - 1];
