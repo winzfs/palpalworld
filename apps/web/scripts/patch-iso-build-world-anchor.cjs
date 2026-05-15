@@ -19,33 +19,20 @@ function replaceRegex(regex, replacement, label) {
   console.log(`[patch-iso-build-world-anchor] patched ${label}`);
 }
 
-const anchorConstants = `
-// Build part isometric visuals still live in normal world/camera space.
-// This anchor keeps the diamond lattice fixed in the world instead of behaving
-// like a HUD layer that follows the player camera.
-export const BUILD_ISO_WORLD_ORIGIN_X = 1500;
-export const BUILD_ISO_WORLD_ORIGIN_Y = 620;
-`;
-
-if (!source.includes("BUILD_ISO_WORLD_ORIGIN_X")) {
-  source = source.replace("export const ISO_ROOF_RISE = 34;\n", `export const ISO_ROOF_RISE = 34;\n${anchorConstants}`);
-  changed = true;
-  console.log("[patch-iso-build-world-anchor] patched anchor constants");
-}
-
+// Stable mode: build storage/placement stays in the normal world grid. The part
+// renderer still draws diamond/isometric shapes at that world-grid center. This
+// avoids remote installs caused by saving screen-to-iso lattice coordinates that
+// are unrelated to the clicked world position.
 replaceRegex(
-  /export function buildGridToIsoCenter\(gridX: number, gridY: number\): IsoPoint \{\n  return \{\n    x: \(gridX - gridY\) \* \(ISO_TILE_WIDTH \/ 2\),\n    y: \(gridX \+ gridY\) \* \(ISO_TILE_HEIGHT \/ 2\),\n  \};\n\}/,
+  /export function buildGridToIsoCenter\(gridX: number, gridY: number\): IsoPoint \{[\s\S]*?\n\}/,
   `export function buildGridToIsoCenter(gridX: number, gridY: number): IsoPoint {
-  return {
-    x: BUILD_ISO_WORLD_ORIGIN_X + (gridX - gridY) * (ISO_TILE_WIDTH / 2),
-    y: BUILD_ISO_WORLD_ORIGIN_Y + (gridX + gridY) * (ISO_TILE_HEIGHT / 2),
-  };
+  return { x: gridX * BUILD_GRID_SIZE, y: gridY * BUILD_GRID_SIZE };
 }`,
-  "world anchored buildGridToIsoCenter",
+  "normal world grid build center",
 );
 
 replaceRegex(
-  /export function worldCameraToIsoBuildCamera\(\n  worldCamX: number,\n  worldCamY: number,\n  viewWidth: number,\n  viewHeight: number,\n\): IsoPoint \{\n  const px = worldCamX \+ viewWidth \/ 2;\n  const py = worldCamY \+ viewHeight \/ 2;\n  const playerIsoX = \(px - py\) \/ 2;\n  const playerIsoY = \(px \+ py\) \* ISO_TILE_HEIGHT \/ \(2 \* BUILD_GRID_SIZE\);\n  return \{ x: playerIsoX - viewWidth \/ 2, y: playerIsoY - viewHeight \/ 2 \};\n\}/,
+  /export function worldCameraToIsoBuildCamera\([\s\S]*?\n\): IsoPoint \{[\s\S]*?\n\}/,
   `export function worldCameraToIsoBuildCamera(
   worldCamX: number,
   worldCamY: number,
@@ -58,10 +45,19 @@ replaceRegex(
 );
 
 replaceRegex(
-  /  const isoX = screenX \+ isoCamX;\n  const isoY = screenY \+ isoCamY;/,
-  `  const isoX = screenX + isoCamX - BUILD_ISO_WORLD_ORIGIN_X;
-  const isoY = screenY + isoCamY - BUILD_ISO_WORLD_ORIGIN_Y;`,
-  "screen to anchored iso grid",
+  /export function screenToIsoBuildGrid\([\s\S]*?\n\): \{ gridX: number; gridY: number \} \{[\s\S]*?\n\}/,
+  `export function screenToIsoBuildGrid(
+  screenX: number,
+  screenY: number,
+  isoCamX: number,
+  isoCamY: number,
+): { gridX: number; gridY: number } {
+  return {
+    gridX: Math.round((screenX + isoCamX) / BUILD_GRID_SIZE),
+    gridY: Math.round((screenY + isoCamY) / BUILD_GRID_SIZE),
+  };
+}`,
+  "screen to normal build grid",
 );
 
 if (changed) fs.writeFileSync(target, source);
