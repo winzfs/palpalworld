@@ -1,8 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent, type ReactNode } from "react";
-import type { BuildingState, BuildingType, CreaturePublicState, Direction, InventoryState, ResourceNodeState, Vector2, WorldSnapshot } from "@palpalworld/shared";
+import type { BuildingState, BuildingType, CreaturePublicState, Direction, InventoryState, ItemStack, ResourceNodeState, Vector2, WorldSnapshot } from "@palpalworld/shared";
 import { BuildingInteractionPanel } from "../buildings/BuildingInteractionPanel";
+import { StationBuildingPanel } from "../buildings/StationBuildingPanel";
 import { CharacterPanel } from "../character/CharacterPanel";
 import { CraftingPanel } from "../crafting/CraftingPanel";
 import { getBuildingItemId, getCraftingStationByBuildingType, getProgressionBuilding, getProgressionBuildingByItemId, getProgressionRecipe } from "../crafting/progressionCatalog";
@@ -105,7 +106,8 @@ function createWanderTarget(creature: CreaturePublicState, now: number): Creatur
     y: Math.max(creatureMapMin, Math.min(creatureMapMax, y)),
     nextRetargetAt: now + 7800 + (seed % 9000),
   };
-}\nfunction getWanderTarget(creature: CreaturePublicState, now: number): CreatureWanderTarget {
+}
+function getWanderTarget(creature: CreaturePublicState, now: number): CreatureWanderTarget {
   const current = creatureWanderTargets.get(creature.id);
   const distanceToTarget = current ? Math.hypot(current.x - creature.position.x, current.y - creature.position.y) : Number.POSITIVE_INFINITY;
   if (!current || now >= current.nextRetargetAt || distanceToTarget < 64) {
@@ -363,6 +365,16 @@ export function GameClientTileDemoStation() {
     updateInventory((current) => { const consumed = consumeInventoryItems(current, recipe.inputs); if (!consumed) return current; return recipe.outputs.reduce((next, output) => addCraftedItem(next, output.itemId, output.amount), consumed); });
     setChatLines((prev) => [...prev.slice(-5), `[demo] ${recipe.name} 제작 완료`]);
   }, [updateInventory]);
+  const handleDismantleBuilding = useCallback((target: BuildingState, refunds: ItemStack[]) => {
+    updateInventory((current) => refunds.reduce((next, refund) => addInventoryStack(next, refund.itemId, refund.amount), current));
+    demoBuildingsRef.current = demoBuildingsRef.current.filter((building) => building.id !== target.id);
+    demoTileIndexRef.current = createDemoTileIndex(demoResourcesRef.current, demoCreaturesRef.current, demoBuildingsRef.current);
+    window.dispatchEvent(new CustomEvent("palpalworld:building-dismantled", { detail: { buildingId: target.id, building: target } }));
+    setSelectedBuilding((current) => current?.id === target.id ? null : current);
+    setSelectedStationBuilding((current) => current?.id === target.id ? null : current);
+    setChatLines((prev) => [...prev.slice(-5), `[build] ${String(target.type)} 분해 완료`]);
+    applyDemoSnapshot(true);
+  }, [applyDemoSnapshot, updateInventory]);
   const handleCraftBuildingItem = useCallback((buildingType: string) => {
     const building = getProgressionBuilding(buildingType);
     if (!building) return;
@@ -434,9 +446,9 @@ export function GameClientTileDemoStation() {
         <section className={`hud-minimap hud-minimap--${minimapSize}`} aria-label="미니맵"><button className="hud-minimap__size-button" onClick={cycleMinimapSize} aria-label="미니맵 크기 변경">{minimapSizeLabels[minimapSize]}</button><MiniMapPanel snapshot={snapshot} localPlayerId={demoPlayerId} /></section>
         {captureOrbReady ? <div className="capture-ready-badge">포획 준비: {getItemLabel(captureOrbReady)} · 체력 30% 이하 몬스터를 공격하세요</div> : null}
         {inventoryOpen ? <section className="inventory-overlay-panel" aria-label="인벤토리"><button className="inventory-overlay-panel__close" onClick={() => setInventoryOpen(false)} aria-label="인벤토리 닫기">×</button><InventoryGridPanel inventory={inventory} quickSlots={quickSlots} selectedBuildingItemId={selectedBuildingItemId} onSelectBuildingItem={handleSelectBuildingItem} onAssignQuickSlot={handleAssignQuickSlot} /></section> : null}
-        {selectedBuilding ? <BuildingInteractionPanel building={selectedBuilding} inventory={inventory} onInventoryChange={commitInventory} onClose={() => setSelectedBuilding(null)} onOpenCrafting={() => { const station = getCraftingStationByBuildingType(String(selectedBuilding.type)); if (station) setSelectedStationBuilding(selectedBuilding); setSelectedBuilding(null); }} /> : null}
-        {selectedStationBuilding && selectedStation ? <section className="station-overlay-panel" aria-label={`${selectedStation.name} 제작소`}><header className="station-overlay-panel__header"><strong>{selectedStation.name}</strong><button onClick={() => setSelectedStationBuilding(null)}>닫기</button></header><div className="station-overlay-panel__body"><CraftingPanel inventory={inventory} stationId={selectedStation.id} compact onCraft={handleCraft} onCraftBuildingItem={handleCraftBuildingItem} /></div></section> : null}
-        {menuOpen ? <section className="hud-menu-panel" aria-label="게임 메뉴"><header className="hud-menu-panel__header"><strong>게임 메뉴</strong><button onClick={() => setMenuOpen(false)}>닫기</button></header><nav className="hud-menu-tabs" aria-label="메뉴 탭">{menuTabs.map((tab) => <button key={tab.id} className={activeMenuTab === tab.id ? "hud-menu-tabs__button hud-menu-tabs__button--active" : "hud-menu-tabs__button"} onClick={() => setActiveMenuTab(tab.id)}>{tab.label}</button>)}</nav><div className="hud-menu-panel__body">{activeMenuContent}</div></section> : null}
+        {selectedBuilding ? <BuildingInteractionPanel building={selectedBuilding} inventory={inventory} onInventoryChange={commitInventory} onClose={() => setSelectedBuilding(null)} onDismantle={handleDismantleBuilding} onOpenCrafting={() => { const station = getCraftingStationByBuildingType(String(selectedBuilding.type)); if (station) setSelectedStationBuilding(selectedBuilding); setSelectedBuilding(null); }} /> : null}
+        {selectedStationBuilding && selectedStation ? <StationBuildingPanel building={selectedStationBuilding} station={selectedStation} inventory={inventory} onCraft={handleCraft} onCraftBuildingItem={handleCraftBuildingItem} onDismantle={handleDismantleBuilding} onClose={() => setSelectedStationBuilding(null)} /> : null}
+        {menuOpen ? <section className="hud-menu-panel" aria-label="게임 메뉴"><header className="hud-menu-panel__header"><strong>게임 메뉴</strong><button onClick={() => setMenuOpen(false)}>×</button></header><nav className="hud-menu-tabs" aria-label="메뉴 탭">{menuTabs.map((tab) => <button key={tab.id} className={activeMenuTab === tab.id ? "hud-menu-tabs__button hud-menu-tabs__button--active" : "hud-menu-tabs__button"} onClick={() => setActiveMenuTab(tab.id)}>{tab.label}</button>)}</nav><div className="hud-menu-panel__body">{activeMenuContent}</div></section> : null}
         {activeCapture ? <CaptureMinigameOverlay creature={activeCapture.creature} config={activeCapture.config} onResolve={handleResolveCapture} onCancel={handleCancelCapture} /> : null}
         <QuickSlotBar inventory={inventory} quickSlots={quickSlots} onUseQuickSlot={handleUseQuickSlot} onClearQuickSlot={handleClearQuickSlot} />
         <MobileControls onInputChange={handleInputChange} onInteract={handleDemoInteract} />
