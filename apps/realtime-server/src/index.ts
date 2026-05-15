@@ -86,7 +86,7 @@ function createPlayer(socketId: string, nickname: string): PlayerPublicState {
     currentTile: { ...DEFAULT_PLAYER_TILE },
     hp: profile.stats.maxHp,
     maxHp: profile.stats.maxHp,
-  } as PlayerPublicState;
+  };
 }
 
 function travelPlayerIfAtPortal(player: PlayerPublicState, forcedDirection?: MapDirection) {
@@ -94,15 +94,14 @@ function travelPlayerIfAtPortal(player: PlayerPublicState, forcedDirection?: Map
   const previousTravel = lastTravelAt.get(player.id) ?? 0;
   if (now - previousTravel < 900) return false;
 
-  const currentTile = (player as any).currentTile ?? DEFAULT_PLAYER_TILE;
-  const direction = forcedDirection ?? getPortalDirectionAtPosition(player.position, currentTile);
+  const direction = forcedDirection ?? getPortalDirectionAtPosition(player.position, player.currentTile);
   if (!direction) return false;
 
-  const nextTile = getNeighborTile(currentTile, direction);
+  const nextTile = getNeighborTile(player.currentTile, direction);
   if (!nextTile) return false;
 
   const previousPosition = { ...player.position };
-  (player as any).currentTile = { ...nextTile };
+  player.currentTile = { ...nextTile };
   player.position = getSpawnPositionAfterTravel(direction, previousPosition);
   lastTravelAt.set(player.id, now);
   return true;
