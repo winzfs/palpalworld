@@ -159,8 +159,8 @@ replaceIn(
 insertAfter(
   "client",
   'import { addBuildingToTileIndex, createDemoTileIndex, getAliveTileCreatures, getAliveTileResources, getTileBuildings } from "./demoTileIndex";',
-  'import { BUILD_PARTS, type PlacedBuildPart } from "../buildings/buildPartCatalog";\nimport { buildGridToWorld } from "../buildings/buildGrid";\nimport { getBuildPartsForTile, readStoredBuildParts, toggleBuildDoorOpen } from "../buildings/buildPartStore";',
-  "door imports",
+  'import { BUILD_PARTS, type PlacedBuildPart } from "../buildings/buildPartCatalog";\nimport { buildGridToWorld } from "../buildings/buildGrid";\nimport { getBuildCollisionAtPosition } from "../buildings/buildCollision2p5d";\nimport { getBuildPartsForTile, readStoredBuildParts, toggleBuildDoorOpen } from "../buildings/buildPartStore";',
+  "door and monster collision imports",
 );
 
 insertAfter(
@@ -168,6 +168,25 @@ insertAfter(
   'function findNearestCreature(creatures: CreaturePublicState[], position: Vector2, maxRange = 180) {\n  let nearest: CreaturePublicState | null = null;\n  let nearestDistance = Number.POSITIVE_INFINITY;\n  for (const creature of creatures) {\n    if (creature.hp <= 0) continue;\n    const distance = Math.hypot(creature.position.x - position.x, creature.position.y - position.y);\n    if (distance < nearestDistance) { nearest = creature; nearestDistance = distance; }\n  }\n  return nearest && nearestDistance <= maxRange ? nearest : null;\n}',
   'function findNearestDoorPart(parts: PlacedBuildPart[], position: Vector2, maxRange = 82) {\n  let nearest: PlacedBuildPart | null = null;\n  let nearestDistance = Number.POSITIVE_INFINITY;\n  for (const part of parts) {\n    const definition = BUILD_PARTS[part.partId];\n    if (definition?.category !== "door") continue;\n    const center = buildGridToWorld(part);\n    const distance = Math.hypot(center.x - position.x, center.y - position.y);\n    if (distance < nearestDistance) { nearest = part; nearestDistance = distance; }\n  }\n  return nearest && nearestDistance <= maxRange ? nearest : null;\n}',
   "nearest door helper",
+);
+
+replaceIn(
+  "client",
+  'function moveDemoCreatures(creatures: CreaturePublicState[], deltaSeconds: number, now: number, playerPosition: Vector2) {',
+  'function moveDemoCreatures(creatures: CreaturePublicState[], deltaSeconds: number, now: number, playerPosition: Vector2, buildParts: PlacedBuildPart[] = []) {',
+  "creature movement accepts build parts",
+);
+replaceIn(
+  "client",
+  '    const next = clampCreaturePosition(clampPositionToTile({\n      x: creature.position.x + Math.cos(baseAngle) * speed * speedMultiplier * deltaSeconds,\n      y: creature.position.y + Math.sin(baseAngle) * speed * speedMultiplier * deltaSeconds,\n    }));\n    const touchedEdge = next.x <= creatureMapMin + 4 || next.x >= creatureMapMax - 4 || next.y <= creatureMapMin + 4 || next.y >= creatureMapMax - 4;\n    if (touchedEdge) creatureWanderTargets.set(creature.id, createWanderTarget(creature, now + 7777));\n    creature.position.x = next.x;\n    creature.position.y = next.y;',
+  '    const desiredNext = clampCreaturePosition(clampPositionToTile({\n      x: creature.position.x + Math.cos(baseAngle) * speed * speedMultiplier * deltaSeconds,\n      y: creature.position.y + Math.sin(baseAngle) * speed * speedMultiplier * deltaSeconds,\n    }));\n    const collision = buildParts.length > 0 ? getBuildCollisionAtPosition({ parts: buildParts, position: desiredNext, floorLevel: 0 }) : { blocked: false };\n    const next = collision.blocked ? creature.position : desiredNext;\n    const touchedEdge = next.x <= creatureMapMin + 4 || next.x >= creatureMapMax - 4 || next.y <= creatureMapMin + 4 || next.y >= creatureMapMax - 4;\n    if (touchedEdge || collision.blocked) creatureWanderTargets.set(creature.id, createWanderTarget(creature, now + 7777));\n    creature.position.x = next.x;\n    creature.position.y = next.y;',
+  "creature wall collision",
+);
+replaceIn(
+  "client",
+  '      moveDemoCreatures(getCurrentCreatures(), deltaSeconds, now, demoPositionRef.current);',
+  '      moveDemoCreatures(getCurrentCreatures(), deltaSeconds, now, demoPositionRef.current, getBuildPartsForTile(cachedBuildPartsRef.current ?? readStoredBuildParts(), demoTileRef.current));',
+  "pass cached build parts to creatures",
 );
 
 replaceIn(
