@@ -15,9 +15,26 @@ function replaceOnce(search, replacement, label) {
   console.log(`[patch-build-mode-panel] patched ${label}`);
 }
 
+function ensureAfter(anchor, insertion, label) {
+  if (source.includes(insertion)) return;
+  replaceOnce(anchor, `${anchor}\n${insertion}`, label);
+}
+
 replaceOnce(
+  'type QuickButtonId = "inventory" | "crafting";',
+  'type QuickButtonId = "inventory" | "crafting" | "building";',
+  "QuickButtonId",
+);
+
+replaceOnce(
+  '  crafting: { x: 12, y: 164, icon: "🛠", label: "제작" },\n};',
+  '  crafting: { x: 12, y: 164, icon: "🛠", label: "제작" },\n  building: { x: 12, y: 216, icon: "🏠", label: "건설" },\n};',
+  "quickButtonDefaults.building",
+);
+
+ensureAfter(
   'import type { BuildingState, BuildingType, CreaturePublicState, Direction, InventoryState, ItemStack, ResourceNodeState, Vector2, WorldSnapshot } from "@palpalworld/shared";',
-  'import type { BuildingState, BuildingType, CreaturePublicState, Direction, InventoryState, ItemStack, ResourceNodeState, Vector2, WorldSnapshot } from "@palpalworld/shared";\nimport { BuildModePanel } from "../buildings/BuildModePanel";\nimport type { BuildFloorLevel, BuildPartId, BuildPartRotation } from "../buildings/buildPartCatalog";',
+  'import { BuildModePanel } from "../buildings/BuildModePanel";\nimport type { BuildFloorLevel, BuildPartId, BuildPartRotation } from "../buildings/buildPartCatalog";',
   "imports",
 );
 
@@ -30,7 +47,13 @@ replaceOnce(
 replaceOnce(
   '  const openInventoryPanel = useCallback(() => { setInventoryOpen((value) => !value); setMenuOpen(false); setSelectedStationBuilding(null); setSelectedBuilding(null); }, []);\n  const openCraftingMenu = useCallback(() => { setActiveMenuTab("crafting"); setMenuOpen(true); setInventoryOpen(false); setSelectedStationBuilding(null); setSelectedBuilding(null); }, []);',
   '  const openInventoryPanel = useCallback(() => { setInventoryOpen((value) => !value); setBuildModeOpen(false); setMenuOpen(false); setSelectedStationBuilding(null); setSelectedBuilding(null); }, []);\n  const openCraftingMenu = useCallback(() => { setActiveMenuTab("crafting"); setMenuOpen(true); setBuildModeOpen(false); setInventoryOpen(false); setSelectedStationBuilding(null); setSelectedBuilding(null); }, []);\n  const openBuildingMenu = useCallback(() => { setBuildModeOpen((value) => !value); setMenuOpen(false); setInventoryOpen(false); setSelectedStationBuilding(null); setSelectedBuilding(null); setCaptureOrbReady(null); setChatLines((prev) => [...prev.slice(-5), "[build] 건설 모드: 부품을 선택한 뒤 맵에 배치하세요."]); }, []);',
-  "open handlers",
+  "open handlers from original",
+);
+
+replaceOnce(
+  '  const openCraftingMenu = useCallback(() => { setActiveMenuTab("crafting"); setMenuOpen(true); setInventoryOpen(false); setSelectedStationBuilding(null); setSelectedBuilding(null); }, []);\n  const openBuildingMenu = useCallback(() => { setActiveMenuTab("crafting"); setMenuOpen(true); setInventoryOpen(false); setSelectedStationBuilding(null); setSelectedBuilding(null); setCaptureOrbReady(null); setChatLines((prev) => [...prev.slice(-5), "[build] 건설 모드: 제작 탭에서 건물/부품을 선택하세요."]); }, []);',
+  '  const openCraftingMenu = useCallback(() => { setActiveMenuTab("crafting"); setMenuOpen(true); setBuildModeOpen(false); setInventoryOpen(false); setSelectedStationBuilding(null); setSelectedBuilding(null); }, []);\n  const openBuildingMenu = useCallback(() => { setBuildModeOpen((value) => !value); setMenuOpen(false); setInventoryOpen(false); setSelectedStationBuilding(null); setSelectedBuilding(null); setCaptureOrbReady(null); setChatLines((prev) => [...prev.slice(-5), "[build] 건설 모드: 부품을 선택한 뒤 맵에 배치하세요."]); }, []);',
+  "open handlers after old floating patch",
 );
 
 replaceOnce(
@@ -45,6 +68,10 @@ replaceOnce(
   "build mode panel render",
 );
 
-if (changed) {
-  fs.writeFileSync(target, source);
-}
+replaceOnce(
+  '<GameScene onReady={handleSceneReady} onInputChange={handleInputChange} onInteract={handleDemoInteract} onWorldClick={handleWorldClick} placementBuildingType={placementBuildingType} />',
+  '<GameScene onReady={handleSceneReady} onInputChange={handleInputChange} onInteract={handleDemoInteract} onWorldClick={handleWorldClick} placementBuildingType={placementBuildingType} selectedBuildPartId={selectedBuildPartId} selectedBuildPartRotation={selectedBuildPartRotation} selectedBuildFloorLevel={selectedBuildFloorLevel} />',
+  "GameScene build part props",
+);
+
+if (changed) fs.writeFileSync(target, source);
