@@ -89,7 +89,8 @@ function getMountedPlayerMoveSpeed() {
 function createWanderTarget(creature: CreaturePublicState, now: number): CreatureWanderTarget {
   const seed = hashId(creature.id);
   const retargetIndex = Math.floor(now / (5200 + (seed % 3600)));
-  const sectorIndex = (seed + retargetIndex * 5 + creature.level * 3) % 9;
+  const rawSector = (seed + retargetIndex * 5 + creature.level * 3) % 12;
+  const sectorIndex = rawSector >= 8 ? [0, 2, 6, 8][(seed + retargetIndex) % 4] : rawSector >= 4 ? [1, 3, 5, 7][(seed + retargetIndex) % 4] : [0, 2, 6, 8][(seed + creature.level + retargetIndex) % 4];
   const sectorX = sectorIndex % 3;
   const sectorY = Math.floor(sectorIndex / 3);
   const sectorMinX = 130 + sectorX * 920;
@@ -121,14 +122,24 @@ function getSeparationVector(creature: CreaturePublicState, creatures: CreatureP
     const dx = creature.position.x - other.position.x;
     const dy = creature.position.y - other.position.y;
     const distance = Math.hypot(dx, dy);
-    if (distance <= 0 || distance > 135) continue;
-    const strength = (135 - distance) / 135;
+    if (distance <= 0 || distance > 180) continue;
+    const strength = ((180 - distance) / 180) ** 1.35;
     pushX += (dx / distance) * strength;
     pushY += (dy / distance) * strength;
     count += 1;
-    if (count >= 5) break;
+    if (count >= 8) break;
   }
   return count > 0 ? { x: pushX / count, y: pushY / count } : { x: 0, y: 0 };
+}
+function getCenterOutwardVector(position: Vector2) {
+  const centerX = 1500;
+  const centerY = 1500;
+  const dx = position.x - centerX;
+  const dy = position.y - centerY;
+  const distance = Math.hypot(dx, dy) || 1;
+  if (distance >= 820) return { x: 0, y: 0 };
+  const strength = ((820 - distance) / 820) ** 1.2;
+  return { x: (dx / distance) * strength, y: (dy / distance) * strength };
 }
 function moveDemoCreatures(creatures: CreaturePublicState[], deltaSeconds: number, now: number, playerPosition: Vector2) {
   for (const creature of creatures) {
@@ -141,8 +152,11 @@ function moveDemoCreatures(creatures: CreaturePublicState[], deltaSeconds: numbe
     let moveX = dxToTarget;
     let moveY = dyToTarget;
     const separation = getSeparationVector(creature, creatures);
-    moveX += separation.x * (isFlying ? 520 : 380);
-    moveY += separation.y * (isFlying ? 520 : 380);
+    moveX += separation.x * (isFlying ? 880 : 680);
+    moveY += separation.y * (isFlying ? 880 : 680);
+    const centerOutward = getCenterOutwardVector(creature.position);
+    moveX += centerOutward.x * (isFlying ? 760 : 560);
+    moveY += centerOutward.y * (isFlying ? 760 : 560);
     const dxFromPlayer = creature.position.x - playerPosition.x;
     const dyFromPlayer = creature.position.y - playerPosition.y;
     const playerDistance = Math.hypot(dxFromPlayer, dyFromPlayer);
@@ -151,10 +165,9 @@ function moveDemoCreatures(creatures: CreaturePublicState[], deltaSeconds: numbe
       moveX += (dxFromPlayer / playerDistance) * 620 * fleeStrength;
       moveY += (dyFromPlayer / playerDistance) * 620 * fleeStrength;
     }
-    const moveLength = Math.hypot(moveX, moveY) || 1;
     const drift = isFlying ? Math.sin(now / 620 + hashId(creature.id)) * 0.18 : Math.sin(now / 1100 + hashId(creature.id)) * 0.08;
     const baseAngle = Math.atan2(moveY, moveX) + drift;
-    const speedMultiplier = isFlying ? 1.16 : 0.92;
+    const speedMultiplier = isFlying ? 1.18 : 0.96;
     const next = clampCreaturePosition(clampPositionToTile({
       x: creature.position.x + Math.cos(baseAngle) * speed * speedMultiplier * deltaSeconds,
       y: creature.position.y + Math.sin(baseAngle) * speed * speedMultiplier * deltaSeconds,
