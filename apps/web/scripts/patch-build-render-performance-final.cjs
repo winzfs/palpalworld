@@ -51,12 +51,7 @@ function replaceRenderer(search, replacement, label) {
   console.log(`[patch-build-render-performance-final] patched renderer ${label}`);
 }
 
-// Stable two-pass build rendering:
-// - floors/stairs/decor render below the player
-// - walls/doors/windows/roofs render above the player
-// - foreground pieces near the local player become translucent
-// This fixes indoor readability and avoids the wall-missing artifacts caused by
-// the previous static offscreen layer cache.
+// Stable two-pass build rendering.
 replaceSceneRegex(
   /  private drawBuildParts\(ctx: CanvasRenderingContext2D, cameraX: number, cameraY: number, viewport: ViewportBounds, isoCamX: number, isoCamY: number\) \{[\s\S]*?\n  \}\n  private drawBuildings\(/,
   `  private drawBuildParts(ctx: CanvasRenderingContext2D, cameraX: number, cameraY: number, viewport: ViewportBounds, isoCamX: number, isoCamY: number) {
@@ -90,6 +85,7 @@ replaceSceneRegex(
     });
 
     const heavyScene = sourceParts.length > 90 || visibleParts.length > 50;
+    this.buildPartRenderer.setLiteMode(heavyScene);
     for (const part of visibleParts) {
       const visibility = heavyScene
         ? { hide: false, alpha: 0.94, outlineAlpha: 0 }
@@ -134,6 +130,7 @@ replaceSceneRegex(
       return getBuildPartSortKey(definitionA, a.gridX, a.gridY, a.floorLevel) - getBuildPartSortKey(definitionB, b.gridX, b.gridY, b.floorLevel);
     });
 
+    this.buildPartRenderer.setLiteMode(sourceParts.length > 90 || visibleParts.length > 55);
     let ghostOutlineCount = 0;
     const maxGhostOutlines = sourceParts.length > 70 ? 0 : 20;
     for (const part of visibleParts) {
@@ -190,10 +187,35 @@ replaceSceneRegex(
   "padded drag hit bounds",
 );
 
-replaceRenderer("ctx.shadowBlur = preview ? 1 : 3;", "ctx.shadowBlur = preview ? 0 : 1;", "reduce shadow blur");
-replaceRenderer("ctx.shadowBlur = preview ? 1 : 2;", "ctx.shadowBlur = preview ? 0 : 1;", "reduce alternate shadow blur");
-replaceRenderer("ctx.shadowColor = preview ? \"rgba(0,0,0,0.07)\" : \"rgba(0,0,0,0.16)\";", "ctx.shadowColor = preview ? \"rgba(0,0,0,0.04)\" : \"rgba(0,0,0,0.10)\";", "reduce shadow color");
-replaceRenderer("ctx.shadowColor = preview ? \"rgba(0, 0, 0, 0.10)\" : \"rgba(0, 0, 0, 0.18)\";", "ctx.shadowColor = preview ? \"rgba(0, 0, 0, 0.04)\" : \"rgba(0, 0, 0, 0.10)\";", "reduce soft shadow color");
+// Renderer lite mode: keeps visual identity but removes the most expensive detail
+// passes when many build parts are visible. This is intentionally centralized in
+// the renderer so later sprite-cache work can reuse the same simplified draw.
+replaceRenderer(
+  "export class BuildPartRenderer {\n  drawPlacedPart",
+  "export class BuildPartRenderer {\n  private liteMode = false;\n\n  setLiteMode(enabled: boolean) {\n    this.liteMode = enabled;\n  }\n\n  drawPlacedPart",
+  "lite mode field",
+);
+replaceRenderer("ctx.shadowBlur = preview ? 1 : 3;", "ctx.shadowBlur = this.liteMode ? 0 : preview ? 0 : 1;", "reduce shadow blur");
+replaceRenderer("ctx.shadowBlur = preview ? 1 : 2;", "ctx.shadowBlur = this.liteMode ? 0 : preview ? 0 : 1;", "reduce alternate shadow blur");
+replaceRenderer("ctx.shadowColor = preview ? \"rgba(0,0,0,0.07)\" : \"rgba(0,0,0,0.16)\";", "ctx.shadowColor = this.liteMode ? \"rgba(0,0,0,0)\" : preview ? \"rgba(0,0,0,0.04)\" : \"rgba(0,0,0,0.10)\";", "reduce shadow color");
+replaceRenderer("ctx.shadowColor = preview ? \"rgba(0, 0, 0, 0.10)\" : \"rgba(0, 0, 0, 0.18)\";", "ctx.shadowColor = this.liteMode ? \"rgba(0,0,0,0)\" : preview ? \"rgba(0,0,0,0.04)\" : \"rgba(0,0,0,0.10)\";", "reduce soft shadow color");
+replaceRenderer("ctx.shadowOffsetY = 2;", "ctx.shadowOffsetY = this.liteMode ? 0 : 1;", "reduce shadow offset");
+replaceRenderer(
+  "    ctx.globalAlpha *= 0.78 * intensity;\n    ctx.strokeStyle = definition.material === \"stone\" ? \"rgba(30,41,59,0.30)\" : \"rgba(255,255,255,0.18)\";",
+  "    if (this.liteMode && !preview) { ctx.restore(); return; }\n    ctx.globalAlpha *= 0.78 * intensity;\n    ctx.strokeStyle = definition.material === \"stone\" ? \"rgba(30,41,59,0.30)\" : \"rgba(255,255,255,0.18)\";",
+  "skip floor detail lines",
+);
+replaceRenderer(
+  "    ctx.shadowBlur = 0;\n    ctx.strokeStyle = \"rgba(255,255,255,0.16)\";",
+  "    ctx.shadowBlur = 0;\n    if (this.liteMode && !lowWall) return;\n    ctx.strokeStyle = \"rgba(255,255,255,0.16)\";",
+  "skip wall detail lines",
+);
+replaceRenderer("    const steps = 6;", "    const steps = this.liteMode ? 2 : 6;", "reduce stair steps");
+replaceRenderer(
+  "    ctx.strokeStyle = \"rgba(255,255,255,0.22)\";\n    ctx.lineWidth = 1;\n    this.strokePolyline(ctx, [ridgeStart, ridgeEnd]);",
+  "    if (this.liteMode) { ctx.restore(); return; }\n    ctx.strokeStyle = \"rgba(255,255,255,0.22)\";\n    ctx.lineWidth = 1;\n    this.strokePolyline(ctx, [ridgeStart, ridgeEnd]);",
+  "skip roof detail lines",
+);
 
 if (sceneChanged) fs.writeFileSync(scenePath, scene);
 if (rendererChanged) fs.writeFileSync(rendererPath, renderer);
