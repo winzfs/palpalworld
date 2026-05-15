@@ -228,7 +228,7 @@
   display: grid;
   place-items: center;
   filter: drop-shadow(0 8px 10px rgb(0 0 0 / 0.35));
-  transition: left 0.42s linear, top 0.42s linear;
+  transition: none;
   will-change: left, top;
 }
 
