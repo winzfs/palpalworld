@@ -9,6 +9,7 @@
  * - demolition click outside placed parts: clear all build/demolition selection
  * - demolition drag: select multiple parts; Shift adds, Ctrl/Meta toggles
  * - selected placed part rotate button keeps the part installed and rotates it
+ * - new-part preview drag must never move an already placed/selected part
  * - closing the build UI clears every build/demolition selection
  */
 const fs = require("fs");
@@ -65,6 +66,29 @@ replaceSceneRegex(
 );
 
 replaceSceneRegex(
+  /  setBuildPartPlacement\(partId: BuildPartId \| null, rotation: BuildPartRotation, floorLevel: BuildFloorLevel\) \{\n    this\.selectedBuildPartId = partId;\n    this\.selectedBuildPartRotation = rotation;\n    this\.selectedBuildFloorLevel = floorLevel;\n    this\.buildPartDragPointerId = null;\n    this\.buildPartDragPosition = null;\n    this\.canvas\.style\.cursor = partId \? "crosshair" : this\.placementPreviewBuildingType \? "crosshair" : "default";\n  \}/,
+  `  setBuildPartPlacement(partId: BuildPartId | null, rotation: BuildPartRotation, floorLevel: BuildFloorLevel) {
+    this.selectedBuildPartId = partId;
+    this.selectedBuildPartRotation = rotation;
+    this.selectedBuildFloorLevel = floorLevel;
+    this.buildPartDragPointerId = null;
+    this.buildPartDragPosition = null;
+    if (partId) {
+      this.selectedPlacedBuildPartId = null;
+      this.selectedHouseId = null;
+      this.demolitionSelectedPartIds.clear();
+      this.demolitionPointerId = null;
+      this.demolitionDragStart = null;
+      this.demolitionDragCurrent = null;
+      this.editingBuildPartPointerId = null;
+    }
+    this.canvas.style.cursor = partId ? "crosshair" : this.placementPreviewBuildingType ? "crosshair" : "default";
+    this.dispatchBuildPartSelection();
+  }`,
+  "new placement clears selected placed part",
+);
+
+replaceSceneRegex(
   /  rotateSelectedPlacedBuildPartForUi\(\) \{\n    const selected = this\.getSelectedPlacedBuildPart\(\);\n    if \(!selected\) return;\n    this\.placedBuildParts = rotatePlacedBuildPart\(selected\.id, rotateBuildPart\(selected\.rotation\)\);\n    this\.dispatchBuildPartSelection\(\);\n  \}/,
   `  rotateSelectedPlacedBuildPartForUi() {
     const selected = this.getSelectedPlacedBuildPart();
@@ -75,6 +99,13 @@ replaceSceneRegex(
     this.dispatchBuildPartSelection();
   }`,
   "rotate selected placed part in place",
+);
+
+replaceSceneRegex(
+  /    const movingSelected = this\.getSelectedPlacedBuildPart\(\);\n    if \(movingSelected && this\.buildPartDragPosition\) \{/,
+  `    const movingSelected = this.getSelectedPlacedBuildPart();
+    if (movingSelected && this.editingBuildPartPointerId !== null && this.buildPartDragPosition) {`,
+  "preview does not move selected placed part during new placement",
 );
 
 replaceSceneRegex(
