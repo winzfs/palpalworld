@@ -51,3 +51,4 @@ if (changed) {
 }
 
 require("./patch-build-render-hotpath-final.cjs");
+require("./patch-smooth-movement-snapshot-throttle.cjs");
