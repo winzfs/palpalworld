@@ -58,7 +58,8 @@ replace(
 
 replace(
   `    this.canvas.remove();`,
-  `    this.fullscreenButtonEl?.remove();
+  `    document.removeEventListener("fullscreenchange", this.handleFullscreenChanged);
+    this.fullscreenButtonEl?.remove();
     this.canvas.remove();`,
   "destroy fullscreen button",
 );
@@ -86,7 +87,7 @@ replace(
         await document.exitFullscreen();
         return;
       }
-      const target = this.root;
+      const target = document.documentElement;
       await target.requestFullscreen?.();
       try { await screen.orientation?.lock?.("landscape"); } catch {}
     } catch (error) {
@@ -97,8 +98,10 @@ replace(
   }
 
   private handleEquipmentChanged = (event: EquipmentChangedEvent) => { this.localEquippedWeaponItemId = event.detail?.weaponItemId ?? readStoredWeaponItemId(); };`,
-  "fullscreen methods",
+  "fullscreen methods page target",
 );
+
+replaceAll("const target = this.root;\n      await target.requestFullscreen?.();", "const target = document.documentElement;\n      await target.requestFullscreen?.();", "use page fullscreen target");
 
 // If older button styles remain in generated code, make them usable as fullscreen button style.
 for (const oldButton of [
