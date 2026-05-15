@@ -95,19 +95,98 @@
   padding: 0 11px;
 }
 
+.build-mode-panel__edit-card,
 .build-mode-panel__selected {
   display: grid;
-  gap: 3px;
+  gap: 7px;
   padding: 9px;
   border: 1px solid rgb(250 204 21 / 0.2);
   border-radius: 12px;
   background: rgb(0 0 0 / 0.22);
 }
 
+.build-mode-panel__edit-card {
+  border-color: rgb(96 165 250 / 0.34);
+  background: linear-gradient(180deg, rgb(30 41 59 / 0.62), rgb(0 0 0 / 0.24));
+}
+
+.build-mode-panel__edit-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.build-mode-panel__edit-title b,
 .build-mode-panel__selected b {
   color: var(--jrpg-gold);
   font-size: 13px;
   font-weight: 950;
+}
+
+.build-mode-panel__edit-title span {
+  min-width: 0;
+  overflow: hidden;
+  color: #bfdbfe;
+  font-size: 11px;
+  font-weight: 900;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.build-mode-panel__edit-meta {
+  display: grid;
+  grid-template-columns: repeat(4, auto 1fr);
+  gap: 4px 6px;
+  color: var(--jrpg-muted);
+  font-size: 9px;
+}
+
+.build-mode-panel__edit-meta b {
+  color: var(--jrpg-text);
+  font-size: 9px;
+  font-weight: 950;
+}
+
+.build-mode-panel__edit-actions {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 5px;
+}
+
+.build-mode-panel__edit-actions button {
+  min-height: 30px;
+  padding: 0 6px;
+  border: 1px solid rgb(255 255 255 / 0.15);
+  border-radius: 9px;
+  background: rgb(15 23 42 / 0.72);
+  color: var(--jrpg-text);
+  font-size: 10px;
+  font-weight: 950;
+  cursor: pointer;
+}
+
+.build-mode-panel__edit-actions button:hover,
+.build-mode-panel__edit-actions button:focus-visible {
+  border-color: var(--jrpg-border-bright);
+  outline: none;
+}
+
+.build-mode-panel__edit-actions .build-mode-panel__danger {
+  border-color: rgb(248 113 113 / 0.4);
+  background: rgb(127 29 29 / 0.55);
+  color: #fecaca;
+}
+
+.build-mode-panel__edit-card p {
+  margin: 0;
+  color: var(--jrpg-muted);
+  font-size: 10px;
+  line-height: 1.35;
+}
+
+.build-mode-panel__selected {
+  gap: 3px;
 }
 
 .build-mode-panel__selected span,
@@ -236,8 +315,22 @@
     font-size: 10px;
   }
 
+  .build-mode-panel__edit-card,
   .build-mode-panel__selected {
     padding: 7px;
+  }
+
+  .build-mode-panel__edit-meta {
+    grid-template-columns: repeat(2, auto 1fr);
+  }
+
+  .build-mode-panel__edit-actions {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .build-mode-panel__edit-actions button {
+    min-height: 32px;
+    font-size: 10px;
   }
 
   .build-mode-panel__grid {
