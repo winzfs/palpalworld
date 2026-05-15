@@ -49,3 +49,5 @@ if (changed) {
 } else {
   console.log("[patch-game-client-import-dedupe-final] no import changes needed");
 }
+
+require("./patch-build-render-hotpath-final.cjs");
