@@ -36,6 +36,9 @@ const uiSnapshotIntervalMs = 500;
 const quickSlotCount = 5;
 const mountedPetStorageKey = "palpalworld.demo.mountedPetItemId";
 const creatureWanderTargets = new Map<string, CreatureWanderTarget>();
+const creatureMapMin = 120;
+const creatureMapMax = 2880;
+const creatureMapSize = creatureMapMax - creatureMapMin;
 const menuTabs: { id: MenuTab; label: string }[] = [
   { id: "status", label: "캐릭터" },
   { id: "objective", label: "목표" },
@@ -73,7 +76,8 @@ function getCreatureMoveSpeed(speciesId: string) {
   if (speciesId === "rockturtle") return 14;
   return 26;
 }
-function clampCreaturePosition(position: Vector2): Vector2 { return { x: Math.max(120, Math.min(2880, position.x)), y: Math.max(120, Math.min(2880, position.y)) }; }
+function clampCreaturePosition(position: Vector2): Vector2 { return { x: Math.max(creatureMapMin, Math.min(creatureMapMax, position.x)), y: Math.max(creatureMapMin, Math.min(creatureMapMax, position.y)) }; }
+function random01(seed: number) { const value = Math.sin(seed * 12.9898) * 43758.5453; return value - Math.floor(value); }
 function clampHudButtonPosition(position: { x: number; y: number }) {
   if (typeof window === "undefined") return position;
   return { x: Math.max(4, Math.min(window.innerWidth - 48, position.x)), y: Math.max(4, Math.min(window.innerHeight - 48, position.y)) };
@@ -88,25 +92,23 @@ function getMountedPlayerMoveSpeed() {
 }
 function createWanderTarget(creature: CreaturePublicState, now: number): CreatureWanderTarget {
   const seed = hashId(creature.id);
-  const retargetIndex = Math.floor(now / (5200 + (seed % 3600)));
-  const rawSector = (seed + retargetIndex * 5 + creature.level * 3) % 12;
-  const sectorIndex = rawSector >= 8 ? [0, 2, 6, 8][(seed + retargetIndex) % 4] : rawSector >= 4 ? [1, 3, 5, 7][(seed + retargetIndex) % 4] : [0, 2, 6, 8][(seed + creature.level + retargetIndex) % 4];
-  const sectorX = sectorIndex % 3;
-  const sectorY = Math.floor(sectorIndex / 3);
-  const sectorMinX = 130 + sectorX * 920;
-  const sectorMinY = 130 + sectorY * 920;
-  const mixedA = (seed * 48271 + retargetIndex * 179 + creature.level * 97) % 100_000;
-  const mixedB = (seed * 69691 + retargetIndex * 233 + creature.level * 131) % 100_000;
+  const retargetIndex = Math.floor(now / (7200 + (seed % 5200)));
+  const angleSeed = seed + retargetIndex * 7919 + creature.level * 97;
+  const radiusSeed = seed * 3 + retargetIndex * 3571 + creature.level * 131;
+  const angle = random01(angleSeed) * Math.PI * 2;
+  const radius = Math.sqrt(random01(radiusSeed));
+  const orbit = 0.5 + radius * 0.5;
+  const x = 1500 + Math.cos(angle) * creatureMapSize * 0.5 * orbit;
+  const y = 1500 + Math.sin(angle) * creatureMapSize * 0.5 * orbit;
   return {
-    x: Math.max(120, Math.min(2880, sectorMinX + (mixedA % 820))),
-    y: Math.max(120, Math.min(2880, sectorMinY + (mixedB % 820))),
-    nextRetargetAt: now + 5200 + (seed % 6400),
+    x: Math.max(creatureMapMin, Math.min(creatureMapMax, x)),
+    y: Math.max(creatureMapMin, Math.min(creatureMapMax, y)),
+    nextRetargetAt: now + 7800 + (seed % 9000),
   };
-}
-function getWanderTarget(creature: CreaturePublicState, now: number): CreatureWanderTarget {
+}\nfunction getWanderTarget(creature: CreaturePublicState, now: number): CreatureWanderTarget {
   const current = creatureWanderTargets.get(creature.id);
   const distanceToTarget = current ? Math.hypot(current.x - creature.position.x, current.y - creature.position.y) : Number.POSITIVE_INFINITY;
-  if (!current || now >= current.nextRetargetAt || distanceToTarget < 52) {
+  if (!current || now >= current.nextRetargetAt || distanceToTarget < 64) {
     const next = createWanderTarget(creature, now);
     creatureWanderTargets.set(creature.id, next);
     return next;
@@ -122,24 +124,24 @@ function getSeparationVector(creature: CreaturePublicState, creatures: CreatureP
     const dx = creature.position.x - other.position.x;
     const dy = creature.position.y - other.position.y;
     const distance = Math.hypot(dx, dy);
-    if (distance <= 0 || distance > 180) continue;
-    const strength = ((180 - distance) / 180) ** 1.35;
+    if (distance <= 0 || distance > 220) continue;
+    const strength = ((220 - distance) / 220) ** 1.45;
     pushX += (dx / distance) * strength;
     pushY += (dy / distance) * strength;
     count += 1;
-    if (count >= 8) break;
+    if (count >= 10) break;
   }
   return count > 0 ? { x: pushX / count, y: pushY / count } : { x: 0, y: 0 };
 }
-function getCenterOutwardVector(position: Vector2) {
-  const centerX = 1500;
-  const centerY = 1500;
-  const dx = position.x - centerX;
-  const dy = position.y - centerY;
-  const distance = Math.hypot(dx, dy) || 1;
-  if (distance >= 820) return { x: 0, y: 0 };
-  const strength = ((820 - distance) / 820) ** 1.2;
-  return { x: (dx / distance) * strength, y: (dy / distance) * strength };
+function getEdgeAvoidanceVector(position: Vector2) {
+  const margin = 260;
+  let x = 0;
+  let y = 0;
+  if (position.x < creatureMapMin + margin) x += (creatureMapMin + margin - position.x) / margin;
+  if (position.x > creatureMapMax - margin) x -= (position.x - (creatureMapMax - margin)) / margin;
+  if (position.y < creatureMapMin + margin) y += (creatureMapMin + margin - position.y) / margin;
+  if (position.y > creatureMapMax - margin) y -= (position.y - (creatureMapMax - margin)) / margin;
+  return { x, y };
 }
 function moveDemoCreatures(creatures: CreaturePublicState[], deltaSeconds: number, now: number, playerPosition: Vector2) {
   for (const creature of creatures) {
@@ -152,27 +154,27 @@ function moveDemoCreatures(creatures: CreaturePublicState[], deltaSeconds: numbe
     let moveX = dxToTarget;
     let moveY = dyToTarget;
     const separation = getSeparationVector(creature, creatures);
-    moveX += separation.x * (isFlying ? 880 : 680);
-    moveY += separation.y * (isFlying ? 880 : 680);
-    const centerOutward = getCenterOutwardVector(creature.position);
-    moveX += centerOutward.x * (isFlying ? 760 : 560);
-    moveY += centerOutward.y * (isFlying ? 760 : 560);
+    moveX += separation.x * (isFlying ? 620 : 480);
+    moveY += separation.y * (isFlying ? 620 : 480);
+    const edgeAvoidance = getEdgeAvoidanceVector(creature.position);
+    moveX += edgeAvoidance.x * (isFlying ? 560 : 440);
+    moveY += edgeAvoidance.y * (isFlying ? 560 : 440);
     const dxFromPlayer = creature.position.x - playerPosition.x;
     const dyFromPlayer = creature.position.y - playerPosition.y;
     const playerDistance = Math.hypot(dxFromPlayer, dyFromPlayer);
-    if (playerDistance > 0 && playerDistance < 150) {
-      const fleeStrength = (150 - playerDistance) / 150;
-      moveX += (dxFromPlayer / playerDistance) * 620 * fleeStrength;
-      moveY += (dyFromPlayer / playerDistance) * 620 * fleeStrength;
+    if (playerDistance > 0 && playerDistance < 130) {
+      const fleeStrength = (130 - playerDistance) / 130;
+      moveX += (dxFromPlayer / playerDistance) * 520 * fleeStrength;
+      moveY += (dyFromPlayer / playerDistance) * 520 * fleeStrength;
     }
-    const drift = isFlying ? Math.sin(now / 620 + hashId(creature.id)) * 0.18 : Math.sin(now / 1100 + hashId(creature.id)) * 0.08;
+    const drift = isFlying ? Math.sin(now / 820 + hashId(creature.id)) * 0.22 : Math.sin(now / 1350 + hashId(creature.id)) * 0.1;
     const baseAngle = Math.atan2(moveY, moveX) + drift;
-    const speedMultiplier = isFlying ? 1.18 : 0.96;
+    const speedMultiplier = isFlying ? 1.2 : 0.92;
     const next = clampCreaturePosition(clampPositionToTile({
       x: creature.position.x + Math.cos(baseAngle) * speed * speedMultiplier * deltaSeconds,
       y: creature.position.y + Math.sin(baseAngle) * speed * speedMultiplier * deltaSeconds,
     }));
-    const touchedEdge = next.x <= 124 || next.x >= 2876 || next.y <= 124 || next.y >= 2876;
+    const touchedEdge = next.x <= creatureMapMin + 4 || next.x >= creatureMapMax - 4 || next.y <= creatureMapMin + 4 || next.y >= creatureMapMax - 4;
     if (touchedEdge) creatureWanderTargets.set(creature.id, createWanderTarget(creature, now + 7777));
     creature.position.x = next.x;
     creature.position.y = next.y;
