@@ -91,6 +91,8 @@ export function BuildModePanel({
   selectedFloorLevel,
   selectedPlacedPart,
   selectedHousePartCount = 0,
+  demolitionMode = false,
+  demolitionSelectionCount = 0,
   onSelectPart,
   onRotate,
   onSetFloorLevel,
@@ -98,6 +100,8 @@ export function BuildModePanel({
   onDeleteSelectedPlacedPart,
   onClearSelection,
   onFocusHouse,
+  onToggleDemolitionMode,
+  onDismantleDemolitionSelection,
   onClose,
 }: {
   inventory: InventoryState | null;
@@ -106,6 +110,8 @@ export function BuildModePanel({
   selectedFloorLevel: BuildFloorLevel;
   selectedPlacedPart?: PlacedBuildPart | null;
   selectedHousePartCount?: number;
+  demolitionMode?: boolean;
+  demolitionSelectionCount?: number;
   onSelectPart: (partId: BuildPartId) => void;
   onRotate: (rotation: BuildPartRotation) => void;
   onSetFloorLevel: (floorLevel: BuildFloorLevel) => void;
@@ -113,6 +119,8 @@ export function BuildModePanel({
   onDeleteSelectedPlacedPart?: () => void;
   onClearSelection?: () => void;
   onFocusHouse?: () => void;
+  onToggleDemolitionMode?: (enabled: boolean) => void;
+  onDismantleDemolitionSelection?: () => void;
   onClose: () => void;
 }) {
   const [panelPosition, setPanelPosition] = useState<PanelPosition>(() => readPanelPosition());
@@ -166,7 +174,7 @@ export function BuildModePanel({
 
   return (
     <section
-      className="build-mode-panel"
+      className={demolitionMode ? "build-mode-panel build-mode-panel--demolition" : "build-mode-panel"}
       aria-label="건설 모드"
       style={{ left: panelPosition.x, top: panelPosition.y }}
     >
@@ -178,9 +186,15 @@ export function BuildModePanel({
         onPointerCancel={handlePanelDragEnd}
       >
         <div>
-          <strong>건설 모드</strong>
-          <span>헤더 드래그로 패널 이동 · 부품 선택 → 맵에 드래그/클릭 설치</span>
+          <strong>{demolitionMode ? "철거 모드" : "건설 모드"}</strong>
+          <span>{demolitionMode ? "맵을 드래그해서 여러 부품 선택 → 일괄 분해" : "헤더 드래그로 패널 이동 · 부품 선택 → 맵에 드래그/클릭 설치"}</span>
         </div>
+        <button
+          className={demolitionMode ? "build-mode-panel__header-action build-mode-panel__header-action--active" : "build-mode-panel__header-action"}
+          onClick={() => onToggleDemolitionMode?.(!demolitionMode)}
+          aria-pressed={demolitionMode}
+          title="철거 모드"
+        >철거</button>
         <button onClick={resetPanelPosition} aria-label="건설 패널 위치 초기화">↺</button>
         <button onClick={onClose} aria-label="건설 모드 닫기">×</button>
       </header>
@@ -199,6 +213,16 @@ export function BuildModePanel({
         </div>
         <button className="build-mode-panel__rotate" onClick={() => onRotate(rotateBuildPart(selectedRotation))}>새 부품 회전 {selectedRotation}°</button>
       </div>
+
+      {demolitionMode ? (
+        <div className="build-mode-panel__demolition-card">
+          <div>
+            <b>철거 선택</b>
+            <span>{demolitionSelectionCount > 0 ? `${demolitionSelectionCount}개 선택됨` : "드래그하거나 부품을 클릭해서 선택"}</span>
+          </div>
+          <button className="build-mode-panel__danger" disabled={demolitionSelectionCount <= 0} onClick={onDismantleDemolitionSelection}>선택 {demolitionSelectionCount}개 분해</button>
+        </div>
+      ) : null}
 
       {selectedPlacedPart && selectedPlacedDefinition ? (
         <div className="build-mode-panel__edit-card">

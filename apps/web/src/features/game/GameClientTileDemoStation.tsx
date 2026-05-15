@@ -2,6 +2,10 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent, type ReactNode } from "react";
 import type { BuildingState, BuildingType, CreaturePublicState, Direction, InventoryState, ItemStack, ResourceNodeState, Vector2, WorldSnapshot } from "@palpalworld/shared";
+import type { PlacedBuildPart } from "../buildings/buildPartCatalog";
+import { BuildModePanel } from "../buildings/BuildModePanel";
+import type { BuildFloorLevel, BuildPartId, BuildPartRotation } from "../buildings/buildPartCatalog";
+import { startBuildPartRealtimeSync, stopBuildPartRealtimeSync } from "../buildings/buildPartStore";
 import { BuildingInteractionPanel } from "../buildings/BuildingInteractionPanel";
 import { StationBuildingPanel } from "../buildings/StationBuildingPanel";
 import { CharacterPanel } from "../character/CharacterPanel";
@@ -24,10 +28,13 @@ import { DEFAULT_PLAYER_TILE, clampPositionToTile, type MapTileRef } from "../..
 import { createTileBasedDemoBuildings, createTileBasedDemoCreatures, createTileBasedDemoResources } from "./demoWorldSpawns";
 import { GameScene, type GameSceneInput, type GameWorldScene, type WorldClickTarget } from "./GameScene";
 import { addBuildingToTileIndex, createDemoTileIndex, getAliveTileCreatures, getAliveTileResources, getTileBuildings } from "./demoTileIndex";
+import { getBuildCollisionAtPosition } from "../buildings/buildCollision2p5d";
+import { getBuildPartsForTile, readStoredBuildParts } from "../buildings/buildPartStore";
+import { findWalkableFloorAtPosition } from "../buildings/floorTraversal2p5d";
 
 type MenuTab = "status" | "objective" | "equipment" | "crafting" | "logs";
 type MiniMapSize = "small" | "medium" | "large";
-type QuickButtonId = "inventory" | "crafting";
+type QuickButtonId = "inventory" | "crafting" | "building";
 type ActiveCaptureState = { creature: CreaturePublicState; orbItemId: CaptureOrbItemId; config: CaptureMinigameConfig };
 type CreatureWanderTarget = { x: number; y: number; nextRetargetAt: number };
 
@@ -52,6 +59,7 @@ const minimapSizeLabels: Record<MiniMapSize, string> = { small: "S", medium: "M"
 const quickButtonDefaults: Record<QuickButtonId, { x: number; y: number; icon: string; label: string }> = {
   inventory: { x: 12, y: 112, icon: "🎒", label: "가방" },
   crafting: { x: 12, y: 164, icon: "🛠", label: "제작" },
+  building: { x: 12, y: 216, icon: "🏠", label: "건설" },
 };
 
 function createClientNickname() {
@@ -90,6 +98,14 @@ function getMountedPlayerMoveSpeed() {
   if (!mountedPetItemId) return 180;
   const speciesId = getSpeciesIdFromPetItemId(mountedPetItemId);
   return getPetSpeciesDefinition(speciesId).mountSpeed ?? 260;
+}
+let cachedMountedPlayerMoveSpeed: number | null = null;
+function readCachedMountedPlayerMoveSpeed() {
+  if (cachedMountedPlayerMoveSpeed === null) cachedMountedPlayerMoveSpeed = getMountedPlayerMoveSpeed();
+  return cachedMountedPlayerMoveSpeed;
+}
+function invalidateMountedPlayerMoveSpeed() {
+  cachedMountedPlayerMoveSpeed = null;
 }
 function createWanderTarget(creature: CreaturePublicState, now: number): CreatureWanderTarget {
   const seed = hashId(creature.id);
@@ -248,11 +264,20 @@ export function GameClientTileDemoStation() {
   const [activeCapture, setActiveCapture] = useState<ActiveCaptureState | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [inventoryOpen, setInventoryOpen] = useState(false);
+  const [buildModeOpen, setBuildModeOpen] = useState(false);
+  const [selectedBuildPartId, setSelectedBuildPartId] = useState<BuildPartId | null>(null);
+  const [selectedBuildPartRotation, setSelectedBuildPartRotation] = useState<BuildPartRotation>(0);
+  const [selectedBuildFloorLevel, setSelectedBuildFloorLevel] = useState<BuildFloorLevel>(0);
+  const [selectedPlacedBuildPart, setSelectedPlacedBuildPart] = useState<PlacedBuildPart | null>(null);
+  const [selectedHousePartCount, setSelectedHousePartCount] = useState(0);
+  const [buildDemolitionMode, setBuildDemolitionMode] = useState(false);
+  const [demolitionSelectionCount, setDemolitionSelectionCount] = useState(0);
   const [activeMenuTab, setActiveMenuTab] = useState<MenuTab>("crafting");
   const [minimapSize, setMinimapSize] = useState<MiniMapSize>("medium");
   const [quickSlots, setQuickSlots] = useState<(string | null)[]>(() => Array.from({ length: quickSlotCount }, () => null));
   const sceneRef = useRef<GameWorldScene | null>(null);
   const inputRef = useRef<GameSceneInput>({ x: 0, y: 0, primary: false, secondary: false });
+  const buildFloorStateRef = useRef<{ floorLevel: number; floorYOffset: number; onStair: boolean; overFloor: boolean; collisionReason?: string | null }>({ floorLevel: 0, floorYOffset: 0, onStair: false, overFloor: false, collisionReason: null });
   const demoPositionRef = useRef<Vector2>({ x: 1500, y: 1500 });
   const demoDirectionRef = useRef<Direction>("down");
   const demoTileRef = useRef<MapTileRef>({ ...DEFAULT_PLAYER_TILE });
@@ -260,6 +285,8 @@ export function GameClientTileDemoStation() {
   const demoCreaturesRef = useRef<CreaturePublicState[]>(createTileBasedDemoCreatures());
   const demoBuildingsRef = useRef<BuildingState[]>(createTileBasedDemoBuildings());
   const demoTileIndexRef = useRef(createDemoTileIndex(demoResourcesRef.current, demoCreaturesRef.current, demoBuildingsRef.current));
+  const cachedBuildPartsRef = useRef<PlacedBuildPart[] | null>(null);
+  const handleDemoAttackRef = useRef<(() => void) | null>(null);
   const lastDemoAttackAtRef = useRef(0);
   const lastUiSnapshotAtRef = useRef(0);
 
@@ -284,11 +311,59 @@ export function GameClientTileDemoStation() {
     if (forceUiUpdate || now - lastUiSnapshotAtRef.current >= uiSnapshotIntervalMs) { lastUiSnapshotAtRef.current = now; setSnapshot(nextSnapshot); }
   }, [getCurrentBuildings, getCurrentCreatures, getCurrentResources, nickname]);
 
-  useEffect(() => { setNickname(createClientNickname()); commitInventory(readStoredInventory(createDemoInventory())); }, [commitInventory]);
+  useEffect(() => { setNickname(createClientNickname()); commitInventory(readStoredInventory(createDemoInventory())); void startBuildPartRealtimeSync(); return () => stopBuildPartRealtimeSync(); }, [commitInventory]);
   useEffect(() => {
     const handleInventoryChanged = (event: Event) => { const customEvent = event as CustomEvent<{ inventory?: InventoryState }>; if (customEvent.detail?.inventory) setInventory(customEvent.detail.inventory); };
     window.addEventListener("palpalworld:inventory-changed", handleInventoryChanged);
     return () => window.removeEventListener("palpalworld:inventory-changed", handleInventoryChanged);
+  }, []);
+  useEffect(() => {
+    cachedBuildPartsRef.current = readStoredBuildParts();
+    const handleBuildPartsChanged = (event: Event) => {
+      const customEvent = event as CustomEvent<{ parts?: PlacedBuildPart[] }>;
+      cachedBuildPartsRef.current = customEvent.detail?.parts ?? readStoredBuildParts();
+    };
+    const handleMountStorage = (event: StorageEvent) => {
+      if (event.key === "palpalworld.demo.mountedPetItemId") invalidateMountedPlayerMoveSpeed();
+    };
+    window.addEventListener("palpalworld:build-parts-changed", handleBuildPartsChanged);
+    window.addEventListener("storage", handleMountStorage);
+    return () => {
+      window.removeEventListener("palpalworld:build-parts-changed", handleBuildPartsChanged);
+      window.removeEventListener("storage", handleMountStorage);
+    };
+  }, []);
+  useEffect(() => {
+    const handleBuildFloorState = (event: Event) => {
+      const customEvent = event as CustomEvent<{ floorLevel?: number; floorYOffset?: number; onStair?: boolean; overFloor?: boolean; collisionReason?: string | null }>;
+      buildFloorStateRef.current = {
+        floorLevel: customEvent.detail?.floorLevel ?? 0,
+        floorYOffset: customEvent.detail?.floorYOffset ?? 0,
+        onStair: Boolean(customEvent.detail?.onStair),
+        overFloor: Boolean(customEvent.detail?.overFloor),
+        collisionReason: customEvent.detail?.collisionReason ?? null,
+      };
+    };
+    window.addEventListener("palpalworld:build-floor-state", handleBuildFloorState);
+    return () => window.removeEventListener("palpalworld:build-floor-state", handleBuildFloorState);
+  }, []);
+  useEffect(() => {
+    const handleBuildPartSelection = (event: Event) => {
+      const customEvent = event as CustomEvent<{ selectedPart?: PlacedBuildPart | null; selectedHousePartCount?: number; demolitionSelectionCount?: number }>;
+      setSelectedPlacedBuildPart(customEvent.detail?.selectedPart ?? null);
+      setSelectedHousePartCount(customEvent.detail?.selectedHousePartCount ?? 0);
+      setDemolitionSelectionCount(customEvent.detail?.demolitionSelectionCount ?? 0);
+    };
+    window.addEventListener("palpalworld:build-part-selection", handleBuildPartSelection);
+    return () => window.removeEventListener("palpalworld:build-part-selection", handleBuildPartSelection);
+  }, []);
+  useEffect(() => {
+    const handleBuildPlacementFailed = (event: Event) => {
+      const customEvent = event as CustomEvent<{ reason?: string }>;
+      setChatLines((prev) => [...prev.slice(-5), `[build] ${customEvent.detail?.reason ?? "설치할 수 없습니다."}`]);
+    };
+    window.addEventListener("palpalworld:build-placement-failed", handleBuildPlacementFailed);
+    return () => window.removeEventListener("palpalworld:build-placement-failed", handleBuildPlacementFailed);
   }, []);
   useEffect(() => {
     let animationFrame = 0;
@@ -298,12 +373,44 @@ export function GameClientTileDemoStation() {
       const input = inputRef.current;
       const length = Math.hypot(input.x, input.y) || 1;
       const normalized = length > 1 ? { x: input.x / length, y: input.y / length } : input;
-      const playerMoveSpeed = getMountedPlayerMoveSpeed();
+      const playerMoveSpeed = readCachedMountedPlayerMoveSpeed();
       demoDirectionRef.current = directionFromMovement(normalized, demoDirectionRef.current);
-      const next = clampPositionToTile({ x: demoPositionRef.current.x + normalized.x * playerMoveSpeed * deltaSeconds, y: demoPositionRef.current.y + normalized.y * playerMoveSpeed * deltaSeconds });
+      const movementStep = { x: normalized.x * playerMoveSpeed * deltaSeconds, y: normalized.y * playerMoveSpeed * deltaSeconds };
+      const __sourceParts = cachedBuildPartsRef.current ?? readStoredBuildParts();
+      const buildParts = getBuildPartsForTile(__sourceParts, demoTileRef.current);
+      const floorLevel = buildFloorStateRef.current.floorLevel;
+      const fullTarget = clampPositionToTile({ x: demoPositionRef.current.x + movementStep.x, y: demoPositionRef.current.y + movementStep.y });
+      const fullCollision = getBuildCollisionAtPosition({ parts: buildParts, position: fullTarget, floorLevel });
+      let next = fullTarget;
+      if (fullCollision.blocked) {
+        const xTarget = clampPositionToTile({ x: demoPositionRef.current.x + movementStep.x, y: demoPositionRef.current.y });
+        const yTarget = clampPositionToTile({ x: demoPositionRef.current.x, y: demoPositionRef.current.y + movementStep.y });
+        const xBlocked = Math.abs(movementStep.x) > 0 && getBuildCollisionAtPosition({ parts: buildParts, position: xTarget, floorLevel }).blocked;
+        const yBlocked = Math.abs(movementStep.y) > 0 && getBuildCollisionAtPosition({ parts: buildParts, position: yTarget, floorLevel }).blocked;
+        next = clampPositionToTile({
+          x: xBlocked ? demoPositionRef.current.x : xTarget.x,
+          y: yBlocked ? demoPositionRef.current.y : yTarget.y,
+        });
+      }
+      const floorState = buildFloorStateRef.current;
+      if (floorState.floorLevel > 0.8 && !floorState.onStair) {
+        const floorHit = findWalkableFloorAtPosition(buildParts, next.x, next.y, floorState.floorLevel);
+        if (!floorHit) {
+          buildFloorStateRef.current = { ...floorState, floorLevel: 0, floorYOffset: 0, overFloor: false, collisionReason: null };
+          setChatLines((prev) => {
+            const last = prev[prev.length - 1] ?? "";
+            if (last.includes("2층 바닥 밖")) return prev;
+            return [...prev.slice(-5), "[build] 2층 바닥 밖으로 벗어나 1층으로 내려왔습니다."];
+          });
+        }
+      }
       demoPositionRef.current.x = next.x;
       demoPositionRef.current.y = next.y;
       moveDemoCreatures(getCurrentCreatures(), deltaSeconds, now, demoPositionRef.current);
+      if (input.primary && now - lastDemoAttackAtRef.current >= 50) {
+        lastDemoAttackAtRef.current = now;
+        handleDemoAttackRef.current?.();
+      }
       applyDemoSnapshot(false);
       lastTick = now;
       animationFrame = requestAnimationFrame(tick);
@@ -351,13 +458,7 @@ export function GameClientTileDemoStation() {
     applyDemoSnapshot(true);
   }, [activeCapture, applyDemoSnapshot, getCurrentCreatures, updateInventory]);
   const handleCancelCapture = useCallback(() => { setActiveCapture(null); setChatLines((prev) => [...prev.slice(-5), "[capture] 포획을 취소했습니다."]); }, []);
-  useEffect(() => {
-    let animationFrame = 0;
-    let lastSent = 0;
-    const tickInput = (now: number) => { const input = inputRef.current; if (now - lastSent >= 50 && input.primary) { handleDemoAttack(); lastSent = now; } animationFrame = requestAnimationFrame(tickInput); };
-    animationFrame = requestAnimationFrame(tickInput);
-    return () => cancelAnimationFrame(animationFrame);
-  }, [handleDemoAttack]);
+  useEffect(() => { handleDemoAttackRef.current = handleDemoAttack; }, [handleDemoAttack]);
 
   const handleCraft = useCallback((recipeId: string) => {
     const recipe = getProgressionRecipe(recipeId);
@@ -423,8 +524,9 @@ export function GameClientTileDemoStation() {
   const handleInputChange = useCallback((input: GameSceneInput) => { inputRef.current = input; }, []);
   const objectiveText = useMemo(() => selectedBuildingItemId ? "배치 모드입니다. 설치할 필드 위치를 클릭하세요." : "타일마다 다른 자원과 몬스터가 배치됩니다.", [selectedBuildingItemId]);
   const cycleMinimapSize = useCallback(() => setMinimapSize((current) => minimapSizes[(minimapSizes.indexOf(current) + 1) % minimapSizes.length]), []);
-  const openInventoryPanel = useCallback(() => { setInventoryOpen((value) => !value); setMenuOpen(false); setSelectedStationBuilding(null); setSelectedBuilding(null); }, []);
-  const openCraftingMenu = useCallback(() => { setActiveMenuTab("crafting"); setMenuOpen(true); setInventoryOpen(false); setSelectedStationBuilding(null); setSelectedBuilding(null); }, []);
+  const openInventoryPanel = useCallback(() => { setInventoryOpen((value) => !value); setBuildModeOpen(false); setMenuOpen(false); setSelectedStationBuilding(null); setSelectedBuilding(null); }, []);
+  const openCraftingMenu = useCallback(() => { setActiveMenuTab("crafting"); setMenuOpen(true); setBuildModeOpen(false); setInventoryOpen(false); setSelectedStationBuilding(null); setSelectedBuilding(null); }, []);
+  const openBuildingMenu = useCallback(() => { setBuildModeOpen((value) => !value); setMenuOpen(false); setInventoryOpen(false); setSelectedStationBuilding(null); setSelectedBuilding(null); setCaptureOrbReady(null); setChatLines((prev) => [...prev.slice(-5), "[build] 건설 모드: 부품을 선택한 뒤 맵에 배치하세요."]); }, []);
   const activeMenuContent = useMemo<ReactNode>(() => {
     switch (activeMenuTab) {
       case "status": return <CharacterPanel nickname={nickname} connectionState="offline-demo" serverEndpoint="tile-demo" snapshot={snapshot} />;
@@ -438,14 +540,16 @@ export function GameClientTileDemoStation() {
 
   return (
     <main className={`game-shell ${selectedBuildingItemId ? "game-shell--placing" : ""}`}>
-      <GameScene onReady={handleSceneReady} onInputChange={handleInputChange} onInteract={handleDemoInteract} onWorldClick={handleWorldClick} placementBuildingType={placementBuildingType} />
+      <GameScene onReady={handleSceneReady} onInputChange={handleInputChange} onInteract={handleDemoInteract} onWorldClick={handleWorldClick} placementBuildingType={placementBuildingType} selectedBuildPartId={selectedBuildPartId} selectedBuildPartRotation={selectedBuildPartRotation} selectedBuildFloorLevel={selectedBuildFloorLevel} demolitionMode={buildDemolitionMode} />
       <section className="game-hud" aria-label="Game HUD">
         <button className="hud-menu-button" onClick={() => { setMenuOpen((value) => !value); setInventoryOpen(false); setSelectedStationBuilding(null); setSelectedBuilding(null); }} aria-expanded={menuOpen}>☰ 메뉴</button>
         <FloatingQuickButton id="inventory" onOpen={openInventoryPanel} />
         <FloatingQuickButton id="crafting" onOpen={openCraftingMenu} />
+        <FloatingQuickButton id="building" onOpen={openBuildingMenu} />
         <section className={`hud-minimap hud-minimap--${minimapSize}`} aria-label="미니맵"><button className="hud-minimap__size-button" onClick={cycleMinimapSize} aria-label="미니맵 크기 변경">{minimapSizeLabels[minimapSize]}</button><MiniMapPanel snapshot={snapshot} localPlayerId={demoPlayerId} /></section>
         {captureOrbReady ? <div className="capture-ready-badge">포획 준비: {getItemLabel(captureOrbReady)} · 체력 30% 이하 몬스터를 공격하세요</div> : null}
         {inventoryOpen ? <section className="inventory-overlay-panel" aria-label="인벤토리"><button className="inventory-overlay-panel__close" onClick={() => setInventoryOpen(false)} aria-label="인벤토리 닫기">×</button><InventoryGridPanel inventory={inventory} quickSlots={quickSlots} selectedBuildingItemId={selectedBuildingItemId} onSelectBuildingItem={handleSelectBuildingItem} onAssignQuickSlot={handleAssignQuickSlot} /></section> : null}
+        {buildModeOpen ? <BuildModePanel inventory={inventory} selectedPartId={selectedBuildPartId} selectedRotation={selectedBuildPartRotation} selectedFloorLevel={selectedBuildFloorLevel} selectedPlacedPart={selectedPlacedBuildPart} selectedHousePartCount={selectedHousePartCount} demolitionMode={buildDemolitionMode} demolitionSelectionCount={demolitionSelectionCount} onSelectPart={(partId) => { setBuildDemolitionMode(false); setSelectedBuildPartId(partId); setChatLines((prev) => [...prev.slice(-5), `[build] ${partId} 선택됨`]); }} onRotate={setSelectedBuildPartRotation} onSetFloorLevel={setSelectedBuildFloorLevel} onRotateSelectedPlacedPart={() => sceneRef.current?.rotateSelectedPlacedBuildPartForUi()} onDeleteSelectedPlacedPart={() => sceneRef.current?.deleteSelectedPlacedBuildPartForUi()} onClearSelection={() => sceneRef.current?.clearBuildPartSelectionForUi()} onFocusHouse={() => sceneRef.current?.focusSelectedHouseForUi()} onToggleDemolitionMode={(enabled) => { setBuildDemolitionMode(enabled); if (enabled) setSelectedBuildPartId(null); setChatLines((prev) => [...prev.slice(-5), enabled ? "[build] 철거 모드: 드래그로 여러 부품을 선택하세요." : "[build] 철거 모드 해제"]); }} onDismantleDemolitionSelection={() => { sceneRef.current?.dismantleDemolitionSelectionForUi(); setChatLines((prev) => [...prev.slice(-5), "[build] 선택한 부품을 분해했습니다."]); }} onClose={() => setBuildModeOpen(false)} /> : null}
         {selectedBuilding ? <BuildingInteractionPanel building={selectedBuilding} inventory={inventory} onInventoryChange={commitInventory} onClose={() => setSelectedBuilding(null)} onDismantle={handleDismantleBuilding} onOpenCrafting={() => { const station = getCraftingStationByBuildingType(String(selectedBuilding.type)); if (station) setSelectedStationBuilding(selectedBuilding); setSelectedBuilding(null); }} /> : null}
         {selectedStationBuilding && selectedStation ? <StationBuildingPanel building={selectedStationBuilding} station={selectedStation} inventory={inventory} onCraft={handleCraft} onCraftBuildingItem={handleCraftBuildingItem} onDismantle={handleDismantleBuilding} onClose={() => setSelectedStationBuilding(null)} /> : null}
         {menuOpen ? <section className="hud-menu-panel" aria-label="게임 메뉴"><header className="hud-menu-panel__header"><strong>게임 메뉴</strong><button onClick={() => setMenuOpen(false)}>×</button></header><nav className="hud-menu-tabs" aria-label="메뉴 탭">{menuTabs.map((tab) => <button key={tab.id} className={activeMenuTab === tab.id ? "hud-menu-tabs__button hud-menu-tabs__button--active" : "hud-menu-tabs__button"} onClick={() => setActiveMenuTab(tab.id)}>{tab.label}</button>)}</nav><div className="hud-menu-panel__body">{activeMenuContent}</div></section> : null}

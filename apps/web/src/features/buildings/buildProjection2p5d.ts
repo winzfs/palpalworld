@@ -222,3 +222,41 @@ export function getEdgeSortBias2p5d(rotation: BuildPartRotation) {
   if (edge === "east") return 4;
   return 8;
 }
+
+export const ISO_FLOOR_HEIGHT = 58;
+
+export function buildGridToIsoCenter(gridX: number, gridY: number): IsoPoint {
+  return {
+    x: (gridX - gridY) * (ISO_TILE_WIDTH / 2),
+    y: (gridX + gridY) * (ISO_TILE_HEIGHT / 2),
+  };
+}
+
+export function worldCameraToIsoBuildCamera(
+  worldCamX: number,
+  worldCamY: number,
+  viewWidth: number,
+  viewHeight: number,
+): IsoPoint {
+  const px = worldCamX + viewWidth / 2;
+  const py = worldCamY + viewHeight / 2;
+  const playerIsoX = (px - py) / 2;
+  const playerIsoY = (px + py) * ISO_TILE_HEIGHT / (2 * BUILD_GRID_SIZE);
+  return { x: playerIsoX - viewWidth / 2, y: playerIsoY - viewHeight / 2 };
+}
+
+export function screenToIsoBuildGrid(
+  screenX: number,
+  screenY: number,
+  isoCamX: number,
+  isoCamY: number,
+): { gridX: number; gridY: number } {
+  const isoX = screenX + isoCamX;
+  const isoY = screenY + isoCamY;
+  const halfW = ISO_TILE_WIDTH / 2;
+  const halfH = ISO_TILE_HEIGHT / 2;
+  return {
+    gridX: Math.round(isoX / (2 * halfW) + isoY / (2 * halfH)),
+    gridY: Math.round(-isoX / (2 * halfW) + isoY / (2 * halfH)),
+  };
+}
