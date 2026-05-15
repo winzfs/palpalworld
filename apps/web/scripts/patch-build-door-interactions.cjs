@@ -46,6 +46,21 @@ function insertAfter(which, anchor, insertion, label) {
   console.log(`[patch-build-door-interactions] patched ${which} ${label}`);
 }
 
+function ensureClientImport(importLine, label) {
+  if (client.includes(importLine)) {
+    console.log(`[patch-build-door-interactions] already-patched client ${label}`);
+    return;
+  }
+  const anchor = 'import { addBuildingToTileIndex, createDemoTileIndex, getAliveTileCreatures, getAliveTileResources, getTileBuildings } from "./demoTileIndex";';
+  if (!client.includes(anchor)) {
+    console.log(`[patch-build-door-interactions] skipped client ${label}`);
+    return;
+  }
+  client = client.replace(anchor, `${anchor}\n${importLine}`);
+  clientChanged = true;
+  console.log(`[patch-build-door-interactions] patched client ${label}`);
+}
+
 replaceIn(
   "renderer",
   "    this.drawPart(ctx, definition, iso.x - isoCamX, iso.y - isoCamY, part.rotation, false, 1, part.floorLevel);",
@@ -156,12 +171,10 @@ replaceIn(
   "door open collision",
 );
 
-insertAfter(
-  "client",
-  'import { addBuildingToTileIndex, createDemoTileIndex, getAliveTileCreatures, getAliveTileResources, getTileBuildings } from "./demoTileIndex";',
-  'import { BUILD_PARTS, type PlacedBuildPart } from "../buildings/buildPartCatalog";\nimport { buildGridToWorld } from "../buildings/buildGrid";\nimport { getBuildCollisionAtPosition } from "../buildings/buildCollision2p5d";\nimport { getBuildPartsForTile, readStoredBuildParts, toggleBuildDoorOpen } from "../buildings/buildPartStore";',
-  "door and monster collision imports",
-);
+ensureClientImport('import { BUILD_PARTS, type PlacedBuildPart } from "../buildings/buildPartCatalog";', "build part types import");
+ensureClientImport('import { buildGridToWorld } from "../buildings/buildGrid";', "build grid import");
+ensureClientImport('import { getBuildCollisionAtPosition } from "../buildings/buildCollision2p5d";', "build collision import");
+ensureClientImport('import { getBuildPartsForTile, readStoredBuildParts, toggleBuildDoorOpen } from "../buildings/buildPartStore";', "build part store import");
 
 insertAfter(
   "client",
