@@ -32,7 +32,9 @@ import {
   type WorldResourceRow,
 } from "./supabaseWorldResources";
 import {
+  createOptimisticChatMessage,
   fetchWorldChatMessages,
+  isSameChatTile,
   sendWorldChatMessage,
   subscribeWorldChatMessages,
   type WorldChatMessageRow,
@@ -50,6 +52,7 @@ type CameraState = {
 };
 
 const emotes = ["👋", "❤️", "⚔️", "🆘"];
+const chatBubbleVisibleMs = 12_000;
 
 function computeCamera(player: PlayerPublicState): CameraState {
   const width = typeof window === "undefined" ? 1280 : window.innerWidth;
@@ -75,6 +78,20 @@ function getSharedBuildingIcon(type: string) {
   if (type === "farm_plot") return "🌱";
   if (type === "cold_storage") return "🧊";
   return "🏗";
+}
+
+function appendChatMessage(current: WorldChatMessageRow[], message: WorldChatMessageRow) {
+  const withoutDuplicate = current.filter((existing) => {
+    if (existing.message_id === message.message_id) return false;
+    const isLocalEcho = existing.message_id.startsWith("local-")
+      && existing.player_id === message.player_id
+      && existing.message === message.message
+      && Math.abs(new Date(existing.created_at).getTime() - new Date(message.created_at).getTime()) < 10_000;
+    return !isLocalEcho;
+  });
+  return [...withoutDuplicate, message]
+    .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
+    .slice(-30);
 }
 
 function applyRemoteCreatureRows(localCreatures: CreaturePublicState[], rows: WorldCreatureRow[]) {
@@ -106,7 +123,7 @@ function applyRemoteResourceRows(localResources: ResourceNodeState[], rows: Worl
 }
 
 function isFreshMessage(message: WorldChatMessageRow) {
-  return Date.now() - new Date(message.created_at).getTime() < 6500;
+  return Date.now() - new Date(message.created_at).getTime() < chatBubbleVisibleMs;
 }
 
 export function MultiplayerOverlay() {
@@ -161,7 +178,7 @@ export function MultiplayerOverlay() {
   const refreshChat = useCallback(async () => {
     if (!client) return;
     const messages = await fetchWorldChatMessages(client, latestTileRef.current);
-    setChatMessages(messages.slice(-18));
+    setChatMessages(messages.slice(-30));
   }, [client]);
 
   const sendChat = useCallback(async (message: string, messageType: "chat" | "emote" = "chat") => {
@@ -169,7 +186,7 @@ export function MultiplayerOverlay() {
     const localPlayer = latestLocalPlayerRef.current;
     const tile = latestTileRef.current;
     if (!localPlayer || !tile) return;
-    await sendWorldChatMessage(client, {
+    const input = {
       playerId,
       nickname: localPlayer.nickname,
       message,
@@ -177,9 +194,12 @@ export function MultiplayerOverlay() {
       position: localPlayer.position,
       direction: localPlayer.direction,
       currentTile: tile,
-    });
-    await refreshChat();
-  }, [client, playerId, refreshChat]);
+    };
+    const optimisticMessage = createOptimisticChatMessage(input);
+    setChatMessages((current) => appendChatMessage(current, optimisticMessage));
+    const savedMessage = await sendWorldChatMessage(client, input);
+    if (savedMessage) setChatMessages((current) => appendChatMessage(current, savedMessage));
+  }, [client, playerId]);
 
   const handleSubmitChat = useCallback((event: FormEvent) => {
     event.preventDefault();
@@ -224,8 +244,11 @@ export function MultiplayerOverlay() {
   useEffect(() => {
     if (!client || !enabled) return;
     refreshChat();
-    const chatChannel = subscribeWorldChatMessages(client, refreshChat);
-    const interval = window.setInterval(refreshChat, 3500);
+    const chatChannel = subscribeWorldChatMessages(client, (message) => {
+      if (!isSameChatTile(message, latestTileRef.current)) return;
+      setChatMessages((current) => appendChatMessage(current, message));
+    });
+    const interval = window.setInterval(refreshChat, 12_000);
     return () => { window.clearInterval(interval); client.removeChannel(chatChannel); };
   }, [client, enabled, refreshChat]);
 
