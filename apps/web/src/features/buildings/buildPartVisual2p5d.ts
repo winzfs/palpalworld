@@ -21,13 +21,23 @@ export type BuildPartVisual2p5d = {
 };
 
 const layerDepthBias: Record<BuildPartLayer, number> = {
-  foundation: -18,
-  floor: -10,
-  wall: 10,
-  object: 18,
-  stairs: 16,
-  roof: 36,
-  decor: 24,
+  foundation: -22,
+  floor: -14,
+  wall: 12,
+  object: 28,
+  stairs: 24,
+  roof: 46,
+  decor: 34,
+};
+
+const visualLayerOrder: Record<BuildVisualLayer, number> = {
+  ground: 0,
+  floor: 10,
+  structure: 30,
+  stairs: 36,
+  decor: 44,
+  roof: 58,
+  overlay: 80,
 };
 
 export function getMaterialPalette(material: BuildPartMaterial) {
@@ -83,7 +93,7 @@ export function getBuildPartVisual2p5d(definition: BuildPartDefinition): BuildPa
         ? BUILD_2P5D_ROOF_RISE
         : definition.category === "stairs"
           ? BUILD_2P5D_WALL_HEIGHT
-          : definition.category === "decor"
+          : definition.category === "decor" || definition.category === "furniture" || definition.category === "utility"
             ? 36
             : 8;
 
@@ -97,7 +107,11 @@ export function getBuildPartVisual2p5d(definition: BuildPartDefinition): BuildPa
   };
 }
 
-export function getBuildPartSortKey(definition: BuildPartDefinition, gridY: number, floorLevel: number) {
+export function getBuildPartSortKey(definition: BuildPartDefinition, gridX: number, gridY: number, floorLevel: number) {
   const visual = getBuildPartVisual2p5d(definition);
-  return gridY * BUILD_2P5D_TILE_HEIGHT + visual.depthBias + floorLevel * BUILD_2P5D_FLOOR_HEIGHT;
+  const layerOrder = visualLayerOrder[visual.visualLayer] ?? 30;
+  const floorOrder = floorLevel * 10_000;
+  const yOrder = gridY * 200;
+  const xOrder = gridX * 0.5;
+  return floorOrder + yOrder + xOrder + layerOrder + visual.depthBias;
 }
