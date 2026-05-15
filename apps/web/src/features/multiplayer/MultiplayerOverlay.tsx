@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import type { BuildingState, CreaturePublicState, PlayerPublicState, ResourceNodeState, WorldSnapshot } from "@palpalworld/shared";
 import { MAP_TILE_SIZE, isSameTile, type MapTileRef } from "../../../../../packages/shared/src/worldTiles";
 import {
@@ -31,6 +31,12 @@ import {
   upsertWorldResources,
   type WorldResourceRow,
 } from "./supabaseWorldResources";
+import {
+  fetchWorldChatMessages,
+  sendWorldChatMessage,
+  subscribeWorldChatMessages,
+  type WorldChatMessageRow,
+} from "./supabaseWorldChat";
 
 type WorldSnapshotEvent = CustomEvent<{ snapshot?: WorldSnapshot; localPlayerId?: string | null }>;
 type BuildingDismantledEvent = CustomEvent<{ buildingId?: string; building?: BuildingState }>;
@@ -42,6 +48,8 @@ type CameraState = {
   cameraY: number;
   currentTile: MapTileRef;
 };
+
+const emotes = ["👋", "❤️", "⚔️", "🆘"];
 
 function computeCamera(player: PlayerPublicState): CameraState {
   const width = typeof window === "undefined" ? 1280 : window.innerWidth;
@@ -73,23 +81,13 @@ function applyRemoteCreatureRows(localCreatures: CreaturePublicState[], rows: Wo
   if (localCreatures.length === 0 || rows.length === 0) return false;
   const rowById = new Map(rows.map((row) => [row.creature_id, row]));
   let changed = false;
-
   for (const creature of localCreatures) {
     const row = rowById.get(creature.id);
     if (!row) continue;
-
     const remoteHp = row.defeated ? 0 : Math.max(0, Math.min(row.hp, row.max_hp));
-    if (remoteHp < creature.hp) {
-      creature.hp = remoteHp;
-      changed = true;
-    }
-
-    if (row.defeated && creature.hp !== 0) {
-      creature.hp = 0;
-      changed = true;
-    }
+    if (remoteHp < creature.hp) { creature.hp = remoteHp; changed = true; }
+    if (row.defeated && creature.hp !== 0) { creature.hp = 0; changed = true; }
   }
-
   return changed;
 }
 
@@ -97,24 +95,18 @@ function applyRemoteResourceRows(localResources: ResourceNodeState[], rows: Worl
   if (localResources.length === 0 || rows.length === 0) return false;
   const rowById = new Map(rows.map((row) => [row.resource_id, row]));
   let changed = false;
-
   for (const resource of localResources) {
     const row = rowById.get(resource.id);
     if (!row) continue;
-
     const remoteAmount = row.depleted ? 0 : Math.max(0, Math.min(row.remaining_amount, row.max_amount));
-    if (remoteAmount < resource.remainingAmount) {
-      resource.remainingAmount = remoteAmount;
-      changed = true;
-    }
-
-    if (row.depleted && resource.remainingAmount !== 0) {
-      resource.remainingAmount = 0;
-      changed = true;
-    }
+    if (remoteAmount < resource.remainingAmount) { resource.remainingAmount = remoteAmount; changed = true; }
+    if (row.depleted && resource.remainingAmount !== 0) { resource.remainingAmount = 0; changed = true; }
   }
-
   return changed;
+}
+
+function isFreshMessage(message: WorldChatMessageRow) {
+  return Date.now() - new Date(message.created_at).getTime() < 6500;
 }
 
 export function MultiplayerOverlay() {
@@ -123,6 +115,8 @@ export function MultiplayerOverlay() {
   const [camera, setCamera] = useState<CameraState | null>(null);
   const [onlinePlayers, setOnlinePlayers] = useState<PlayerPublicState[]>([]);
   const [worldBuildings, setWorldBuildings] = useState<BuildingState[]>([]);
+  const [chatMessages, setChatMessages] = useState<WorldChatMessageRow[]>([]);
+  const [chatInput, setChatInput] = useState("");
   const [status, setStatus] = useState(enabled ? "온라인 연결 중" : "오프라인 모드");
   const latestLocalPlayerRef = useRef<PlayerPublicState | null>(null);
   const latestTileRef = useRef<MapTileRef | null>(null);
@@ -145,8 +139,7 @@ export function MultiplayerOverlay() {
 
   const refreshBuildings = useCallback(async () => {
     if (!client) return;
-    const buildings = await fetchWorldBuildings(client, latestTileRef.current);
-    setWorldBuildings(buildings);
+    setWorldBuildings(await fetchWorldBuildings(client, latestTileRef.current));
   }, [client]);
 
   const refreshCreatures = useCallback(async () => {
@@ -165,15 +158,43 @@ export function MultiplayerOverlay() {
     if (changed) window.dispatchEvent(new CustomEvent("palpalworld:remote-resources-applied"));
   }, [client]);
 
+  const refreshChat = useCallback(async () => {
+    if (!client) return;
+    const messages = await fetchWorldChatMessages(client, latestTileRef.current);
+    setChatMessages(messages.slice(-18));
+  }, [client]);
+
+  const sendChat = useCallback(async (message: string, messageType: "chat" | "emote" = "chat") => {
+    if (!client) return;
+    const localPlayer = latestLocalPlayerRef.current;
+    const tile = latestTileRef.current;
+    if (!localPlayer || !tile) return;
+    await sendWorldChatMessage(client, {
+      playerId,
+      nickname: localPlayer.nickname,
+      message,
+      messageType,
+      position: localPlayer.position,
+      direction: localPlayer.direction,
+      currentTile: tile,
+    });
+    await refreshChat();
+  }, [client, playerId, refreshChat]);
+
+  const handleSubmitChat = useCallback((event: FormEvent) => {
+    event.preventDefault();
+    const next = chatInput.trim();
+    if (!next) return;
+    setChatInput("");
+    void sendChat(next, "chat");
+  }, [chatInput, sendChat]);
+
   useEffect(() => {
     if (!client || !enabled) return;
     refreshPlayers();
     const playerChannel = subscribeOnlinePlayers(client, refreshPlayers);
     const interval = window.setInterval(refreshPlayers, 2500);
-    return () => {
-      window.clearInterval(interval);
-      client.removeChannel(playerChannel);
-    };
+    return () => { window.clearInterval(interval); client.removeChannel(playerChannel); };
   }, [client, enabled, refreshPlayers]);
 
   useEffect(() => {
@@ -181,10 +202,7 @@ export function MultiplayerOverlay() {
     refreshBuildings();
     const buildingChannel = subscribeWorldBuildings(client, refreshBuildings);
     const interval = window.setInterval(refreshBuildings, 3000);
-    return () => {
-      window.clearInterval(interval);
-      client.removeChannel(buildingChannel);
-    };
+    return () => { window.clearInterval(interval); client.removeChannel(buildingChannel); };
   }, [client, enabled, refreshBuildings]);
 
   useEffect(() => {
@@ -192,10 +210,7 @@ export function MultiplayerOverlay() {
     refreshCreatures();
     const creatureChannel = subscribeWorldCreatures(client, refreshCreatures);
     const interval = window.setInterval(refreshCreatures, 1800);
-    return () => {
-      window.clearInterval(interval);
-      client.removeChannel(creatureChannel);
-    };
+    return () => { window.clearInterval(interval); client.removeChannel(creatureChannel); };
   }, [client, enabled, refreshCreatures]);
 
   useEffect(() => {
@@ -203,24 +218,23 @@ export function MultiplayerOverlay() {
     refreshResources();
     const resourceChannel = subscribeWorldResources(client, refreshResources);
     const interval = window.setInterval(refreshResources, 1800);
-    return () => {
-      window.clearInterval(interval);
-      client.removeChannel(resourceChannel);
-    };
+    return () => { window.clearInterval(interval); client.removeChannel(resourceChannel); };
   }, [client, enabled, refreshResources]);
+
+  useEffect(() => {
+    if (!client || !enabled) return;
+    refreshChat();
+    const chatChannel = subscribeWorldChatMessages(client, refreshChat);
+    const interval = window.setInterval(refreshChat, 3500);
+    return () => { window.clearInterval(interval); client.removeChannel(chatChannel); };
+  }, [client, enabled, refreshChat]);
 
   useEffect(() => {
     if (!client || !enabled) return;
     const publish = async () => {
       const localPlayer = latestLocalPlayerRef.current;
       if (!localPlayer) return;
-      await upsertLocalPresence(client, {
-        playerId,
-        nickname: localPlayer.nickname,
-        position: localPlayer.position,
-        direction: localPlayer.direction,
-        currentTile: localPlayer.currentTile as MapTileRef,
-      });
+      await upsertLocalPresence(client, { playerId, nickname: localPlayer.nickname, position: localPlayer.position, direction: localPlayer.direction, currentTile: localPlayer.currentTile as MapTileRef });
     };
     const interval = window.setInterval(publish, 450);
     return () => window.clearInterval(interval);
@@ -262,11 +276,17 @@ export function MultiplayerOverlay() {
       const localPlayer = snapshot.players[0];
       if (!localPlayer) return;
       latestLocalPlayerRef.current = localPlayer;
+      const previousTile = latestTileRef.current;
       latestTileRef.current = localPlayer.currentTile as MapTileRef;
       latestCreaturesRef.current = snapshot.creatures;
       latestResourcesRef.current = snapshot.resources;
       setCamera(computeCamera(localPlayer));
-
+      if (previousTile && !isSameTile(previousTile, latestTileRef.current)) {
+        void refreshBuildings();
+        void refreshCreatures();
+        void refreshResources();
+        void refreshChat();
+      }
       if (client && enabled) {
         for (const building of snapshot.buildings) {
           if (!shouldShareBuilding(building)) continue;
@@ -283,11 +303,8 @@ export function MultiplayerOverlay() {
     };
     window.addEventListener("palpalworld:world_snapshot", handleSnapshot);
     window.addEventListener("resize", handleResize);
-    return () => {
-      window.removeEventListener("palpalworld:world_snapshot", handleSnapshot);
-      window.removeEventListener("resize", handleResize);
-    };
-  }, [client, enabled]);
+    return () => { window.removeEventListener("palpalworld:world_snapshot", handleSnapshot); window.removeEventListener("resize", handleResize); };
+  }, [client, enabled, refreshBuildings, refreshChat, refreshCreatures, refreshResources]);
 
   useEffect(() => {
     if (!client || !enabled) return;
@@ -318,6 +335,8 @@ export function MultiplayerOverlay() {
     });
   }, [camera, worldBuildings]);
 
+  const bubbleMessages = useMemo(() => chatMessages.filter(isFreshMessage).slice(-8), [chatMessages]);
+
   if (!enabled || !camera) return null;
 
   return (
@@ -327,27 +346,30 @@ export function MultiplayerOverlay() {
         const left = building.position.x - camera.cameraX;
         const top = building.position.y - camera.cameraY;
         if (left < -100 || left > camera.width + 100 || top < -120 || top > camera.height + 100) return null;
-        return (
-          <div key={building.id} className="multiplayer-building" style={{ left, top }}>
-            <div className="multiplayer-building__sprite">{getSharedBuildingIcon(String(building.type))}</div>
-            <div className="multiplayer-building__label">공유 건물</div>
-          </div>
-        );
+        return <div key={building.id} className="multiplayer-building" style={{ left, top }}><div className="multiplayer-building__sprite">{getSharedBuildingIcon(String(building.type))}</div><div className="multiplayer-building__label">공유 건물</div></div>;
+      })}
+      {bubbleMessages.map((message) => {
+        const left = message.x - camera.cameraX;
+        const top = message.y - camera.cameraY;
+        if (left < -120 || left > camera.width + 120 || top < -140 || top > camera.height + 100) return null;
+        return <div key={message.message_id} className={`world-chat-bubble world-chat-bubble--${message.message_type}`} style={{ left, top }}>{message.message}</div>;
       })}
       {visiblePlayers.map((player) => {
         const left = player.position.x - camera.cameraX;
         const top = player.position.y - camera.cameraY;
         if (left < -80 || left > camera.width + 80 || top < -100 || top > camera.height + 80) return null;
-        return (
-          <div key={player.id} className="multiplayer-player" style={{ left, top }}>
-            <div className={`multiplayer-player__avatar multiplayer-player__avatar--${player.direction ?? "down"}`}>
-              <span className="multiplayer-player__head" />
-              <span className="multiplayer-player__body" />
-            </div>
-            <div className="multiplayer-player__name">{player.nickname}</div>
-          </div>
-        );
+        return <div key={player.id} className="multiplayer-player" style={{ left, top }}><div className={`multiplayer-player__avatar multiplayer-player__avatar--${player.direction ?? "down"}`}><span className="multiplayer-player__head" /><span className="multiplayer-player__body" /></div><div className="multiplayer-player__name">{player.nickname}</div></div>;
       })}
+      <section className="world-chat-panel" aria-label="근처 채팅">
+        <div className="world-chat-log">
+          {chatMessages.slice(-5).map((message) => <div key={message.message_id} className="world-chat-log__line"><b>{message.nickname}</b><span>{message.message}</span></div>)}
+        </div>
+        <div className="world-chat-emotes">{emotes.map((emote) => <button key={emote} type="button" onClick={() => void sendChat(emote, "emote")}>{emote}</button>)}</div>
+        <form className="world-chat-form" onSubmit={handleSubmitChat}>
+          <input value={chatInput} onChange={(event) => setChatInput(event.target.value)} maxLength={80} placeholder="근처 채팅" />
+          <button type="submit">전송</button>
+        </form>
+      </section>
     </div>
   );
 }
