@@ -31,7 +31,7 @@ export const MAP_TILE_SIZE = {
   portalRadius: 72,
 } as const;
 
-export const REGION_THEMES: Record<string, RegionThemeDefinition> = {
+export const REGION_THEMES = {
   starter_meadow: {
     regionId: "starter_meadow",
     name: "초록 초원 지대",
@@ -46,13 +46,13 @@ export const REGION_THEMES: Record<string, RegionThemeDefinition> = {
     columns: 3,
     rows: 3,
   },
-};
+} satisfies Record<RegionId, RegionThemeDefinition>;
 
 export const STARTER_TILE_COLUMNS = REGION_THEMES.starter_meadow.columns;
 export const STARTER_TILE_ROWS = REGION_THEMES.starter_meadow.rows;
 export const DEFAULT_PLAYER_TILE: MapTileRef = { regionId: "starter_meadow", tileX: 1, tileY: 1 };
 
-const regionTileNames: Record<string, string[]> = {
+const regionTileNames: Record<RegionId, string[]> = {
   starter_meadow: [
     "초원 서북 들판",
     "바람 언덕",
@@ -78,7 +78,7 @@ const regionTileNames: Record<string, string[]> = {
 };
 
 function getRegionTheme(regionId: RegionId) {
-  return REGION_THEMES[String(regionId)] ?? null;
+  return REGION_THEMES[regionId] ?? null;
 }
 
 export function isSameTile(a?: MapTileRef | null, b?: MapTileRef | null) {
@@ -92,7 +92,7 @@ export function isTileInsideGrid(tile: MapTileRef) {
 
 export function getTileName(tile: MapTileRef) {
   const theme = getRegionTheme(tile.regionId);
-  const names = regionTileNames[String(tile.regionId)] ?? [];
+  const names = regionTileNames[tile.regionId] ?? [];
   return names[tile.tileY * (theme?.columns ?? 1) + tile.tileX] ?? `${theme?.name ?? "지역"} ${tile.tileX},${tile.tileY}`;
 }
 
