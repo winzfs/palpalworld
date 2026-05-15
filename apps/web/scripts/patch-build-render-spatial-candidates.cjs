@@ -19,16 +19,26 @@ function replace(search, replacement, label) {
   console.log(`[patch-build-render-spatial-candidates] patched ${label}`);
 }
 
-replace(
-  'import { createPlacedBuildPart, getBuildPartsForHouse, getBuildPartsForTile, moveBuildPart, readStoredBuildParts, removeBuildPart, rotatePlacedBuildPart, writeStoredBuildParts } from "../buildings/buildPartStore";',
-  'import { createPlacedBuildPart, getBuildPartsForHouse, getBuildPartsForTile, getBuildPartsInGridRect, moveBuildPart, readStoredBuildParts, removeBuildPart, rotatePlacedBuildPart, writeStoredBuildParts } from "../buildings/buildPartStore";',
-  "import getBuildPartsInGridRect",
-);
+function replaceAll(search, replacement, label) {
+  if (!source.includes(search)) {
+    console.log(`[patch-build-render-spatial-candidates] skipped ${label}`);
+    return;
+  }
+  source = source.split(search).join(replacement);
+  changed = true;
+  console.log(`[patch-build-render-spatial-candidates] patched ${label}`);
+}
 
 replace(
   '  private getSelectedPlacedBuildPart() {\n    return this.selectedPlacedBuildPartId ? this.placedBuildParts.find((part) => part.id === this.selectedPlacedBuildPartId) ?? null : null;\n  }',
-  '  private getSelectedPlacedBuildPart() {\n    return this.selectedPlacedBuildPartId ? this.placedBuildParts.find((part) => part.id === this.selectedPlacedBuildPartId) ?? null : null;\n  }\n  private getSceneBuildPartsInIsoViewport(viewport: ViewportBounds, isoCamX: number, isoCamY: number, padding = 420) {\n    const width = this.cachedRootRectWidth || this.root.clientWidth;\n    const height = this.cachedRootRectHeight || this.root.clientHeight;\n    const corners = [\n      screenToIsoBuildGrid(-padding, -padding, isoCamX, isoCamY),\n      screenToIsoBuildGrid(width + padding, -padding, isoCamX, isoCamY),\n      screenToIsoBuildGrid(-padding, height + padding, isoCamX, isoCamY),\n      screenToIsoBuildGrid(width + padding, height + padding, isoCamX, isoCamY),\n    ];\n    const xs = corners.map((point) => point.gridX);\n    const ys = corners.map((point) => point.gridY);\n    const minGX = Math.min(...xs) - 4;\n    const maxGX = Math.max(...xs) + 4;\n    const minGY = Math.min(...ys) - 4;\n    const maxGY = Math.max(...ys) + 4;\n    return getBuildPartsInGridRect(this.placedBuildParts, this.getCurrentTile(), minGX, minGY, maxGX, maxGY);\n  }',
+  '  private getSelectedPlacedBuildPart() {\n    return this.selectedPlacedBuildPartId ? this.placedBuildParts.find((part) => part.id === this.selectedPlacedBuildPartId) ?? null : null;\n  }\n  private getSceneBuildPartsInIsoViewport(viewport: ViewportBounds, isoCamX: number, isoCamY: number, padding = 420) {\n    const width = this.cachedRootRectWidth || this.root.clientWidth;\n    const height = this.cachedRootRectHeight || this.root.clientHeight;\n    const corners = [\n      screenToIsoBuildGrid(-padding, -padding, isoCamX, isoCamY),\n      screenToIsoBuildGrid(width + padding, -padding, isoCamX, isoCamY),\n      screenToIsoBuildGrid(-padding, height + padding, isoCamX, isoCamY),\n      screenToIsoBuildGrid(width + padding, height + padding, isoCamX, isoCamY),\n    ];\n    const xs = corners.map((point) => point.gridX);\n    const ys = corners.map((point) => point.gridY);\n    const minGX = Math.min(...xs) - 4;\n    const maxGX = Math.max(...xs) + 4;\n    const minGY = Math.min(...ys) - 4;\n    const maxGY = Math.max(...ys) + 4;\n    const tile = this.getCurrentTile();\n    return this.placedBuildParts.filter((part) => part.tileX === tile.x && part.tileY === tile.y && part.gridX >= minGX && part.gridX <= maxGX && part.gridY >= minGY && part.gridY <= maxGY);\n  }',
   "viewport grid candidate helper",
+);
+
+replaceAll(
+  'return getBuildPartsInGridRect(this.placedBuildParts, this.getCurrentTile(), minGX, minGY, maxGX, maxGY);',
+  'const tile = this.getCurrentTile();\n    return this.placedBuildParts.filter((part) => part.tileX === tile.x && part.tileY === tile.y && part.gridX >= minGX && part.gridX <= maxGX && part.gridY >= minGY && part.gridY <= maxGY);',
+  "remove undefined helper usage",
 );
 
 replace(
