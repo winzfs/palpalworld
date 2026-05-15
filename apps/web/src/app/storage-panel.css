@@ -34,6 +34,65 @@
   font-weight: 950;
 }
 
+.storage-overlay-panel--with-real-header::before {
+  display: none;
+  content: none;
+}
+
+.building-interaction__header,
+.storage-overlay-panel__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.storage-overlay-panel__header {
+  min-height: 32px;
+  margin: -10px -10px 10px;
+  padding: 8px 10px 8px 12px;
+  border-bottom: 1px solid rgb(250 204 21 / 0.24);
+  background: linear-gradient(rgb(58 45 28 / 0.88), rgb(22 18 28 / 0.88));
+}
+
+.building-interaction__header strong,
+.storage-overlay-panel__header strong {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--jrpg-gold);
+  font-size: 14px;
+  font-weight: 950;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.building-interaction__header-actions,
+.building-interaction__header-confirm {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  gap: 6px;
+}
+
+.building-interaction__header-danger {
+  min-height: 26px;
+  padding: 4px 9px;
+  border: 1px solid rgb(248 113 113 / 0.55);
+  border-radius: 999px;
+  background: rgb(127 29 29 / 0.58);
+  color: #fecaca;
+  font-size: 11px;
+  font-weight: 950;
+  cursor: pointer;
+}
+
+.building-interaction__header-danger:hover,
+.building-interaction__header-danger:focus-visible {
+  background: rgb(185 28 28 / 0.68);
+  color: white;
+  outline: none;
+}
+
 .storage-overlay-panel__close {
   position: absolute;
   right: 8px;
@@ -47,6 +106,11 @@
   color: var(--jrpg-text);
   font-weight: 950;
   cursor: pointer;
+}
+
+.storage-overlay-panel__close--inline {
+  position: static;
+  flex: 0 0 auto;
 }
 
 .storage-box-panel {
@@ -223,6 +287,33 @@
     margin: -7px -7px 7px;
     padding: 7px 40px 6px 10px;
     font-size: 12px;
+  }
+
+  .storage-overlay-panel--with-real-header::before {
+    display: none;
+    content: none;
+  }
+
+  .storage-overlay-panel__header {
+    min-height: 30px;
+    margin: -7px -7px 7px;
+    padding: 6px 7px 6px 10px;
+  }
+
+  .building-interaction__header strong,
+  .storage-overlay-panel__header strong {
+    font-size: 12px;
+  }
+
+  .building-interaction__header-actions,
+  .building-interaction__header-confirm {
+    gap: 4px;
+  }
+
+  .building-interaction__header-danger {
+    min-height: 24px;
+    padding: 3px 7px;
+    font-size: 10px;
   }
 
   .storage-box-panel {
