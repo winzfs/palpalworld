@@ -57,6 +57,11 @@ export function getOccupancyKey(occupancy: BuildOccupancy) {
   return `${occupancy.kind}:${occupancy.gridX}:${occupancy.gridY}:${occupancy.floorLevel}:${occupancy.layer}`;
 }
 
+export function getEquivalentWallEdgeKey(occupancy: BuildOccupancy) {
+  if (occupancy.kind !== "edge") return null;
+  return getOccupancyKey({ ...occupancy, layer: "wall" });
+}
+
 export function hasOccupancyConflict(a: BuildOccupancy, b: BuildOccupancy) {
   return getOccupancyKey(a) === getOccupancyKey(b);
 }
@@ -67,4 +72,39 @@ export function getOccupiedKeys(parts: PlacedBuildPart[]) {
     for (const occupancy of getPlacedBuildPartOccupancy(part)) keys.add(getOccupancyKey(occupancy));
   }
   return keys;
+}
+
+export function findReplaceableWallForPart({
+  parts,
+  candidateDefinition,
+  gridX,
+  gridY,
+  floorLevel,
+  rotation,
+}: {
+  parts: PlacedBuildPart[];
+  candidateDefinition: BuildPartDefinition;
+  gridX: number;
+  gridY: number;
+  floorLevel: BuildFloorLevel;
+  rotation: BuildPartRotation;
+}) {
+  if (candidateDefinition.category !== "door" && candidateDefinition.category !== "window") return null;
+  const candidateEdgeKeys = new Set(
+    getBuildPartOccupancy(candidateDefinition, gridX, gridY, floorLevel, rotation)
+      .map(getEquivalentWallEdgeKey)
+      .filter(Boolean) as string[],
+  );
+
+  for (const part of parts) {
+    const definition = BUILD_PARTS[part.partId];
+    if (!definition || definition.category !== "wall") continue;
+    const hasSameEdge = getPlacedBuildPartOccupancy(part).some((occupancy) => candidateEdgeKeys.has(getOccupancyKey(occupancy)));
+    if (hasSameEdge) return part;
+  }
+  return null;
+}
+
+export function canReplaceWallWithPart(candidateDefinition: BuildPartDefinition) {
+  return candidateDefinition.category === "door" || candidateDefinition.category === "window";
 }
