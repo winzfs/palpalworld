@@ -6,6 +6,7 @@ import "./storage-panel.css";
 import "./capture-panel.css";
 import "./pet-panel.css";
 import "./menu-overrides.css";
+import "../features/multiplayer/multiplayer-overlay.css";
 
 export const metadata: Metadata = {
   title: "PalPalWorld",
