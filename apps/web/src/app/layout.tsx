@@ -6,6 +6,7 @@ import "./storage-panel.css";
 import "./capture-panel.css";
 import "./pet-panel.css";
 import "./menu-overrides.css";
+import "./build-mode-panel.css";
 import "../features/multiplayer/multiplayer-overlay.css";
 import "../features/multiplayer/chat-panel.css";
 import "./overlay-layer-fixes.css";
