@@ -125,7 +125,9 @@ function computeCamera(player: PlayerPublicState): CameraState {
 }
 
 function shouldShareBuilding(building: BuildingState) {
-  return building.id.startsWith("demo-building-");
+  return building.id.startsWith("demo-building-")
+    && !building.id.includes("starter_meadow")
+    && !building.id.endsWith("-workbench");
 }
 
 function appendChatMessage(current: WorldChatMessageRow[], message: WorldChatMessageRow) {
