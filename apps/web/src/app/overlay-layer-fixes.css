@@ -1,19 +1,29 @@
 /* Overlay stacking fixes for gameplay UI.
-   Keep this file small and safe: it only normalizes pointer behavior
-   and z-index ordering for floating panels above the canvas. */
+   Full-screen HUD wrappers must not steal pointer events from the game canvas.
+   Only real interactive panels/buttons should receive pointer events. */
 
 .game-canvas-root {
   position: relative;
   z-index: 1;
 }
 
-.multiplayer-overlay,
+/* Full-screen overlay wrappers should let map movement, clicks, and touch pass through. */
+.multiplayer-overlay {
+  pointer-events: none;
+}
+
+/* Actual interactive UI surfaces can still be clicked/touched. */
 .chat-panel,
 .inventory-overlay-panel,
 .build-mode-panel,
 .building-interaction,
 .station-building-panel,
-.capture-minigame-overlay {
+.capture-minigame-overlay,
+.floating-quick-button,
+button,
+input,
+select,
+textarea {
   pointer-events: auto;
 }
 
