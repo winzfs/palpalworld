@@ -1,5 +1,6 @@
 import type { InventoryState } from "@palpalworld/shared";
 import { getIconAsset } from "../assets/assetCatalog";
+import { getBuildPart, isBuildPartItemId } from "../buildings/buildPartCatalog";
 import { getProgressionBuildingByItemId, isBuildingItemId } from "../crafting/progressionCatalog";
 import { getItemLabel } from "../items/itemLabels";
 import { getPetItemDescription, getPetItemEmoji, getPetItemLabel, isPetItemId } from "../pets/petInventory";
@@ -21,6 +22,7 @@ export type InventoryEntry = {
   description: string;
   quickSlotEligible: boolean;
   buildingType?: string | null;
+  buildPartId?: string | null;
 };
 
 export const inventoryCategoryLabels: Record<InventoryCategory, string> = {
@@ -77,7 +79,7 @@ const usableItemIds = new Set([
 export function getInventoryEntryCategory(itemId: string, kind: InventoryEntryKind): InventoryCategory {
   if (isPetItemId(itemId)) return "pet";
   if (kind === "instance" || equipmentItemIds.has(itemId)) return "equipment";
-  if (isBuildingItemId(itemId)) return "building";
+  if (isBuildingItemId(itemId) || isBuildPartItemId(itemId)) return "building";
   if (usableItemIds.has(itemId)) return "usable";
   if (materialItemIds.has(itemId)) return "material";
   return "general";
@@ -87,12 +89,15 @@ export function getInventoryItemLabel(itemId: string) {
   if (isPetItemId(itemId)) return getPetItemLabel(itemId);
   const label = getItemLabel(itemId);
   if (label !== itemId) return label;
+  const buildPart = getBuildPart(itemId);
+  if (buildPart) return buildPart.name;
   const building = getProgressionBuildingByItemId(itemId);
   return building ? `${building.name} 설치 아이템` : itemId;
 }
 
 export function getInventoryItemDescription(entry: InventoryEntry) {
   if (entry.category === "pet") return getPetItemDescription(entry.itemId);
+  if (entry.buildPartId) return "집을 조립하는 건축 부품입니다. 건설 모드에서 선택하면 그리드에 맞춰 설치됩니다.";
   if (entry.category === "building") return "필드에 배치할 수 있는 건설 아이템입니다. 선택하면 배치 모드로 전환됩니다.";
   if (entry.category === "equipment") return "장착하거나 퀵슬롯에 등록해 빠르게 사용할 수 있는 장비입니다.";
   if (entry.category === "usable") return "음식, 회복 아이템, 포획구처럼 즉시 사용할 수 있는 아이템입니다. 퀵슬롯에 등록할 수 있습니다.";
@@ -109,6 +114,7 @@ export function buildInventoryEntries(inventory: InventoryState | null): Invento
     const category = getInventoryEntryCategory(item.itemId, "stack");
     const icon = getIconAsset(item.itemId);
     const building = getProgressionBuildingByItemId(item.itemId);
+    const buildPart = getBuildPart(item.itemId);
     const entry: InventoryEntry = {
       key: `stack:${item.itemId}`,
       kind: "stack",
@@ -121,6 +127,7 @@ export function buildInventoryEntries(inventory: InventoryState | null): Invento
       description: "",
       quickSlotEligible: isQuickSlotEligible(item.itemId, category),
       buildingType: building?.type ?? null,
+      buildPartId: buildPart?.id ?? null,
     };
     return { ...entry, description: getInventoryItemDescription(entry) };
   });
