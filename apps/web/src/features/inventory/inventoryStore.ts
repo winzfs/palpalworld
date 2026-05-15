@@ -1,6 +1,8 @@
 import type { InventoryState, ItemStack } from "@palpalworld/shared";
+import { BUILD_PART_TEST_ITEM_STACKS } from "../buildings/buildPartCatalog";
 
 const inventoryStorageKey = "palpalworld.demo.inventory";
+const enableBuildPartTestInventory = true;
 
 function cloneInventory(inventory: InventoryState): InventoryState {
   return {
@@ -15,8 +17,32 @@ function cloneInventory(inventory: InventoryState): InventoryState {
   };
 }
 
+function ensureStackMinimum(items: ItemStack[], stack: ItemStack) {
+  const existing = items.find((item) => item.itemId === stack.itemId);
+  if (existing) existing.amount = Math.max(existing.amount, stack.amount);
+  else items.push({ ...stack });
+}
+
+function withDemoTestItems(inventory: InventoryState): InventoryState {
+  if (!enableBuildPartTestInventory || inventory.ownerPlayerId !== "demo-player") return cloneInventory(inventory);
+
+  const items = inventory.items.map((item) => ({ ...item }));
+  for (const stack of [
+    { itemId: "wood", amount: 999 },
+    { itemId: "stone", amount: 999 },
+    { itemId: "fiber", amount: 999 },
+    { itemId: "ingot", amount: 120 },
+    { itemId: "coal", amount: 120 },
+    ...BUILD_PART_TEST_ITEM_STACKS,
+  ]) {
+    ensureStackMinimum(items, stack);
+  }
+
+  return cloneInventory({ ...inventory, items });
+}
+
 export function createFallbackInventory(): InventoryState {
-  return {
+  return withDemoTestItems({
     ownerPlayerId: "demo-player",
     items: [
       { itemId: "wood", amount: 30 },
@@ -25,24 +51,24 @@ export function createFallbackInventory(): InventoryState {
       { itemId: "berry", amount: 10 },
     ],
     itemInstances: [],
-  };
+  });
 }
 
 export function readStoredInventory(fallback?: InventoryState | null): InventoryState {
-  if (typeof window === "undefined") return cloneInventory(fallback ?? createFallbackInventory());
+  if (typeof window === "undefined") return withDemoTestItems(cloneInventory(fallback ?? createFallbackInventory()));
 
   try {
     const raw = window.localStorage.getItem(inventoryStorageKey);
-    if (!raw) return cloneInventory(fallback ?? createFallbackInventory());
+    if (!raw) return withDemoTestItems(cloneInventory(fallback ?? createFallbackInventory()));
 
     const parsed = JSON.parse(raw) as Partial<InventoryState>;
-    return cloneInventory({
+    return withDemoTestItems(cloneInventory({
       ownerPlayerId: parsed.ownerPlayerId ?? fallback?.ownerPlayerId ?? "demo-player",
       items: parsed.items ?? fallback?.items ?? [],
       itemInstances: parsed.itemInstances ?? fallback?.itemInstances ?? [],
-    });
+    }));
   } catch {
-    return cloneInventory(fallback ?? createFallbackInventory());
+    return withDemoTestItems(cloneInventory(fallback ?? createFallbackInventory()));
   }
 }
 
