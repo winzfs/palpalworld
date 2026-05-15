@@ -157,7 +157,7 @@ io.on("connection", (socket) => {
     }
   });
 
-  (socket as any).on("client:travel_tile", ({ direction }: { direction?: MapDirection }) => {
+  socket.on("client:travel_tile", ({ direction }) => {
     const player = world.players.get(socket.id);
     if (!player) return;
     const moved = travelPlayerIfAtPortal(player, direction);
