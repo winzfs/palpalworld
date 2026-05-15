@@ -1,5 +1,5 @@
 import type { Vector2 } from "@palpalworld/shared";
-import { BUILD_GRID_SIZE, worldToBuildGrid } from "./buildGrid";
+import { BUILD_GRID_SIZE, buildGridToWorld, worldToBuildGrid } from "./buildGrid";
 import { BUILD_PARTS, type PlacedBuildPart } from "./buildPartCatalog";
 import { getEdgeFromRotation } from "./buildPartOccupancy";
 import { findStairAtPosition } from "./stairTraversal2p5d";
@@ -27,13 +27,18 @@ function distancePointToSegment(point: Vector2, a: Vector2, b: Vector2) {
 }
 
 function getWallSegment(part: PlacedBuildPart) {
-  const baseX = part.gridX * BUILD_GRID_SIZE;
-  const baseY = part.gridY * BUILD_GRID_SIZE;
+  const center = buildGridToWorld(part);
+  const halfW = BUILD_GRID_SIZE / 2;
+  const halfH = BUILD_GRID_SIZE * 0.62 / 2;
+  const top = { x: center.x, y: center.y - halfH };
+  const right = { x: center.x + halfW, y: center.y };
+  const bottom = { x: center.x, y: center.y + halfH };
+  const left = { x: center.x - halfW, y: center.y };
   const edge = getEdgeFromRotation(part.rotation);
-  if (edge === "north") return { a: { x: baseX, y: baseY }, b: { x: baseX + BUILD_GRID_SIZE, y: baseY } };
-  if (edge === "south") return { a: { x: baseX, y: baseY + BUILD_GRID_SIZE }, b: { x: baseX + BUILD_GRID_SIZE, y: baseY + BUILD_GRID_SIZE } };
-  if (edge === "east") return { a: { x: baseX + BUILD_GRID_SIZE, y: baseY }, b: { x: baseX + BUILD_GRID_SIZE, y: baseY + BUILD_GRID_SIZE } };
-  return { a: { x: baseX, y: baseY }, b: { x: baseX, y: baseY + BUILD_GRID_SIZE } };
+  if (edge === "north") return { a: left, b: top };
+  if (edge === "east") return { a: top, b: right };
+  if (edge === "south") return { a: right, b: bottom };
+  return { a: bottom, b: left };
 }
 
 function isWallCollisionPart(part: PlacedBuildPart) {
@@ -79,10 +84,7 @@ export function getBuildCollisionAtPosition({
     }
 
     if (isObjectCollisionPart(part)) {
-      const center = {
-        x: part.gridX * BUILD_GRID_SIZE + BUILD_GRID_SIZE / 2,
-        y: part.gridY * BUILD_GRID_SIZE + BUILD_GRID_SIZE / 2,
-      };
+      const center = buildGridToWorld(part);
       if (Math.hypot(position.x - center.x, position.y - center.y) <= PLAYER_COLLISION_RADIUS + OBJECT_COLLISION_RADIUS) {
         return { blocked: true, reason: "object", part };
       }
