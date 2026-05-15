@@ -19,12 +19,23 @@ function storeOnce(search, replacement, label) {
   console.log(`[patch-build-parts-version-cache] patched store ${label}`);
 }
 
-function sceneReplace(search, replacement, label) {
+function sceneOnce(search, replacement, label) {
+  if (scene.includes(replacement)) return;
   if (!scene.includes(search)) {
     console.log(`[patch-build-parts-version-cache] skipped scene ${label}`);
     return;
   }
   scene = scene.replace(search, replacement);
+  sceneChanged = true;
+  console.log(`[patch-build-parts-version-cache] patched scene ${label}`);
+}
+
+function sceneReplaceAll(search, replacement, label) {
+  if (!scene.includes(search)) {
+    console.log(`[patch-build-parts-version-cache] skipped scene ${label}`);
+    return;
+  }
+  scene = scene.split(search).join(replacement);
   sceneChanged = true;
   console.log(`[patch-build-parts-version-cache] patched scene ${label}`);
 }
@@ -47,16 +58,22 @@ storeOnce(
   "event version detail",
 );
 
-sceneReplace(
-  'import { BUILD_PARTS } from "../buildings/buildPartCatalog";',
-  'import { BUILD_PARTS } from "../buildings/buildPartCatalog";\nimport { getBuildPartsVersion } from "../buildings/buildPartStore";',
-  "import version helper",
+sceneOnce(
+  'function normalizeSnapshotToCurrentTile(snapshot: WorldSnapshot): WorldSnapshot {',
+  'function readBuildPartsVersionForScene() {\n  if (typeof window === "undefined") return 0;\n  const raw = window.localStorage.getItem("palpalworld.demo.buildParts.version");\n  const parsed = raw ? Number(raw) : 0;\n  return Number.isFinite(parsed) ? parsed : 0;\n}\n\nfunction normalizeSnapshotToCurrentTile(snapshot: WorldSnapshot): WorldSnapshot {',
+  "local scene version helper",
 );
 
-sceneReplace(
+sceneReplaceAll(
   'const __cacheKey = sourceParts.length + ":" + sourceParts.map((part) => [part.id, part.partId, part.gridX, part.gridY, part.rotation, part.floorLevel, part.isOpen === true ? 1 : 0].join("/")).join("|");',
-  'const __cacheKey = String(getBuildPartsVersion()) + ":" + sourceParts.length;',
+  'const __cacheKey = String(readBuildPartsVersionForScene()) + ":" + sourceParts.length;',
   "replace heavy cache key",
+);
+
+sceneReplaceAll(
+  'const __cacheKey = String(getBuildPartsVersion()) + ":" + sourceParts.length;',
+  'const __cacheKey = String(readBuildPartsVersionForScene()) + ":" + sourceParts.length;',
+  "replace imported version key",
 );
 
 if (storeChanged) fs.writeFileSync(storePath, store);
