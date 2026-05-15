@@ -1,5 +1,5 @@
 {
-  "installCommand": "npm install --workspace @palpalworld/web --workspace @palpalworld/shared",
+  "installCommand": "cd apps/web && npm install",
   "buildCommand": "npm run build:web:npm",
   "outputDirectory": "apps/web/.next",
   "framework": "nextjs"
