@@ -6,12 +6,17 @@
   "engines": {
     "node": "20.x"
   },
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
   "scripts": {
     "dev": "pnpm -r --parallel dev",
     "dev:web": "pnpm --filter @palpalworld/web dev",
     "dev:server": "pnpm --filter @palpalworld/realtime-server dev",
     "build": "pnpm -r build",
     "build:web": "pnpm --filter @palpalworld/web build",
+    "build:web:npm": "npm --workspace @palpalworld/shared run build && npm --workspace @palpalworld/game-core run build && npm --workspace @palpalworld/web run build",
     "typecheck": "pnpm -r typecheck",
     "lint": "pnpm -r lint",
     "format": "prettier --write ."
