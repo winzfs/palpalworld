@@ -28,20 +28,48 @@ export type SendWorldChatMessageInput = {
   currentTile: MapTileRef;
 };
 
-export async function sendWorldChatMessage(client: SupabaseClient, input: SendWorldChatMessageInput) {
-  const message = input.message.trim().slice(0, 80);
-  if (!message) return;
-  await client.from("world_chat_messages").insert({
+export function isSameChatTile(message: WorldChatMessageRow, tile: MapTileRef | null) {
+  if (!tile) return true;
+  return message.region_id === tile.regionId && message.tile_x === tile.tileX && message.tile_y === tile.tileY;
+}
+
+export function createOptimisticChatMessage(input: SendWorldChatMessageInput): WorldChatMessageRow {
+  return {
+    message_id: `local-${input.playerId}-${Date.now()}-${Math.floor(Math.random() * 1_000_000)}`,
     player_id: input.playerId,
     nickname: input.nickname,
-    message,
+    message: input.message.trim().slice(0, 80),
     message_type: input.messageType ?? "chat",
     x: input.position.x,
     y: input.position.y,
     region_id: input.currentTile.regionId,
     tile_x: input.currentTile.tileX,
     tile_y: input.currentTile.tileY,
-  });
+    created_at: new Date().toISOString(),
+  };
+}
+
+export async function sendWorldChatMessage(client: SupabaseClient, input: SendWorldChatMessageInput) {
+  const message = input.message.trim().slice(0, 80);
+  if (!message) return null;
+  const { data, error } = await client
+    .from("world_chat_messages")
+    .insert({
+      player_id: input.playerId,
+      nickname: input.nickname,
+      message,
+      message_type: input.messageType ?? "chat",
+      x: input.position.x,
+      y: input.position.y,
+      region_id: input.currentTile.regionId,
+      tile_x: input.currentTile.tileX,
+      tile_y: input.currentTile.tileY,
+    })
+    .select("message_id,player_id,nickname,message,message_type,x,y,region_id,tile_x,tile_y,created_at")
+    .single();
+
+  if (error || !data) return null;
+  return data as WorldChatMessageRow;
 }
 
 export async function fetchWorldChatMessages(client: SupabaseClient, tile: MapTileRef | null) {
@@ -60,9 +88,16 @@ export async function fetchWorldChatMessages(client: SupabaseClient, tile: MapTi
   return (data as WorldChatMessageRow[]).reverse();
 }
 
-export function subscribeWorldChatMessages(client: SupabaseClient, onChange: () => void): RealtimeChannel {
+export function subscribeWorldChatMessages(
+  client: SupabaseClient,
+  onInsert: (message: WorldChatMessageRow) => void,
+): RealtimeChannel {
   return client
     .channel("world_chat_messages_changes")
-    .on("postgres_changes", { event: "INSERT", schema: "public", table: "world_chat_messages" }, onChange)
+    .on(
+      "postgres_changes",
+      { event: "INSERT", schema: "public", table: "world_chat_messages" },
+      (payload) => onInsert(payload.new as WorldChatMessageRow),
+    )
     .subscribe();
 }
