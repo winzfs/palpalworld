@@ -1,8 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import type { BuildingState, InventoryState, ItemStack } from "@palpalworld/shared";
 import { getCraftingStationByBuildingType, getProgressionBuilding, type CraftingStationId } from "../crafting/progressionCatalog";
 import { addInventoryStack, createFallbackInventory, getInventoryAmount, readStoredInventory, removeInventoryStack, writeStoredInventory } from "../inventory/inventoryStore";
+import { getItemLabel } from "../items/itemLabels";
 import { StorageBoxPanel } from "../storage/StorageBoxPanel";
 import { addStorageStack, readStorageBoxItems, removeStorageStack, writeStorageBoxItems } from "../storage/storageStore";
 
@@ -50,18 +51,48 @@ function cloneInventoryForView(inventory: InventoryState): InventoryState {
   };
 }
 
+function getDismantleRefunds(buildingType: string): ItemStack[] {
+  const definition = getProgressionBuilding(buildingType);
+  if (!definition) return [];
+  return definition.requires
+    .map((item) => ({ itemId: item.itemId, amount: Math.max(1, Math.floor(item.amount / 2)) }))
+    .filter((item) => item.amount > 0);
+}
+
+function DismantleAction({ building, onDismantle }: { building: BuildingState; onDismantle?: (building: BuildingState, refunds: ItemStack[]) => void }) {
+  const [confirming, setConfirming] = useState(false);
+  const refunds = useMemo(() => getDismantleRefunds(building.type), [building.type]);
+  const refundText = refunds.length > 0 ? refunds.map((item) => `${getItemLabel(item.itemId)} ${item.amount}`).join(" · ") : "회수 재료 없음";
+
+  return (
+    <div className="building-interaction__dismantle">
+      <p className="feature-panel__hint">분해 시 제작 재료의 절반을 회수합니다: {refundText}</p>
+      {confirming ? (
+        <div className="building-interaction__dismantle-confirm">
+          <button className="building-interaction__action building-interaction__action--danger" onClick={() => onDismantle?.(building, refunds)}>분해 확정</button>
+          <button className="draggable-panel__toggle" onClick={() => setConfirming(false)}>취소</button>
+        </div>
+      ) : (
+        <button className="building-interaction__action building-interaction__action--danger" onClick={() => setConfirming(true)} disabled={!onDismantle}>건설물 분해</button>
+      )}
+    </div>
+  );
+}
+
 export function BuildingInteractionPanel({
   building,
   inventory,
   onInventoryChange,
   onClose,
   onOpenCrafting,
+  onDismantle,
 }: {
   building: BuildingState | null;
   inventory?: InventoryState | null;
   onInventoryChange?: (inventory: InventoryState) => void;
   onClose: () => void;
   onOpenCrafting?: (stationId: CraftingStationId) => void;
+  onDismantle?: (building: BuildingState, refunds: ItemStack[]) => void;
 }) {
   const [activeInventory, setActiveInventory] = useState<InventoryState>(() => readStoredInventory(inventory ?? createFallbackInventory()));
   const [storageItems, setStorageItems] = useState<ItemStack[]>(() => readStorageBoxItems(building));
@@ -136,6 +167,7 @@ export function BuildingInteractionPanel({
           onDeposit={handleDeposit}
           onWithdraw={handleWithdraw}
         />
+        <DismantleAction building={building} onDismantle={onDismantle} />
       </div>
     );
 
@@ -168,6 +200,7 @@ export function BuildingInteractionPanel({
         {action.title}
       </button>
       <p className="feature-panel__hint">{action.description}</p>
+      <DismantleAction building={building} onDismantle={onDismantle} />
     </div>
   );
 }
