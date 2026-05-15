@@ -1,3 +1,5 @@
+import type { MapTileRef } from "./worldTiles";
+
 export type EntityId = string;
 export type PlayerId = string;
 export type WorldId = string;
@@ -210,6 +212,7 @@ export type PlayerPublicState = {
   nickname: string;
   position: Vector2;
   direction: Direction;
+  currentTile: MapTileRef;
   hp: number;
   maxHp: number;
   mountedCreatureId?: EntityId;
