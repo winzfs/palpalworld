@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@palpalworld/shared": "workspace:*",
+    "@supabase/supabase-js": "^2.87.1",
     "next": "^15.1.4",
     "phaser": "^3.87.0",
     "react": "^19.0.0",
