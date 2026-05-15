@@ -1,0 +1,38 @@
+/* Overlay stacking fixes for gameplay UI.
+   Keep this file small and safe: it only normalizes pointer behavior
+   and z-index ordering for floating panels above the canvas. */
+
+.game-canvas-root {
+  position: relative;
+  z-index: 1;
+}
+
+.multiplayer-overlay,
+.chat-panel,
+.inventory-overlay-panel,
+.build-mode-panel,
+.building-interaction,
+.station-building-panel,
+.capture-minigame-overlay {
+  pointer-events: auto;
+}
+
+.inventory-overlay-panel,
+.build-mode-panel,
+.building-interaction,
+.station-building-panel {
+  z-index: 110;
+}
+
+.capture-minigame-overlay {
+  z-index: 140;
+}
+
+@media (max-width: 720px) {
+  .inventory-overlay-panel,
+  .build-mode-panel,
+  .building-interaction,
+  .station-building-panel {
+    max-width: calc(100vw - 16px);
+  }
+}
