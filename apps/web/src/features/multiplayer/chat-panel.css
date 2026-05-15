@@ -107,6 +107,14 @@
   color: #f8fafc;
 }
 
+.multiplayer-status {
+  top: calc(204px + var(--safe-top));
+  right: calc(12px + var(--safe-right));
+  z-index: 13;
+  min-width: 92px;
+  text-align: center;
+}
+
 @media (max-width: 720px) {
   .world-chat-panel {
     right: auto;
@@ -160,5 +168,13 @@
     display: -webkit-box;
     -webkit-line-clamp: 2;
     -webkit-box-orient: vertical;
+  }
+
+  .multiplayer-status {
+    top: calc(150px + var(--safe-top));
+    right: calc(8px + var(--safe-right));
+    min-width: 84px;
+    padding: 5px 8px;
+    font-size: 10px;
   }
 }
