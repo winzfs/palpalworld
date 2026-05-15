@@ -22,8 +22,10 @@ export type LocalPresencePayload = {
   currentTile: MapTileRef;
 };
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+const defaultSupabaseUrl = "https://bbpqhwexbdozkxsfoyrn.supabase.co";
+const defaultSupabasePublishableKey = "sb_publishable_gZu3HGdokX2wQsvnaS6SaA__xjvRrn4";
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? defaultSupabaseUrl;
+const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? defaultSupabasePublishableKey;
 
 let cachedClient: SupabaseClient | null = null;
 
