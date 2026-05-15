@@ -7,8 +7,8 @@
     "node": "20.x"
   },
   "workspaces": [
-    "apps/*",
-    "packages/*"
+    "apps/web",
+    "packages/shared"
   ],
   "scripts": {
     "dev": "pnpm -r --parallel dev",
