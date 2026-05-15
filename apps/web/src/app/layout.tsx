@@ -8,6 +8,7 @@ import "./pet-panel.css";
 import "./menu-overrides.css";
 import "../features/multiplayer/multiplayer-overlay.css";
 import "../features/multiplayer/chat-panel.css";
+import "./overlay-layer-fixes.css";
 
 export const metadata: Metadata = {
   title: "PalPalWorld",
