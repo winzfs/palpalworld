@@ -2,8 +2,5 @@
   "installCommand": "cd apps/web && npm install",
   "buildCommand": "cd apps/web && node scripts/fix-game-client-newline.cjs && npm run build",
   "outputDirectory": "apps/web/.next",
-  "framework": "nextjs",
-  "git": {
-    "deploymentEnabled": false
-  }
+  "framework": "nextjs"
 }
