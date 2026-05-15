@@ -37,6 +37,10 @@ export class BuildPartRenderer {
     ctx.fill();
     ctx.stroke();
     ctx.restore();
+
+    if (definition.category === "wall" || definition.category === "door" || definition.category === "window") {
+      this.drawEdgeGuide(ctx, x, visualY, width, height, rotation, valid);
+    }
   }
 
   private drawPart(ctx: CanvasRenderingContext2D, definition: BuildPartDefinition, x: number, y: number, rotation: BuildPartRotation, preview: boolean, intensity: number, floorLevel: number) {
@@ -81,6 +85,44 @@ export class BuildPartRenderer {
         break;
     }
 
+    ctx.restore();
+  }
+
+  private drawEdgeGuide(ctx: CanvasRenderingContext2D, x: number, y: number, width: number, height: number, rotation: BuildPartRotation, valid: boolean) {
+    const edgeColor = valid ? "rgba(74, 222, 128, 0.96)" : "rgba(248, 113, 113, 0.96)";
+    const label = rotation === 90 ? "E" : rotation === 180 ? "S" : rotation === 270 ? "W" : "N";
+    const left = x - width / 2;
+    const right = x + width / 2;
+    const top = y - height / 2;
+    const bottom = y + height / 2;
+    let x1 = left;
+    let y1 = top;
+    let x2 = right;
+    let y2 = top;
+    let labelX = x;
+    let labelY = top - 8;
+
+    if (rotation === 90) {
+      x1 = right; y1 = top; x2 = right; y2 = bottom; labelX = right + 10; labelY = y;
+    } else if (rotation === 180) {
+      x1 = left; y1 = bottom; x2 = right; y2 = bottom; labelX = x; labelY = bottom + 15;
+    } else if (rotation === 270) {
+      x1 = left; y1 = top; x2 = left; y2 = bottom; labelX = left - 10; labelY = y;
+    }
+
+    ctx.save();
+    ctx.strokeStyle = edgeColor;
+    ctx.fillStyle = edgeColor;
+    ctx.lineWidth = 4;
+    ctx.setLineDash([]);
+    ctx.beginPath();
+    ctx.moveTo(x1, y1);
+    ctx.lineTo(x2, y2);
+    ctx.stroke();
+    ctx.font = "bold 11px system-ui";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(label, labelX, labelY);
     ctx.restore();
   }
 
