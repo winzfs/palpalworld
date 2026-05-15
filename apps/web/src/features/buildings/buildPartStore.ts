@@ -1,9 +1,20 @@
+import type { RealtimeChannel } from "@supabase/supabase-js";
 import type { MapTileRef } from "../../../../../packages/shared/src/worldTiles";
 import type { BuildFloorLevel, BuildPartId, BuildPartRotation, PlacedBuildPart } from "./buildPartCatalog";
 import { BUILD_PARTS } from "./buildPartCatalog";
 import { getBuildGridManhattanDistance } from "./buildGrid";
+import {
+  deleteWorldBuildPart,
+  fetchWorldBuildParts,
+  getBuildPartSyncClient,
+  isBuildPartSyncEnabled,
+  subscribeWorldBuildParts,
+  upsertWorldBuildPart,
+} from "../multiplayer/supabaseBuildParts";
 
 const buildPartStorageKey = "palpalworld.demo.buildParts";
+let syncChannel: RealtimeChannel | null = null;
+let syncStarted = false;
 
 function getRegionId(tile: MapTileRef) {
   return `${tile.x}:${tile.y}`;
@@ -15,6 +26,20 @@ function clonePart(part: PlacedBuildPart): PlacedBuildPart {
 
 function createHouseId(tile: MapTileRef, ownerPlayerId: string) {
   return `house-${ownerPlayerId}-${tile.x}-${tile.y}-${Date.now()}-${Math.floor(Math.random() * 1_000_000)}`;
+}
+
+function mergeBuildParts(localParts: PlacedBuildPart[], remoteParts: PlacedBuildPart[]) {
+  const byId = new Map<string, PlacedBuildPart>();
+  for (const part of localParts) byId.set(part.id, clonePart(part));
+  for (const part of remoteParts) {
+    const current = byId.get(part.id);
+    if (!current || part.updatedAt >= current.updatedAt) byId.set(part.id, clonePart(part));
+  }
+  return [...byId.values()];
+}
+
+function upsertLocalPart(parts: PlacedBuildPart[], part: PlacedBuildPart) {
+  return [...parts.filter((existing) => existing.id !== part.id), clonePart(part)];
 }
 
 export function readStoredBuildParts(): PlacedBuildPart[] {
@@ -36,6 +61,53 @@ export function writeStoredBuildParts(parts: PlacedBuildPart[]) {
     window.dispatchEvent(new CustomEvent("palpalworld:build-parts-changed", { detail: { parts: next } }));
   }
   return next;
+}
+
+function syncUpsert(part: PlacedBuildPart) {
+  const client = getBuildPartSyncClient();
+  if (!client || !isBuildPartSyncEnabled()) return;
+  void upsertWorldBuildPart(client, part);
+}
+
+function syncDelete(partId: string) {
+  const client = getBuildPartSyncClient();
+  if (!client || !isBuildPartSyncEnabled()) return;
+  void deleteWorldBuildPart(client, partId);
+}
+
+export async function startBuildPartRealtimeSync() {
+  if (syncStarted || typeof window === "undefined") return;
+  const client = getBuildPartSyncClient();
+  if (!client || !isBuildPartSyncEnabled()) return;
+
+  syncStarted = true;
+  const localParts = readStoredBuildParts();
+  const remoteParts = await fetchWorldBuildParts(client);
+  const merged = writeStoredBuildParts(mergeBuildParts(localParts, remoteParts));
+
+  for (const part of localParts) {
+    if (!remoteParts.some((remote) => remote.id === part.id)) syncUpsert(part);
+  }
+
+  syncChannel = subscribeWorldBuildParts(client, (payload) => {
+    const current = readStoredBuildParts();
+    if (payload.eventType === "DELETE") {
+      if (!payload.oldId) return;
+      writeStoredBuildParts(current.filter((part) => part.id !== payload.oldId));
+      return;
+    }
+    if (!payload.part) return;
+    writeStoredBuildParts(upsertLocalPart(current, payload.part));
+  });
+
+  writeStoredBuildParts(merged);
+}
+
+export function stopBuildPartRealtimeSync() {
+  const client = getBuildPartSyncClient();
+  if (client && syncChannel) client.removeChannel(syncChannel);
+  syncChannel = null;
+  syncStarted = false;
 }
 
 export function findNearestHouseId({
@@ -66,8 +138,11 @@ export function findNearestHouseId({
 
 function assignMissingHouseId(parts: PlacedBuildPart[], target: PlacedBuildPart, currentTile: MapTileRef, ownerPlayerId: string) {
   const houseId = createHouseId(currentTile, ownerPlayerId);
-  const next = parts.map((part) => part.id === target.id ? { ...part, houseId, updatedAt: Date.now() } : part);
+  const now = Date.now();
+  const updatedTarget = { ...target, houseId, updatedAt: now };
+  const next = parts.map((part) => part.id === target.id ? updatedTarget : part);
   writeStoredBuildParts(next);
+  syncUpsert(updatedTarget);
   return houseId;
 }
 
@@ -125,25 +200,40 @@ export function getBuildPartsForHouse(parts: PlacedBuildPart[], houseId: string 
 
 export function upsertBuildPart(part: PlacedBuildPart) {
   const current = readStoredBuildParts();
-  const next = [...current.filter((existing) => existing.id !== part.id), part];
+  const updated = { ...part, updatedAt: Date.now() };
+  const next = upsertLocalPart(current, updated);
+  syncUpsert(updated);
   return writeStoredBuildParts(next);
 }
 
 export function moveBuildPart(partId: string, gridX: number, gridY: number, floorLevel?: BuildFloorLevel) {
   const current = readStoredBuildParts();
   const now = Date.now();
-  const next = current.map((part) => part.id === partId ? { ...part, gridX, gridY, floorLevel: floorLevel ?? part.floorLevel, updatedAt: now } : part);
+  let updatedPart: PlacedBuildPart | null = null;
+  const next = current.map((part) => {
+    if (part.id !== partId) return part;
+    updatedPart = { ...part, gridX, gridY, floorLevel: floorLevel ?? part.floorLevel, updatedAt: now };
+    return updatedPart;
+  });
+  if (updatedPart) syncUpsert(updatedPart);
   return writeStoredBuildParts(next);
 }
 
 export function rotatePlacedBuildPart(partId: string, rotation: BuildPartRotation) {
   const current = readStoredBuildParts();
   const now = Date.now();
-  const next = current.map((part) => part.id === partId ? { ...part, rotation, updatedAt: now } : part);
+  let updatedPart: PlacedBuildPart | null = null;
+  const next = current.map((part) => {
+    if (part.id !== partId) return part;
+    updatedPart = { ...part, rotation, updatedAt: now };
+    return updatedPart;
+  });
+  if (updatedPart) syncUpsert(updatedPart);
   return writeStoredBuildParts(next);
 }
 
 export function removeBuildPart(partId: string) {
   const current = readStoredBuildParts();
+  syncDelete(partId);
   return writeStoredBuildParts(current.filter((part) => part.id !== partId));
 }
