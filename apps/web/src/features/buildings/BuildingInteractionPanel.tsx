@@ -59,7 +59,7 @@ function getDismantleRefunds(buildingType: string): ItemStack[] {
     .filter((item) => item.amount > 0);
 }
 
-function DismantleAction({ building, onDismantle }: { building: BuildingState; onDismantle?: (building: BuildingState, refunds: ItemStack[]) => void }) {
+function DismantleAction({ building, onDismantle }: { building: BuildingState; onDismantle: (building: BuildingState, refunds: ItemStack[]) => void }) {
   const [confirming, setConfirming] = useState(false);
   const refunds = useMemo(() => getDismantleRefunds(building.type), [building.type]);
   const refundText = refunds.length > 0 ? refunds.map((item) => `${getItemLabel(item.itemId)} ${item.amount}`).join(" · ") : "회수 재료 없음";
@@ -69,11 +69,11 @@ function DismantleAction({ building, onDismantle }: { building: BuildingState; o
       <p className="feature-panel__hint">분해 시 제작 재료의 절반을 회수합니다: {refundText}</p>
       {confirming ? (
         <div className="building-interaction__dismantle-confirm">
-          <button className="building-interaction__action building-interaction__action--danger" onClick={() => onDismantle?.(building, refunds)}>분해 확정</button>
+          <button className="building-interaction__action building-interaction__action--danger" onClick={() => onDismantle(building, refunds)}>분해 확정</button>
           <button className="draggable-panel__toggle" onClick={() => setConfirming(false)}>취소</button>
         </div>
       ) : (
-        <button className="building-interaction__action building-interaction__action--danger" onClick={() => setConfirming(true)} disabled={!onDismantle}>건설물 분해</button>
+        <button className="building-interaction__action building-interaction__action--danger" onClick={() => setConfirming(true)}>건설물 분해</button>
       )}
     </div>
   );
@@ -133,6 +133,14 @@ export function BuildingInteractionPanel({
     onInventoryChange?.(storedInventory);
   };
 
+  const handleFallbackDismantle = (targetBuilding: BuildingState, refunds: ItemStack[]) => {
+    const refundedInventory = refunds.reduce((next, refund) => addInventoryStack(next, refund.itemId, refund.amount), activeInventory);
+    updateInventory(refundedInventory);
+    window.dispatchEvent(new CustomEvent("palpalworld:building-dismantled", { detail: { buildingId: targetBuilding.id, building: targetBuilding } }));
+    onDismantle?.(targetBuilding, refunds);
+    onClose();
+  };
+
   const handleDeposit = (itemId: string, amount: number) => {
     const owned = getInventoryAmount(activeInventory, itemId);
     const nextAmount = Math.min(amount, owned);
@@ -167,7 +175,7 @@ export function BuildingInteractionPanel({
           onDeposit={handleDeposit}
           onWithdraw={handleWithdraw}
         />
-        <DismantleAction building={building} onDismantle={onDismantle} />
+        <DismantleAction building={building} onDismantle={handleFallbackDismantle} />
       </div>
     );
 
@@ -200,7 +208,7 @@ export function BuildingInteractionPanel({
         {action.title}
       </button>
       <p className="feature-panel__hint">{action.description}</p>
-      <DismantleAction building={building} onDismantle={onDismantle} />
+      <DismantleAction building={building} onDismantle={handleFallbackDismantle} />
     </div>
   );
 }
