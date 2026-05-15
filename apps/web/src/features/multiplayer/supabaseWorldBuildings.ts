@@ -1,6 +1,7 @@
 import type { RealtimeChannel, SupabaseClient } from "@supabase/supabase-js";
 import type { BuildingState, BuildingType } from "@palpalworld/shared";
 import type { MapTileRef } from "../../../../../packages/shared/src/worldTiles";
+import { getCurrentMultiplayerPlayerId } from "./supabaseMultiplayer";
 
 export type SharedBuildingState = BuildingState & {
   currentTile?: MapTileRef;
@@ -24,11 +25,6 @@ export type WorldBuildingRow = {
   updated_at: string;
 };
 
-function getLocalMultiplayerPlayerId() {
-  if (typeof window === "undefined") return "unknown";
-  return window.localStorage.getItem("palpalworld.multiplayer.playerId") ?? "unknown";
-}
-
 function getLocalNickname(fallback = "Unknown") {
   if (typeof window === "undefined") return fallback;
   return window.localStorage.getItem("palpalworld.nickname") ?? fallback;
@@ -36,7 +32,7 @@ function getLocalNickname(fallback = "Unknown") {
 
 function normalizeOwnerPlayerId(ownerPlayerId?: string) {
   if (!ownerPlayerId || ownerPlayerId === "demo-player" || ownerPlayerId === "unknown") {
-    return getLocalMultiplayerPlayerId();
+    return getCurrentMultiplayerPlayerId();
   }
   return ownerPlayerId;
 }
