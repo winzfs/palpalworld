@@ -35,6 +35,7 @@ export type WorldClickTarget =
 
 type ViewportBounds = { left: number; top: number; right: number; bottom: number };
 type EquipmentChangedEvent = CustomEvent<{ weaponItemId?: string | null }>;
+type BuildingDismantledEvent = CustomEvent<{ buildingId?: string }>;
 
 const fallbackPlayerTiles = new Map<string, MapTileRef>();
 const cullPadding = 96;
@@ -100,9 +101,12 @@ export class GameWorldScene {
   private previousCreatureHpById = new Map<string, number>();
   private previousPlayerPositions = new Map<string, Vector2>();
   private movingPlayerIds = new Set<string>();
+  private hiddenBuildingIds = new Set<string>();
   private localPlayerId: string | null = null;
   private localEquippedWeaponItemId: string | null = null;
   private pointerWorldPosition: Vector2 | null = null;
+  private placementDragStart: Vector2 | null = null;
+  private placementPointerId: number | null = null;
   private hoverBuildingId: string | null = null;
   private hoverCreatureId: string | null = null;
   private highlightedCreatureId: string | null = null;
@@ -128,8 +132,11 @@ export class GameWorldScene {
     window.addEventListener("keydown", this.handleKeyDown);
     window.addEventListener("keyup", this.handleKeyUp);
     window.addEventListener("palpalworld:equipment-changed", this.handleEquipmentChanged as EventListener);
+    window.addEventListener("palpalworld:building-dismantled", this.handleBuildingDismantled as EventListener);
     this.canvas.addEventListener("pointerdown", this.handlePointerDown);
     this.canvas.addEventListener("pointermove", this.handlePointerMove);
+    this.canvas.addEventListener("pointerup", this.handlePointerUp);
+    this.canvas.addEventListener("pointercancel", this.handlePointerCancel);
     this.canvas.addEventListener("pointerleave", this.handlePointerLeave);
     this.resize();
     this.loop();
@@ -141,8 +148,11 @@ export class GameWorldScene {
     window.removeEventListener("keydown", this.handleKeyDown);
     window.removeEventListener("keyup", this.handleKeyUp);
     window.removeEventListener("palpalworld:equipment-changed", this.handleEquipmentChanged as EventListener);
+    window.removeEventListener("palpalworld:building-dismantled", this.handleBuildingDismantled as EventListener);
     this.canvas.removeEventListener("pointerdown", this.handlePointerDown);
     this.canvas.removeEventListener("pointermove", this.handlePointerMove);
+    this.canvas.removeEventListener("pointerup", this.handlePointerUp);
+    this.canvas.removeEventListener("pointercancel", this.handlePointerCancel);
     this.canvas.removeEventListener("pointerleave", this.handlePointerLeave);
     this.canvas.remove();
   }
@@ -173,7 +183,12 @@ export class GameWorldScene {
     window.dispatchEvent(new CustomEvent("palpalworld:world_snapshot", { detail: { snapshot: normalizedSnapshot, localPlayerId } }));
   }
 
-  setPlacementPreviewBuildingType(buildingType: BuildingType | null) { this.placementPreviewBuildingType = buildingType; this.canvas.style.cursor = buildingType ? "none" : "default"; }
+  setPlacementPreviewBuildingType(buildingType: BuildingType | null) {
+    this.placementPreviewBuildingType = buildingType;
+    this.placementDragStart = null;
+    this.placementPointerId = null;
+    this.canvas.style.cursor = buildingType ? "crosshair" : "default";
+  }
   setHighlightedCreatureId(creatureId: string | null) { this.highlightedCreatureId = creatureId; }
   getNearestInteractableId(): EntityId | null {
     const localPlayer = this.getLocalPlayerPosition();
@@ -190,11 +205,17 @@ export class GameWorldScene {
   }
   getLocalPlayerPosition() { return this.getLocalPlayer()?.position ?? null; }
   private handleEquipmentChanged = (event: EquipmentChangedEvent) => { this.localEquippedWeaponItemId = event.detail?.weaponItemId ?? readStoredWeaponItemId(); };
+  private handleBuildingDismantled = (event: BuildingDismantledEvent) => {
+    const buildingId = event.detail?.buildingId;
+    if (!buildingId) return;
+    this.hiddenBuildingIds.add(buildingId);
+    if (this.hoverBuildingId === buildingId) this.hoverBuildingId = null;
+  };
   private getLocalPlayer() { return this.snapshot?.players.find((player) => player.id === this.localPlayerId) ?? this.snapshot?.players[0] ?? null; }
   private getCurrentTile() { return getTileRef(this.getLocalPlayer()); }
   private getSceneResources() { return this.snapshot?.resources ?? []; }
   private getSceneCreatures() { return this.snapshot?.creatures ?? []; }
-  private getSceneBuildings() { return this.snapshot?.buildings ?? []; }
+  private getSceneBuildings() { return (this.snapshot?.buildings ?? []).filter((building) => !this.hiddenBuildingIds.has(building.id)); }
 
   getPlacementValidity(position: Vector2): PlacementValidity {
     if (!this.placementPreviewBuildingType) return { ok: true, reason: "설치 모드가 아닙니다." };
@@ -203,7 +224,7 @@ export class GameWorldScene {
     if (position.x < 0 || position.x > MAP_TILE_SIZE.width || position.y < 0 || position.y > MAP_TILE_SIZE.height) return { ok: false, reason: "타일 밖에는 설치할 수 없습니다." };
     if (distance(localPlayer, position) > WORLD.buildRange) return { ok: false, reason: "너무 멀리 설치할 수 없습니다." };
     for (const building of this.getSceneBuildings()) if (distance(building.position, position) < WORLD.tileSize) return { ok: false, reason: "이미 다른 건물이 있는 위치입니다." };
-    return { ok: true, reason: "설치 가능" };
+    return { ok: true, reason: this.placementDragStart ? "손을 떼면 설치됩니다." : "드래그해서 위치 선택" };
   }
   private getBuildingAt(position: Vector2) { let nearest: BuildingState | null = null; let nearestDistance = Number.POSITIVE_INFINITY; for (const building of this.getSceneBuildings()) { const hitDistance = distance(building.position, position); if (hitDistance <= 42 && hitDistance < nearestDistance) { nearest = building; nearestDistance = hitDistance; } } return nearest; }
   private getCreatureAt(position: Vector2) { let nearest: CreaturePublicState | null = null; let nearestDistance = Number.POSITIVE_INFINITY; for (const creature of this.getSceneCreatures()) { if (creature.hp <= 0) continue; const hitDistance = distance(creature.position, position); if (hitDistance <= 46 && hitDistance < nearestDistance) { nearest = creature; nearestDistance = hitDistance; } } return nearest; }
@@ -212,16 +233,21 @@ export class GameWorldScene {
   private screenToWorld(clientX: number, clientY: number): Vector2 { const rect = this.canvas.getBoundingClientRect(); const camera = this.getCameraOffset(); return clampPositionToTile({ x: clientX - rect.left + camera.x, y: clientY - rect.top + camera.y }); }
   private resize = () => { const dpr = Math.max(1, Math.min(window.devicePixelRatio || 1, 2)); const rect = this.root.getBoundingClientRect(); this.canvas.width = Math.floor(rect.width * dpr); this.canvas.height = Math.floor(rect.height * dpr); this.context.setTransform(dpr, 0, 0, dpr, 0, 0); this.context.imageSmoothingEnabled = false; };
   private emitPrimaryTap() { this.onInputChange({ x: 0, y: 0, primary: true, secondary: false }); window.setTimeout(() => this.onInputChange({ x: 0, y: 0, primary: false, secondary: false }), 90); }
+  private commitPlacement(position: Vector2) { this.onWorldClick({ kind: "field", position, validity: this.getPlacementValidity(position) }); }
   private handlePointerDown = (event: PointerEvent) => {
     if (event.button !== 0) return;
     const position = this.screenToWorld(event.clientX, event.clientY);
     this.pointerWorldPosition = position;
-    if (!this.placementPreviewBuildingType) {
-      const creature = this.getCreatureAt(position);
-      if (creature) { this.onWorldClick({ kind: "creature", creature }); this.emitPrimaryTap(); return; }
-      const building = this.getBuildingAt(position);
-      if (building) { this.onWorldClick({ kind: "building", building }); return; }
+    if (this.placementPreviewBuildingType) {
+      this.placementDragStart = position;
+      this.placementPointerId = event.pointerId;
+      this.canvas.setPointerCapture(event.pointerId);
+      return;
     }
+    const creature = this.getCreatureAt(position);
+    if (creature) { this.onWorldClick({ kind: "creature", creature }); this.emitPrimaryTap(); return; }
+    const building = this.getBuildingAt(position);
+    if (building) { this.onWorldClick({ kind: "building", building }); return; }
     this.onWorldClick({ kind: "field", position, validity: this.getPlacementValidity(position) });
   };
   private handlePointerMove = (event: PointerEvent) => {
@@ -231,7 +257,22 @@ export class GameWorldScene {
     this.hoverBuildingId = this.placementPreviewBuildingType || this.hoverCreatureId ? null : this.getBuildingAt(position)?.id ?? null;
     if (!this.placementPreviewBuildingType) this.canvas.style.cursor = this.hoverCreatureId || this.hoverBuildingId ? "pointer" : "default";
   };
-  private handlePointerLeave = () => { this.pointerWorldPosition = null; this.hoverBuildingId = null; this.hoverCreatureId = null; if (!this.placementPreviewBuildingType) this.canvas.style.cursor = "default"; };
+  private handlePointerUp = (event: PointerEvent) => {
+    if (!this.placementPreviewBuildingType || this.placementPointerId !== event.pointerId) return;
+    const position = this.screenToWorld(event.clientX, event.clientY);
+    this.pointerWorldPosition = position;
+    this.placementDragStart = null;
+    this.placementPointerId = null;
+    this.canvas.releasePointerCapture(event.pointerId);
+    this.commitPlacement(position);
+  };
+  private handlePointerCancel = (event: PointerEvent) => {
+    if (this.placementPointerId === event.pointerId) {
+      this.placementDragStart = null;
+      this.placementPointerId = null;
+    }
+  };
+  private handlePointerLeave = () => { this.hoverBuildingId = null; this.hoverCreatureId = null; if (!this.placementPreviewBuildingType) { this.pointerWorldPosition = null; this.canvas.style.cursor = "default"; } };
   private handleKeyDown = (event: KeyboardEvent) => { const key = event.key.toLowerCase(); if (key === "e" && !this.keys.has(key)) this.onInteract(); this.keys.add(key); this.emitKeyboardInput(); };
   private handleKeyUp = (event: KeyboardEvent) => { this.keys.delete(event.key.toLowerCase()); this.emitKeyboardInput(); };
   private emitKeyboardInput() { const left = this.keys.has("a") || this.keys.has("arrowleft"); const right = this.keys.has("d") || this.keys.has("arrowright"); const up = this.keys.has("w") || this.keys.has("arrowup"); const down = this.keys.has("s") || this.keys.has("arrowdown"); this.onInputChange({ x: Number(right) - Number(left), y: Number(down) - Number(up), primary: this.keys.has(" "), secondary: this.keys.has("e") }); }
@@ -315,7 +356,7 @@ export class GameWorldScene {
     const accent = validity.ok ? "34, 197, 94" : "239, 68, 68";
     ctx.save(); ctx.globalAlpha = validity.ok ? 0.5 : 0.34; this.renderer.drawBuilding(ctx, previewBuilding, x, y); ctx.restore();
     ctx.save(); ctx.strokeStyle = `rgba(${accent}, 0.9)`; ctx.fillStyle = `rgba(${accent}, 0.16)`; ctx.lineWidth = 2; ctx.setLineDash([6, 4]); ctx.beginPath(); ctx.ellipse(x, y + 24, 30, 11, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke(); ctx.restore();
-    ctx.save(); ctx.fillStyle = "rgba(15, 23, 42, 0.86)"; ctx.strokeStyle = `rgba(${accent}, 0.82)`; ctx.lineWidth = 1; ctx.beginPath(); ctx.roundRect(x - 82, y - 64, 164, 26, 8); ctx.fill(); ctx.stroke(); ctx.fillStyle = validity.ok ? "#bbf7d0" : "#fecaca"; ctx.font = "12px system-ui"; ctx.textAlign = "center"; ctx.fillText(validity.reason, x, y - 46); ctx.restore();
+    ctx.save(); ctx.fillStyle = "rgba(15, 23, 42, 0.86)"; ctx.strokeStyle = `rgba(${accent}, 0.82)`; ctx.lineWidth = 1; ctx.beginPath(); ctx.roundRect(x - 98, y - 70, 196, 32, 8); ctx.fill(); ctx.stroke(); ctx.fillStyle = validity.ok ? "#bbf7d0" : "#fecaca"; ctx.font = "12px system-ui"; ctx.textAlign = "center"; ctx.fillText(validity.reason, x, y - 50); ctx.restore();
   }
   private drawInteractionHint(ctx: CanvasRenderingContext2D, cameraX: number, cameraY: number) {
     if (this.placementPreviewBuildingType) return;
