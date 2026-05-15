@@ -1,6 +1,10 @@
 import type { Vector2 } from "@palpalworld/shared";
 
 export const BUILD_GRID_SIZE = 48;
+export const BUILD_ISO_TILE_WIDTH = BUILD_GRID_SIZE;
+export const BUILD_ISO_TILE_HEIGHT = BUILD_GRID_SIZE * 0.62;
+export const BUILD_ISO_WORLD_ORIGIN_X = 1500;
+export const BUILD_ISO_WORLD_ORIGIN_Y = 620;
 
 export type BuildGridPosition = {
   gridX: number;
@@ -13,16 +17,20 @@ export type BuildGridRect = BuildGridPosition & {
 };
 
 export function worldToBuildGrid(position: Vector2): BuildGridPosition {
+  const isoX = position.x - BUILD_ISO_WORLD_ORIGIN_X;
+  const isoY = position.y - BUILD_ISO_WORLD_ORIGIN_Y;
+  const halfW = BUILD_ISO_TILE_WIDTH / 2;
+  const halfH = BUILD_ISO_TILE_HEIGHT / 2;
   return {
-    gridX: Math.round(position.x / BUILD_GRID_SIZE),
-    gridY: Math.round(position.y / BUILD_GRID_SIZE),
+    gridX: Math.round(isoX / (2 * halfW) + isoY / (2 * halfH)),
+    gridY: Math.round(-isoX / (2 * halfW) + isoY / (2 * halfH)),
   };
 }
 
 export function buildGridToWorld(position: BuildGridPosition): Vector2 {
   return {
-    x: position.gridX * BUILD_GRID_SIZE,
-    y: position.gridY * BUILD_GRID_SIZE,
+    x: BUILD_ISO_WORLD_ORIGIN_X + (position.gridX - position.gridY) * (BUILD_ISO_TILE_WIDTH / 2),
+    y: BUILD_ISO_WORLD_ORIGIN_Y + (position.gridX + position.gridY) * (BUILD_ISO_TILE_HEIGHT / 2),
   };
 }
 
