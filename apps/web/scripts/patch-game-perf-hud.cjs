@@ -19,6 +19,19 @@ function replace(search, replacement, label) {
   console.log(`[patch-game-perf-hud] patched ${label}`);
 }
 
+function replaceAll(search, replacement, label) {
+  if (!source.includes(search)) {
+    console.log(`[patch-game-perf-hud] skipped ${label}`);
+    return;
+  }
+  source = source.split(search).join(replacement);
+  changed = true;
+  console.log(`[patch-game-perf-hud] patched ${label}`);
+}
+
+const hudStyle = "position:absolute;left:50%;top:42px;transform:translateX(-50%);z-index:60;max-width:230px;padding:7px 9px;border-radius:8px;background:rgba(2,6,23,.78);color:#dbeafe;font:10px/1.32 monospace;white-space:pre;pointer-events:none;display:none";
+const buttonStyle = "position:absolute;left:50%;top:8px;transform:translateX(-50%);z-index:61;padding:5px 8px;border-radius:999px;border:1px solid rgba(147,197,253,.55);background:rgba(15,23,42,.72);color:#bfdbfe;font:11px system-ui";
+
 replace(
   `  private onWorldClick: (target: WorldClickTarget) => void;`,
   `  private onWorldClick: (target: WorldClickTarget) => void;
@@ -54,12 +67,12 @@ replace(
   `  private handleEquipmentChanged = (event: EquipmentChangedEvent) => { this.localEquippedWeaponItemId = event.detail?.weaponItemId ?? readStoredWeaponItemId(); };`,
   `  private installPerfHud() {
     this.perfHudEl = document.createElement("div");
-    this.perfHudEl.style.cssText = "position:absolute;right:8px;top:42px;z-index:30;max-width:260px;padding:7px 9px;border-radius:8px;background:rgba(2,6,23,.78);color:#dbeafe;font:11px/1.35 monospace;white-space:pre;pointer-events:none;display:none";
+    this.perfHudEl.style.cssText = "${hudStyle}";
     this.root.appendChild(this.perfHudEl);
     this.perfToggleEl = document.createElement("button");
     this.perfToggleEl.type = "button";
     this.perfToggleEl.textContent = "PERF";
-    this.perfToggleEl.style.cssText = "position:absolute;right:8px;top:8px;z-index:31;padding:5px 8px;border-radius:999px;border:1px solid rgba(147,197,253,.55);background:rgba(15,23,42,.72);color:#bfdbfe;font:11px system-ui";
+    this.perfToggleEl.style.cssText = "${buttonStyle}";
     this.perfToggleEl.addEventListener("click", () => this.togglePerfHud());
     this.root.appendChild(this.perfToggleEl);
     this.updatePerfHudVisibility();
@@ -92,6 +105,27 @@ replace(
 
   private handleEquipmentChanged = (event: EquipmentChangedEvent) => { this.localEquippedWeaponItemId = event.detail?.weaponItemId ?? readStoredWeaponItemId(); };`,
   "perf hud methods",
+);
+
+replaceAll(
+  "position:absolute;right:8px;top:42px;z-index:30;max-width:260px;padding:7px 9px;border-radius:8px;background:rgba(2,6,23,.78);color:#dbeafe;font:11px/1.35 monospace;white-space:pre;pointer-events:none;display:none",
+  hudStyle,
+  "move old right perf hud to top center",
+);
+replaceAll(
+  "position:absolute;right:8px;top:8px;z-index:31;padding:5px 8px;border-radius:999px;border:1px solid rgba(147,197,253,.55);background:rgba(15,23,42,.72);color:#bfdbfe;font:11px system-ui",
+  buttonStyle,
+  "move old right perf button to top center",
+);
+replaceAll(
+  "position:absolute;left:8px;top:42px;z-index:60;max-width:230px;padding:7px 9px;border-radius:8px;background:rgba(2,6,23,.78);color:#dbeafe;font:10px/1.32 monospace;white-space:pre;pointer-events:none;display:none",
+  hudStyle,
+  "move old left perf hud to top center",
+);
+replaceAll(
+  "position:absolute;left:8px;top:8px;z-index:61;padding:5px 8px;border-radius:999px;border:1px solid rgba(147,197,253,.55);background:rgba(15,23,42,.72);color:#bfdbfe;font:11px system-ui",
+  buttonStyle,
+  "move old left perf button to top center",
 );
 
 replace(
