@@ -59,6 +59,7 @@ export type BuildPartDefinition = {
 
 export type PlacedBuildPart = {
   id: string;
+  houseId?: string;
   partId: BuildPartId;
   ownerPlayerId: string;
   regionId: string;
