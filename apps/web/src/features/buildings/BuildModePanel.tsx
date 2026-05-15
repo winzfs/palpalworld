@@ -6,6 +6,7 @@ import {
   type BuildPartCategory,
   type BuildPartId,
   type BuildPartRotation,
+  type PlacedBuildPart,
   rotateBuildPart,
 } from "./buildPartCatalog";
 import { buildInventoryEntries } from "../inventory/inventoryUiModel";
@@ -43,18 +44,30 @@ export function BuildModePanel({
   selectedPartId,
   selectedRotation,
   selectedFloorLevel,
+  selectedPlacedPart,
+  selectedHousePartCount = 0,
   onSelectPart,
   onRotate,
   onSetFloorLevel,
+  onRotateSelectedPlacedPart,
+  onDeleteSelectedPlacedPart,
+  onClearSelection,
+  onFocusHouse,
   onClose,
 }: {
   inventory: InventoryState | null;
   selectedPartId: BuildPartId | null;
   selectedRotation: BuildPartRotation;
   selectedFloorLevel: BuildFloorLevel;
+  selectedPlacedPart?: PlacedBuildPart | null;
+  selectedHousePartCount?: number;
   onSelectPart: (partId: BuildPartId) => void;
   onRotate: (rotation: BuildPartRotation) => void;
   onSetFloorLevel: (floorLevel: BuildFloorLevel) => void;
+  onRotateSelectedPlacedPart?: () => void;
+  onDeleteSelectedPlacedPart?: () => void;
+  onClearSelection?: () => void;
+  onFocusHouse?: () => void;
   onClose: () => void;
 }) {
   const buildEntries = useMemo(() => buildInventoryEntries(inventory).filter((entry) => entry.buildPartId), [inventory]);
@@ -65,6 +78,7 @@ export function BuildModePanel({
   }, [buildEntries]);
   const availableParts = useMemo(() => Object.values(BUILD_PARTS).filter((part) => (ownedAmountByPartId.get(part.id) ?? 0) > 0), [ownedAmountByPartId]);
   const selectedPart = selectedPartId ? BUILD_PARTS[selectedPartId] : null;
+  const selectedPlacedDefinition = selectedPlacedPart ? BUILD_PARTS[selectedPlacedPart.partId] : null;
 
   return (
     <section className="build-mode-panel" aria-label="건설 모드">
@@ -88,8 +102,30 @@ export function BuildModePanel({
             </button>
           ))}
         </div>
-        <button className="build-mode-panel__rotate" onClick={() => onRotate(rotateBuildPart(selectedRotation))}>회전 {selectedRotation}°</button>
+        <button className="build-mode-panel__rotate" onClick={() => onRotate(rotateBuildPart(selectedRotation))}>새 부품 회전 {selectedRotation}°</button>
       </div>
+
+      {selectedPlacedPart && selectedPlacedDefinition ? (
+        <div className="build-mode-panel__edit-card">
+          <div className="build-mode-panel__edit-title">
+            <b>선택 부품 편집</b>
+            <span>{selectedPlacedDefinition.name}</span>
+          </div>
+          <div className="build-mode-panel__edit-meta">
+            <span>집 부품</span><b>{selectedHousePartCount}개</b>
+            <span>위치</span><b>{selectedPlacedPart.gridX}, {selectedPlacedPart.gridY}</b>
+            <span>층</span><b>{selectedPlacedPart.floorLevel + 1}층</b>
+            <span>회전</span><b>{selectedPlacedPart.rotation}°</b>
+          </div>
+          <div className="build-mode-panel__edit-actions">
+            <button onClick={onRotateSelectedPlacedPart}>회전</button>
+            <button onClick={onFocusHouse}>집 선택</button>
+            <button onClick={onClearSelection}>선택 해제</button>
+            <button className="build-mode-panel__danger" onClick={onDeleteSelectedPlacedPart}>분해</button>
+          </div>
+          <p>선택한 부품을 맵에서 드래그하면 다시 옮길 수 있습니다.</p>
+        </div>
+      ) : null}
 
       {selectedPart ? (
         <div className="build-mode-panel__selected">
