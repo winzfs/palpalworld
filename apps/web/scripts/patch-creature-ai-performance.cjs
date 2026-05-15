@@ -39,6 +39,11 @@ const creatureSpatialCellSize = 220;
 function getCreatureSpatialKey(x: number, y: number) {
   return \`\${Math.floor(x / creatureSpatialCellSize)}:\${Math.floor(y / creatureSpatialCellSize)}\`;
 }
+function hashCreatureId(id: string) {
+  let hash = 0;
+  for (let index = 0; index < id.length; index += 1) hash = ((hash << 5) - hash + id.charCodeAt(index)) | 0;
+  return Math.abs(hash);
+}
 function createCreatureSpatialIndex(creatures: CreaturePublicState[]): CreatureSpatialIndex {
   const index: CreatureSpatialIndex = new Map();
   for (const creature of creatures) {
@@ -66,7 +71,7 @@ function getNearbyCreatureCandidates(index: CreatureSpatialIndex | null, creatur
 function shouldUpdateCreatureThisFrame(creature: CreaturePublicState, playerPosition: Vector2, now: number) {
   const distance = Math.hypot(creature.position.x - playerPosition.x, creature.position.y - playerPosition.y);
   if (distance < 520) return true;
-  const phase = Math.floor(now / 66) + hashId(creature.id);
+  const phase = Math.floor(now / 66) + hashCreatureId(creature.id);
   if (distance < 980) return phase % 2 === 0;
   if (distance < 1500) return phase % 3 === 0;
   return phase % 4 === 0;
