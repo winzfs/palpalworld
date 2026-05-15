@@ -24,6 +24,18 @@ function replaceIn(which, search, replacement, label) {
   console.log(`[patch-game-perf-optimizations] patched ${which} ${label}`);
 }
 
+function replaceAllIn(which, search, replacement, label) {
+  let source = which === "scene" ? scene : client;
+  if (!source.includes(search)) {
+    console.log(`[patch-game-perf-optimizations] skipped ${which} ${label}`);
+    return;
+  }
+  source = source.split(search).join(replacement);
+  if (which === "scene") { scene = source; sceneChanged = true; }
+  else { client = source; clientChanged = true; }
+  console.log(`[patch-game-perf-optimizations] patched ${which} ${label}`);
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // GameScene optimizations
 // ─────────────────────────────────────────────────────────────────────────────
@@ -112,32 +124,44 @@ replaceIn("scene",
 
 replaceIn("client",
   "function getMountedPlayerMoveSpeed() {\n  if (typeof window === \"undefined\") return 180;\n  const mountedPetItemId = window.localStorage.getItem(mountedPetStorageKey);\n  if (!mountedPetItemId) return 180;\n  const speciesId = getSpeciesIdFromPetItemId(mountedPetItemId);\n  return getPetSpeciesDefinition(speciesId).mountSpeed ?? 260;\n}",
-  "function getMountedPlayerMoveSpeed() {\n  if (typeof window === \"undefined\") return 180;\n  const mountedPetItemId = window.localStorage.getItem(mountedPetStorageKey);\n  if (!mountedPetItemId) return 180;\n  const speciesId = getSpeciesIdFromPetItemId(mountedPetItemId);\n  return getPetSpeciesDefinition(speciesId).mountSpeed ?? 260;\n}\nlet cachedMountedPlayerMoveSpeed: number | null = null;\nfunction readCachedMountedPlayerMoveSpeed() {\n  if (cachedMountedPlayerMoveSpeed === null) cachedMountedPlayerMoveSpeed = getMountedPlayerMoveSpeed();\n  return cachedMountedPlayerMoveSpeed;\n}\nfunction invalidateMountedPlayerMoveSpeed() {\n  cachedMountedPlayerMoveSpeed = null;\n}",
+  "function getMountedPlayerMoveSpeed() {\n  if (typeof window === \"undefined\") return 180;\n  const mountedPetItemId = window.localStorage.getItem(mountedPetStorageKey);\n  if (!mountedPetItemId) return 180;\n  const speciesId = getSpeciesIdFromPetItemId(mountedPetItemId);\n  return getPetSpeciesDefinition(speciesId).mountSpeed ?? 260;\n}\nlet cachedMountedPetItemId: string | null = null;\nlet cachedMountedPlayerMoveSpeed: number | null = null;\nfunction readCachedMountedPlayerMoveSpeed() {\n  if (typeof window === \"undefined\") return 180;\n  const mountedPetItemId = window.localStorage.getItem(mountedPetStorageKey);\n  if (mountedPetItemId !== cachedMountedPetItemId || cachedMountedPlayerMoveSpeed === null) {\n    cachedMountedPetItemId = mountedPetItemId;\n    cachedMountedPlayerMoveSpeed = mountedPetItemId ? getMountedPlayerMoveSpeed() : 180;\n  }\n  return cachedMountedPlayerMoveSpeed;\n}\nfunction invalidateMountedPlayerMoveSpeed() {\n  cachedMountedPetItemId = null;\n  cachedMountedPlayerMoveSpeed = null;\n}",
   "cached mount speed helpers",
+);
+
+replaceAllIn("client",
+  "let cachedMountedPlayerMoveSpeed: number | null = null;\nfunction readCachedMountedPlayerMoveSpeed() {\n  if (cachedMountedPlayerMoveSpeed === null) cachedMountedPlayerMoveSpeed = getMountedPlayerMoveSpeed();\n  return cachedMountedPlayerMoveSpeed;\n}\nfunction invalidateMountedPlayerMoveSpeed() {\n  cachedMountedPlayerMoveSpeed = null;\n}",
+  "let cachedMountedPetItemId: string | null = null;\nlet cachedMountedPlayerMoveSpeed: number | null = null;\nfunction readCachedMountedPlayerMoveSpeed() {\n  if (typeof window === \"undefined\") return 180;\n  const mountedPetItemId = window.localStorage.getItem(mountedPetStorageKey);\n  if (mountedPetItemId !== cachedMountedPetItemId || cachedMountedPlayerMoveSpeed === null) {\n    cachedMountedPetItemId = mountedPetItemId;\n    cachedMountedPlayerMoveSpeed = mountedPetItemId ? getMountedPlayerMoveSpeed() : 180;\n  }\n  return cachedMountedPlayerMoveSpeed;\n}\nfunction invalidateMountedPlayerMoveSpeed() {\n  cachedMountedPetItemId = null;\n  cachedMountedPlayerMoveSpeed = null;\n}",
+  "upgrade cached mount speed helpers",
 );
 
 replaceIn("client",
   "  const lastDemoAttackAtRef = useRef(0);\n  const lastUiSnapshotAtRef = useRef(0);",
-  "  const cachedBuildPartsRef = useRef<PlacedBuildPart[] | null>(null);\n  const handleDemoAttackRef = useRef<(() => void) | null>(null);\n  const lastDemoAttackAtRef = useRef(0);\n  const lastUiSnapshotAtRef = useRef(0);",
+  "  const cachedBuildPartsRef = useRef<PlacedBuildPart[] | null>(null);\n  const handleDemoAttackRef = useRef<(() => void) | null>(null);\n  const lastCreatureAiAtRef = useRef(performance.now());\n  const lastDemoAttackAtRef = useRef(0);\n  const lastUiSnapshotAtRef = useRef(0);",
   "cached refs",
 );
 
 replaceIn("client",
   "  useEffect(() => {\n    const handleBuildFloorState = (event: Event) => {",
-  "  useEffect(() => {\n    cachedBuildPartsRef.current = readStoredBuildParts();\n    const handleBuildPartsChanged = (event: Event) => {\n      const customEvent = event as CustomEvent<{ parts?: PlacedBuildPart[] }>;\n      cachedBuildPartsRef.current = customEvent.detail?.parts ?? readStoredBuildParts();\n    };\n    const handleMountStorage = (event: StorageEvent) => {\n      if (event.key === \"palpalworld.demo.mountedPetItemId\") invalidateMountedPlayerMoveSpeed();\n    };\n    window.addEventListener(\"palpalworld:build-parts-changed\", handleBuildPartsChanged);\n    window.addEventListener(\"storage\", handleMountStorage);\n    return () => {\n      window.removeEventListener(\"palpalworld:build-parts-changed\", handleBuildPartsChanged);\n      window.removeEventListener(\"storage\", handleMountStorage);\n    };\n  }, []);\n  useEffect(() => {\n    const handleBuildFloorState = (event: Event) => {",
+  "  useEffect(() => {\n    cachedBuildPartsRef.current = readStoredBuildParts();\n    const handleBuildPartsChanged = (event: Event) => {\n      const customEvent = event as CustomEvent<{ parts?: PlacedBuildPart[] }>;\n      cachedBuildPartsRef.current = customEvent.detail?.parts ?? readStoredBuildParts();\n    };\n    const handleMountStorage = (event: StorageEvent) => {\n      if (event.key === mountedPetStorageKey) invalidateMountedPlayerMoveSpeed();\n    };\n    const handleMountChanged = () => invalidateMountedPlayerMoveSpeed();\n    window.addEventListener(\"palpalworld:build-parts-changed\", handleBuildPartsChanged);\n    window.addEventListener(\"palpalworld:mounted-pet-changed\", handleMountChanged);\n    window.addEventListener(\"storage\", handleMountStorage);\n    return () => {\n      window.removeEventListener(\"palpalworld:build-parts-changed\", handleBuildPartsChanged);\n      window.removeEventListener(\"palpalworld:mounted-pet-changed\", handleMountChanged);\n      window.removeEventListener(\"storage\", handleMountStorage);\n    };\n  }, []);\n  useEffect(() => {\n    const handleBuildFloorState = (event: Event) => {",
   "build-parts cache listener",
 );
 
 replaceIn("client",
   "      const playerMoveSpeed = getMountedPlayerMoveSpeed();\n      demoDirectionRef.current = directionFromMovement(normalized, demoDirectionRef.current);\n      const movementStep = { x: normalized.x * playerMoveSpeed * deltaSeconds, y: normalized.y * playerMoveSpeed * deltaSeconds };\n      const buildParts = getBuildPartsForTile(readStoredBuildParts(), demoTileRef.current);",
   "      const playerMoveSpeed = readCachedMountedPlayerMoveSpeed();\n      demoDirectionRef.current = directionFromMovement(normalized, demoDirectionRef.current);\n      const movementStep = { x: normalized.x * playerMoveSpeed * deltaSeconds, y: normalized.y * playerMoveSpeed * deltaSeconds };\n      const __sourceParts = cachedBuildPartsRef.current ?? readStoredBuildParts();\n      const buildParts = getBuildPartsForTile(__sourceParts, demoTileRef.current);",
-  "movement tick perf",
+  "movement tick perf with collision",
+);
+
+replaceIn("client",
+  "      const playerMoveSpeed = getMountedPlayerMoveSpeed();\n      demoDirectionRef.current = directionFromMovement(normalized, demoDirectionRef.current);\n      const next = clampPositionToTile({ x: demoPositionRef.current.x + normalized.x * playerMoveSpeed * deltaSeconds, y: demoPositionRef.current.y + normalized.y * playerMoveSpeed * deltaSeconds });",
+  "      const playerMoveSpeed = readCachedMountedPlayerMoveSpeed();\n      demoDirectionRef.current = directionFromMovement(normalized, demoDirectionRef.current);\n      const next = clampPositionToTile({ x: demoPositionRef.current.x + normalized.x * playerMoveSpeed * deltaSeconds, y: demoPositionRef.current.y + normalized.y * playerMoveSpeed * deltaSeconds });",
+  "movement tick mount speed",
 );
 
 replaceIn("client",
   "      demoPositionRef.current.x = next.x;\n      demoPositionRef.current.y = next.y;\n      moveDemoCreatures(getCurrentCreatures(), deltaSeconds, now, demoPositionRef.current);\n      applyDemoSnapshot(false);\n      lastTick = now;",
-  "      demoPositionRef.current.x = next.x;\n      demoPositionRef.current.y = next.y;\n      moveDemoCreatures(getCurrentCreatures(), deltaSeconds, now, demoPositionRef.current);\n      if (input.primary) handleDemoAttackRef.current?.();\n      applyDemoSnapshot(false);\n      lastTick = now;",
-  "merge attack into main tick",
+  "      demoPositionRef.current.x = next.x;\n      demoPositionRef.current.y = next.y;\n      if (now - lastCreatureAiAtRef.current >= 80) {\n        const creatureDeltaSeconds = Math.min(0.16, (now - lastCreatureAiAtRef.current) / 1000);\n        moveDemoCreatures(getCurrentCreatures(), creatureDeltaSeconds, now, demoPositionRef.current);\n        lastCreatureAiAtRef.current = now;\n      }\n      if (input.primary) handleDemoAttackRef.current?.();\n      applyDemoSnapshot(false);\n      lastTick = now;",
+  "throttle creature AI and merge attack",
 );
 
 replaceIn("client",
