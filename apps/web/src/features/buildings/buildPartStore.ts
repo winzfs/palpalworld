@@ -237,3 +237,11 @@ export function removeBuildPart(partId: string) {
   syncDelete(partId);
   return writeStoredBuildParts(current.filter((part) => part.id !== partId));
 }
+
+export function removeBuildParts(partIds: Iterable<string>) {
+  const idsToRemove = new Set(partIds);
+  if (idsToRemove.size <= 0) return readStoredBuildParts();
+  const current = readStoredBuildParts();
+  for (const id of idsToRemove) syncDelete(id);
+  return writeStoredBuildParts(current.filter((part) => !idsToRemove.has(part.id)));
+}

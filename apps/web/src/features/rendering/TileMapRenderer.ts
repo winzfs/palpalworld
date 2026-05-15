@@ -3,11 +3,8 @@ import { getTileSet } from "../assets/assetCatalog";
 import { AssetLoader } from "../assets/AssetLoader";
 
 const tileSize = 32;
-
-type TileSample = {
-  tileId: TerrainTileId;
-  variantSeed: number;
-};
+const cacheBufferTiles = 8;
+const rerenderThresholdTiles = 4;
 
 function hashTile(x: number, y: number) {
   let value = x * 374761393 + y * 668265263;
@@ -15,33 +12,40 @@ function hashTile(x: number, y: number) {
   return (value ^ (value >> 16)) >>> 0;
 }
 
-function sampleTile(worldTileX: number, worldTileY: number): TileSample {
-  const noise = hashTile(worldTileX, worldTileY);
+function sampleTileId(worldTileX: number, worldTileY: number): TerrainTileId {
   const riverCenter = Math.sin(worldTileY * 0.11) * 9 + Math.cos(worldTileY * 0.035) * 5;
   const riverDistance = Math.abs(worldTileX - riverCenter);
 
-  if (riverDistance < 2.2) return { tileId: "water", variantSeed: noise };
-  if (riverDistance < 3.2) return { tileId: "dirt", variantSeed: noise };
+  if (riverDistance < 2.2) return "water";
+  if (riverDistance < 3.2) return "dirt";
 
   const dirtPath = Math.abs(worldTileY - Math.sin(worldTileX * 0.12) * 6 - 7);
-  if (dirtPath < 1.2 && worldTileX > -18 && worldTileX < 42) return { tileId: "dirt", variantSeed: noise };
+  if (dirtPath < 1.2 && worldTileX > -18 && worldTileX < 42) return "dirt";
 
-  const roll = noise % 100;
-  if (roll < 8) return { tileId: "grass_dark", variantSeed: noise };
-  if (roll < 15) return { tileId: "grass_light", variantSeed: noise };
-  if (roll < 20) return { tileId: "flower", variantSeed: noise };
-  return { tileId: "grass", variantSeed: noise };
+  const roll = hashTile(worldTileX, worldTileY) % 100;
+  if (roll < 8) return "grass_dark";
+  if (roll < 15) return "grass_light";
+  if (roll < 20) return "flower";
+  return "grass";
 }
 
 function drawTileFromSet(ctx: CanvasRenderingContext2D, image: HTMLImageElement, tileset: TileSetAsset, tileId: TerrainTileId, x: number, y: number) {
   const tileIndex = tileset.tileIds[tileId] ?? 0;
   const sx = (tileIndex % tileset.columns) * tileset.tileWidth;
   const sy = Math.floor(tileIndex / tileset.columns) * tileset.tileHeight;
-  ctx.drawImage(image, sx, sy, tileset.tileWidth, tileset.tileHeight, Math.floor(x), Math.floor(y), tileSize, tileSize);
+  ctx.drawImage(image, sx, sy, tileset.tileWidth, tileset.tileHeight, x, y, tileSize, tileSize);
 }
 
 export class TileMapRenderer {
   private readonly loader = new AssetLoader();
+  private cacheCanvas: HTMLCanvasElement | null = null;
+  private cacheCtx: CanvasRenderingContext2D | null = null;
+  private cacheTileOriginX = 0;
+  private cacheTileOriginY = 0;
+  private cacheTileWidth = 0;
+  private cacheTileHeight = 0;
+  private cacheTilesetVersion: TileSetAsset | null = null;
+  private cacheImage: HTMLImageElement | null = null;
 
   draw(ctx: CanvasRenderingContext2D, width: number, height: number, cameraX: number, cameraY: number) {
     const tileset = getTileSet("meadow");
@@ -52,21 +56,69 @@ export class TileMapRenderer {
       return;
     }
 
-    const startTileX = Math.floor(cameraX / tileSize) - 1;
-    const startTileY = Math.floor(cameraY / tileSize) - 1;
-    const endTileX = Math.floor((cameraX + width) / tileSize) + 1;
-    const endTileY = Math.floor((cameraY + height) / tileSize) + 1;
+    const viewTileX = Math.floor(cameraX / tileSize) - 1;
+    const viewTileY = Math.floor(cameraY / tileSize) - 1;
+    const viewTileWidth = Math.ceil(width / tileSize) + 3;
+    const viewTileHeight = Math.ceil(height / tileSize) + 3;
 
-    for (let tileY = startTileY; tileY <= endTileY; tileY += 1) {
-      for (let tileX = startTileX; tileX <= endTileX; tileX += 1) {
-        const screenX = tileX * tileSize - cameraX;
-        const screenY = tileY * tileSize - cameraY;
-        const sample = sampleTile(tileX, tileY);
-        drawTileFromSet(ctx, image, tileset, sample.tileId, screenX, screenY);
-      }
+    const needRebuild = !this.cacheCanvas
+      || this.cacheTilesetVersion !== tileset
+      || this.cacheImage !== image
+      || this.cacheTileWidth < viewTileWidth + cacheBufferTiles
+      || this.cacheTileHeight < viewTileHeight + cacheBufferTiles
+      || viewTileX < this.cacheTileOriginX + rerenderThresholdTiles
+      || viewTileY < this.cacheTileOriginY + rerenderThresholdTiles
+      || viewTileX + viewTileWidth > this.cacheTileOriginX + this.cacheTileWidth - rerenderThresholdTiles
+      || viewTileY + viewTileHeight > this.cacheTileOriginY + this.cacheTileHeight - rerenderThresholdTiles;
+
+    if (needRebuild) {
+      this.rebuildCache(tileset, image, viewTileX, viewTileY, viewTileWidth, viewTileHeight);
+    }
+
+    if (this.cacheCanvas) {
+      const offsetX = this.cacheTileOriginX * tileSize - cameraX;
+      const offsetY = this.cacheTileOriginY * tileSize - cameraY;
+      ctx.drawImage(this.cacheCanvas, Math.floor(offsetX), Math.floor(offsetY));
     }
 
     this.drawSoftVignette(ctx, width, height);
+  }
+
+  private rebuildCache(tileset: TileSetAsset, image: HTMLImageElement, viewTileX: number, viewTileY: number, viewTileWidth: number, viewTileHeight: number) {
+    const tileWidth = viewTileWidth + cacheBufferTiles * 2;
+    const tileHeight = viewTileHeight + cacheBufferTiles * 2;
+    const originX = viewTileX - cacheBufferTiles;
+    const originY = viewTileY - cacheBufferTiles;
+
+    if (!this.cacheCanvas || this.cacheTileWidth !== tileWidth || this.cacheTileHeight !== tileHeight) {
+      const canvas = this.cacheCanvas ?? document.createElement("canvas");
+      canvas.width = tileWidth * tileSize;
+      canvas.height = tileHeight * tileSize;
+      const cacheCtx = canvas.getContext("2d");
+      if (!cacheCtx) return;
+      cacheCtx.imageSmoothingEnabled = false;
+      this.cacheCanvas = canvas;
+      this.cacheCtx = cacheCtx;
+    }
+
+    const cacheCtx = this.cacheCtx;
+    if (!cacheCtx) return;
+    cacheCtx.clearRect(0, 0, tileWidth * tileSize, tileHeight * tileSize);
+    for (let row = 0; row < tileHeight; row += 1) {
+      for (let col = 0; col < tileWidth; col += 1) {
+        const worldTileX = originX + col;
+        const worldTileY = originY + row;
+        const tileId = sampleTileId(worldTileX, worldTileY);
+        drawTileFromSet(cacheCtx, image, tileset, tileId, col * tileSize, row * tileSize);
+      }
+    }
+
+    this.cacheTileOriginX = originX;
+    this.cacheTileOriginY = originY;
+    this.cacheTileWidth = tileWidth;
+    this.cacheTileHeight = tileHeight;
+    this.cacheTilesetVersion = tileset;
+    this.cacheImage = image;
   }
 
   private drawFallback(ctx: CanvasRenderingContext2D, width: number, height: number, cameraX: number, cameraY: number) {
