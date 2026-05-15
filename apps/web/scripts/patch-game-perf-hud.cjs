@@ -81,12 +81,12 @@ replace(
     const fps = this.perfFrameMs > 0 ? Math.round(1000 / this.perfFrameMs) : 0;
     const buildTotal = this.perfBuildBaseMs + this.perfBuildForegroundMs;
     this.perfHudEl.textContent = [
-      `FPS ${fps}  frame ${this.perfFrameMs.toFixed(1)}ms`,
-      `draw ${this.perfDrawMs.toFixed(1)}ms`,
-      `build total ${buildTotal.toFixed(1)}ms`,
-      `base ${this.perfBuildBaseMs.toFixed(1)}ms / ${this.perfBuildBaseCount}`,
-      `front ${this.perfBuildForegroundMs.toFixed(1)}ms / ${this.perfBuildForegroundCount}`,
-      `parts ${(this as any).placedBuildParts?.length ?? 0}`,
+      "FPS " + fps + "  frame " + this.perfFrameMs.toFixed(1) + "ms",
+      "draw " + this.perfDrawMs.toFixed(1) + "ms",
+      "build total " + buildTotal.toFixed(1) + "ms",
+      "base " + this.perfBuildBaseMs.toFixed(1) + "ms / " + this.perfBuildBaseCount,
+      "front " + this.perfBuildForegroundMs.toFixed(1) + "ms / " + this.perfBuildForegroundCount,
+      "parts " + (((this as any).placedBuildParts?.length) ?? 0),
     ].join("\\n");
   }
 
