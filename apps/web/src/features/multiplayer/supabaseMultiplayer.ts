@@ -26,6 +26,8 @@ const defaultSupabaseUrl = "https://bbpqhwexbdozkxsfoyrn.supabase.co";
 const defaultSupabasePublishableKey = "sb_publishable_gZu3HGdokX2wQsvnaS6SaA__xjvRrn4";
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? defaultSupabaseUrl;
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? defaultSupabasePublishableKey;
+const sessionPlayerIdKey = "palpalworld.multiplayer.sessionPlayerId";
+const legacyPlayerIdKey = "palpalworld.multiplayer.playerId";
 
 let cachedClient: SupabaseClient | null = null;
 
@@ -39,14 +41,27 @@ export function getSupabaseClient() {
   return cachedClient;
 }
 
+function createPlayerId() {
+  return crypto.randomUUID ? crypto.randomUUID() : `player-${Date.now()}-${Math.floor(Math.random() * 1_000_000)}`;
+}
+
 export function getOrCreateMultiplayerPlayerId() {
   if (typeof window === "undefined") return "server-player";
-  const key = "palpalworld.multiplayer.playerId";
-  const existing = window.localStorage.getItem(key);
-  if (existing) return existing;
-  const next = crypto.randomUUID ? crypto.randomUUID() : `player-${Date.now()}-${Math.floor(Math.random() * 1_000_000)}`;
-  window.localStorage.setItem(key, next);
+
+  const existingSessionId = window.sessionStorage.getItem(sessionPlayerIdKey);
+  if (existingSessionId) return existingSessionId;
+
+  const next = createPlayerId();
+  window.sessionStorage.setItem(sessionPlayerIdKey, next);
+  window.localStorage.setItem(legacyPlayerIdKey, next);
   return next;
+}
+
+export function getCurrentMultiplayerPlayerId() {
+  if (typeof window === "undefined") return "unknown";
+  return window.sessionStorage.getItem(sessionPlayerIdKey)
+    ?? window.localStorage.getItem(legacyPlayerIdKey)
+    ?? "unknown";
 }
 
 export function rowToPlayer(row: WorldPlayerPresenceRow): PlayerPublicState {
@@ -76,7 +91,7 @@ export async function upsertLocalPresence(client: SupabaseClient, payload: Local
 }
 
 export async function fetchOnlinePlayers(client: SupabaseClient, localPlayerId: string) {
-  const since = new Date(Date.now() - 15_000).toISOString();
+  const since = new Date(Date.now() - 60_000).toISOString();
   const { data, error } = await client
     .from("world_players")
     .select("player_id,nickname,x,y,direction,region_id,tile_x,tile_y,updated_at")
