@@ -73,7 +73,7 @@ function getCreatureMoveSpeed(speciesId: string) {
   if (speciesId === "rockturtle") return 14;
   return 26;
 }
-function clampCreaturePosition(position: Vector2): Vector2 { return { x: Math.max(140, Math.min(2860, position.x)), y: Math.max(140, Math.min(2860, position.y)) }; }
+function clampCreaturePosition(position: Vector2): Vector2 { return { x: Math.max(120, Math.min(2880, position.x)), y: Math.max(120, Math.min(2880, position.y)) }; }
 function clampHudButtonPosition(position: { x: number; y: number }) {
   if (typeof window === "undefined") return position;
   return { x: Math.max(4, Math.min(window.innerWidth - 48, position.x)), y: Math.max(4, Math.min(window.innerHeight - 48, position.y)) };
@@ -88,24 +88,47 @@ function getMountedPlayerMoveSpeed() {
 }
 function createWanderTarget(creature: CreaturePublicState, now: number): CreatureWanderTarget {
   const seed = hashId(creature.id);
-  const bucket = Math.floor(now / (4700 + (seed % 2800)));
-  const mixedA = (seed * 48271 + bucket * 69621 + creature.level * 97) % 100_000;
-  const mixedB = (seed * 69691 + bucket * 48299 + creature.level * 131) % 100_000;
+  const retargetIndex = Math.floor(now / (5200 + (seed % 3600)));
+  const sectorIndex = (seed + retargetIndex * 5 + creature.level * 3) % 9;
+  const sectorX = sectorIndex % 3;
+  const sectorY = Math.floor(sectorIndex / 3);
+  const sectorMinX = 130 + sectorX * 920;
+  const sectorMinY = 130 + sectorY * 920;
+  const mixedA = (seed * 48271 + retargetIndex * 179 + creature.level * 97) % 100_000;
+  const mixedB = (seed * 69691 + retargetIndex * 233 + creature.level * 131) % 100_000;
   return {
-    x: 180 + (mixedA % 2640),
-    y: 180 + (mixedB % 2640),
-    nextRetargetAt: now + 3600 + (seed % 5200),
+    x: Math.max(120, Math.min(2880, sectorMinX + (mixedA % 820))),
+    y: Math.max(120, Math.min(2880, sectorMinY + (mixedB % 820))),
+    nextRetargetAt: now + 5200 + (seed % 6400),
   };
 }
 function getWanderTarget(creature: CreaturePublicState, now: number): CreatureWanderTarget {
   const current = creatureWanderTargets.get(creature.id);
   const distanceToTarget = current ? Math.hypot(current.x - creature.position.x, current.y - creature.position.y) : Number.POSITIVE_INFINITY;
-  if (!current || now >= current.nextRetargetAt || distanceToTarget < 48) {
+  if (!current || now >= current.nextRetargetAt || distanceToTarget < 52) {
     const next = createWanderTarget(creature, now);
     creatureWanderTargets.set(creature.id, next);
     return next;
   }
   return current;
+}
+function getSeparationVector(creature: CreaturePublicState, creatures: CreaturePublicState[]) {
+  let pushX = 0;
+  let pushY = 0;
+  let count = 0;
+  for (const other of creatures) {
+    if (other.id === creature.id || other.hp <= 0) continue;
+    const dx = creature.position.x - other.position.x;
+    const dy = creature.position.y - other.position.y;
+    const distance = Math.hypot(dx, dy);
+    if (distance <= 0 || distance > 135) continue;
+    const strength = (135 - distance) / 135;
+    pushX += (dx / distance) * strength;
+    pushY += (dy / distance) * strength;
+    count += 1;
+    if (count >= 5) break;
+  }
+  return count > 0 ? { x: pushX / count, y: pushY / count } : { x: 0, y: 0 };
 }
 function moveDemoCreatures(creatures: CreaturePublicState[], deltaSeconds: number, now: number, playerPosition: Vector2) {
   for (const creature of creatures) {
@@ -115,22 +138,29 @@ function moveDemoCreatures(creatures: CreaturePublicState[], deltaSeconds: numbe
     const isFlying = creature.speciesId === "breezewing" || creature.traitIds.includes("flying");
     const dxToTarget = target.x - creature.position.x;
     const dyToTarget = target.y - creature.position.y;
-    let angle = Math.atan2(dyToTarget, dxToTarget);
-    let speedMultiplier = isFlying ? 1.12 : 0.86;
+    let moveX = dxToTarget;
+    let moveY = dyToTarget;
+    const separation = getSeparationVector(creature, creatures);
+    moveX += separation.x * (isFlying ? 520 : 380);
+    moveY += separation.y * (isFlying ? 520 : 380);
     const dxFromPlayer = creature.position.x - playerPosition.x;
     const dyFromPlayer = creature.position.y - playerPosition.y;
     const playerDistance = Math.hypot(dxFromPlayer, dyFromPlayer);
     if (playerDistance > 0 && playerDistance < 150) {
-      angle = Math.atan2(dyFromPlayer, dxFromPlayer);
-      speedMultiplier = isFlying ? 1.35 : 1.05;
+      const fleeStrength = (150 - playerDistance) / 150;
+      moveX += (dxFromPlayer / playerDistance) * 620 * fleeStrength;
+      moveY += (dyFromPlayer / playerDistance) * 620 * fleeStrength;
     }
-    const drift = isFlying ? Math.sin(now / 480 + hashId(creature.id)) * 0.28 : Math.sin(now / 900 + hashId(creature.id)) * 0.12;
+    const moveLength = Math.hypot(moveX, moveY) || 1;
+    const drift = isFlying ? Math.sin(now / 620 + hashId(creature.id)) * 0.18 : Math.sin(now / 1100 + hashId(creature.id)) * 0.08;
+    const baseAngle = Math.atan2(moveY, moveX) + drift;
+    const speedMultiplier = isFlying ? 1.16 : 0.92;
     const next = clampCreaturePosition(clampPositionToTile({
-      x: creature.position.x + Math.cos(angle + drift) * speed * speedMultiplier * deltaSeconds,
-      y: creature.position.y + Math.sin(angle + drift) * speed * speedMultiplier * deltaSeconds,
+      x: creature.position.x + Math.cos(baseAngle) * speed * speedMultiplier * deltaSeconds,
+      y: creature.position.y + Math.sin(baseAngle) * speed * speedMultiplier * deltaSeconds,
     }));
-    const touchedEdge = next.x <= 145 || next.x >= 2855 || next.y <= 145 || next.y >= 2855;
-    if (touchedEdge) creatureWanderTargets.set(creature.id, createWanderTarget(creature, now + 9999));
+    const touchedEdge = next.x <= 124 || next.x >= 2876 || next.y <= 124 || next.y >= 2876;
+    if (touchedEdge) creatureWanderTargets.set(creature.id, createWanderTarget(creature, now + 7777));
     creature.position.x = next.x;
     creature.position.y = next.y;
   }
