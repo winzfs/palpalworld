@@ -58,7 +58,7 @@ replaceSceneRegex(
       sourceParts.length,
       this.selectedHouseId ?? "none",
       this.selectedBuildFloorLevel,
-      sourceParts.map((part) => `${part.id}:${part.partId}:${part.gridX}:${part.gridY}:${part.floorLevel}:${part.rotation}:${part.houseId ?? ""}`).join("|"),
+      sourceParts.map((part) => \`\${part.id}:\${part.partId}:\${part.gridX}:\${part.gridY}:\${part.floorLevel}:\${part.rotation}:\${part.houseId ?? ""}\`).join("|"),
     ].join("#");
 
     if (!cacheOwner.__buildPartLayerCanvas || cacheOwner.__buildPartLayerCanvas.width !== layerWidth || cacheOwner.__buildPartLayerCanvas.height !== layerHeight) {
