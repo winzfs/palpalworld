@@ -29,7 +29,6 @@ replaceRegex(
     // WorldSnapshot, AI simulation, combat targeting, and minimap data. When the
     // player walks to that location, it renders normally again.
     const renderPadding = creatures.length > 80 ? 64 : 96;
-    const localPlayer = this.getLocalPlayerPosition();
     for (const creature of creatures) {
       if (creature.hp <= 0) continue;
       if (!isPositionInViewport(creature.position, viewport, renderPadding)) continue;
@@ -38,11 +37,7 @@ replaceRegex(
       const y = creature.position.y - cameraY;
       this.renderer.drawCreature(ctx, creature, x, y);
 
-      // Extra effects are only drawn when relevant. This keeps far/edge creatures
-      // cheap while preserving visible combat feedback.
       if (creature.id === this.highlightedCreatureId) {
-        const nearPlayer = !localPlayer || Math.hypot(creature.position.x - localPlayer.x, creature.position.y - localPlayer.y) <= 720;
-        if (!nearPlayer) continue;
         ctx.save();
         ctx.strokeStyle = "rgba(250, 204, 21, 0.96)";
         ctx.lineWidth = 3;
@@ -55,7 +50,7 @@ replaceRegex(
     }
   }
   private drawPlayers(`,
-  "creature render culling",
+  "safe creature render culling",
 );
 
 if (changed) fs.writeFileSync(scenePath, source);
