@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useRef, useState, type PointerEvent } from "react";
 import type { InventoryState } from "@palpalworld/shared";
 import {
   BUILD_PARTS,
@@ -12,6 +12,7 @@ import {
 import { buildInventoryEntries } from "../inventory/inventoryUiModel";
 
 const categoryOrder: BuildPartCategory[] = ["floor", "wall", "door", "window", "stairs", "roof", "decor", "utility", "furniture"];
+const buildPanelPositionStorageKey = "palpalworld.ui.buildModePanelPosition";
 const categoryLabels: Record<BuildPartCategory, string> = {
   floor: "기초/바닥",
   wall: "벽/난간",
@@ -23,6 +24,50 @@ const categoryLabels: Record<BuildPartCategory, string> = {
   utility: "설비",
   decor: "장식",
 };
+
+type PanelPosition = { x: number; y: number };
+
+type DragState = {
+  pointerId: number;
+  startClientX: number;
+  startClientY: number;
+  startX: number;
+  startY: number;
+};
+
+function getDefaultPanelPosition(): PanelPosition {
+  if (typeof window === "undefined") return { x: 72, y: 96 };
+  if (window.innerWidth <= 720) return { x: 8, y: Math.max(76, window.innerHeight - 520) };
+  return { x: 72, y: 96 };
+}
+
+function clampPanelPosition(position: PanelPosition): PanelPosition {
+  if (typeof window === "undefined") return position;
+  const maxX = Math.max(8, window.innerWidth - 96);
+  const maxY = Math.max(8, window.innerHeight - 96);
+  return {
+    x: Math.max(8, Math.min(maxX, position.x)),
+    y: Math.max(8, Math.min(maxY, position.y)),
+  };
+}
+
+function readPanelPosition(): PanelPosition {
+  if (typeof window === "undefined") return getDefaultPanelPosition();
+  try {
+    const raw = window.localStorage.getItem(buildPanelPositionStorageKey);
+    if (!raw) return getDefaultPanelPosition();
+    const parsed = JSON.parse(raw) as Partial<PanelPosition>;
+    if (typeof parsed.x !== "number" || typeof parsed.y !== "number") return getDefaultPanelPosition();
+    return clampPanelPosition({ x: parsed.x, y: parsed.y });
+  } catch {
+    return getDefaultPanelPosition();
+  }
+}
+
+function writePanelPosition(position: PanelPosition) {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(buildPanelPositionStorageKey, JSON.stringify(clampPanelPosition(position)));
+}
 
 function getPartIcon(category: BuildPartCategory) {
   switch (category) {
@@ -70,6 +115,8 @@ export function BuildModePanel({
   onFocusHouse?: () => void;
   onClose: () => void;
 }) {
+  const [panelPosition, setPanelPosition] = useState<PanelPosition>(() => readPanelPosition());
+  const dragStateRef = useRef<DragState | null>(null);
   const buildEntries = useMemo(() => buildInventoryEntries(inventory).filter((entry) => entry.buildPartId), [inventory]);
   const ownedAmountByPartId = useMemo(() => {
     const amounts = new Map<string, number>();
@@ -80,13 +127,61 @@ export function BuildModePanel({
   const selectedPart = selectedPartId ? BUILD_PARTS[selectedPartId] : null;
   const selectedPlacedDefinition = selectedPlacedPart ? BUILD_PARTS[selectedPlacedPart.partId] : null;
 
+  const handlePanelDragStart = (event: PointerEvent<HTMLElement>) => {
+    const target = event.target as HTMLElement | null;
+    if (target?.closest("button,input,select,textarea")) return;
+    event.currentTarget.setPointerCapture(event.pointerId);
+    dragStateRef.current = {
+      pointerId: event.pointerId,
+      startClientX: event.clientX,
+      startClientY: event.clientY,
+      startX: panelPosition.x,
+      startY: panelPosition.y,
+    };
+  };
+
+  const handlePanelDragMove = (event: PointerEvent<HTMLElement>) => {
+    const dragState = dragStateRef.current;
+    if (!dragState || dragState.pointerId !== event.pointerId) return;
+    const nextPosition = clampPanelPosition({
+      x: dragState.startX + event.clientX - dragState.startClientX,
+      y: dragState.startY + event.clientY - dragState.startClientY,
+    });
+    setPanelPosition(nextPosition);
+  };
+
+  const handlePanelDragEnd = (event: PointerEvent<HTMLElement>) => {
+    const dragState = dragStateRef.current;
+    if (!dragState || dragState.pointerId !== event.pointerId) return;
+    dragStateRef.current = null;
+    writePanelPosition(panelPosition);
+    event.currentTarget.releasePointerCapture(event.pointerId);
+  };
+
+  const resetPanelPosition = () => {
+    const nextPosition = getDefaultPanelPosition();
+    setPanelPosition(nextPosition);
+    writePanelPosition(nextPosition);
+  };
+
   return (
-    <section className="build-mode-panel" aria-label="건설 모드">
-      <header className="build-mode-panel__header">
+    <section
+      className="build-mode-panel"
+      aria-label="건설 모드"
+      style={{ left: panelPosition.x, top: panelPosition.y }}
+    >
+      <header
+        className="build-mode-panel__header build-mode-panel__header--draggable"
+        onPointerDown={handlePanelDragStart}
+        onPointerMove={handlePanelDragMove}
+        onPointerUp={handlePanelDragEnd}
+        onPointerCancel={handlePanelDragEnd}
+      >
         <div>
           <strong>건설 모드</strong>
-          <span>부품 선택 → 맵에 드래그/클릭 설치</span>
+          <span>헤더 드래그로 패널 이동 · 부품 선택 → 맵에 드래그/클릭 설치</span>
         </div>
+        <button onClick={resetPanelPosition} aria-label="건설 패널 위치 초기화">↺</button>
         <button onClick={onClose} aria-label="건설 모드 닫기">×</button>
       </header>
 
