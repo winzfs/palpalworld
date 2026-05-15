@@ -182,6 +182,7 @@ export function createPlacedBuildPart({
     gridY,
     floorLevel,
     rotation,
+    isOpen: definition.category === "door" ? false : undefined,
     hp: definition.maxHp,
     maxHp: definition.maxHp,
     createdAt: now,
@@ -226,6 +227,21 @@ export function rotatePlacedBuildPart(partId: string, rotation: BuildPartRotatio
   const next = current.map((part) => {
     if (part.id !== partId) return part;
     updatedPart = { ...part, rotation, updatedAt: now };
+    return updatedPart;
+  });
+  if (updatedPart) syncUpsert(updatedPart);
+  return writeStoredBuildParts(next);
+}
+
+export function toggleBuildDoorOpen(partId: string) {
+  const current = readStoredBuildParts();
+  const now = Date.now();
+  let updatedPart: PlacedBuildPart | null = null;
+  const next = current.map((part) => {
+    if (part.id !== partId) return part;
+    const definition = BUILD_PARTS[part.partId];
+    if (definition?.category !== "door") return part;
+    updatedPart = { ...part, isOpen: !part.isOpen, updatedAt: now };
     return updatedPart;
   });
   if (updatedPart) syncUpsert(updatedPart);
