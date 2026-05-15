@@ -12,10 +12,12 @@ import {
   upsertLocalPresence,
 } from "./supabaseMultiplayer";
 import {
+  dispatchRemoteBuildingState,
   fetchWorldBuildings,
   markWorldBuildingDeleted,
   subscribeWorldBuildings,
   upsertWorldBuilding,
+  type SharedBuildingState,
 } from "./supabaseWorldBuildings";
 import {
   dispatchRemoteCreatureState,
@@ -126,16 +128,6 @@ function shouldShareBuilding(building: BuildingState) {
   return building.id.startsWith("demo-building-");
 }
 
-function getSharedBuildingIcon(type: string) {
-  if (type === "storage_box") return "📦";
-  if (type === "workbench") return "🛠";
-  if (type === "campfire") return "🔥";
-  if (type === "base_core") return "🏠";
-  if (type === "farm_plot") return "🌱";
-  if (type === "cold_storage") return "🧊";
-  return "🏗";
-}
-
 function appendChatMessage(current: WorldChatMessageRow[], message: WorldChatMessageRow) {
   const withoutDuplicate = current.filter((existing) => {
     if (existing.message_id === message.message_id) return false;
@@ -187,7 +179,6 @@ export function MultiplayerOverlay() {
   const [playerId] = useState(() => getOrCreateMultiplayerPlayerId());
   const [camera, setCamera] = useState<CameraState | null>(null);
   const [onlinePlayers, setOnlinePlayers] = useState<PlayerPublicState[]>([]);
-  const [worldBuildings, setWorldBuildings] = useState<BuildingState[]>([]);
   const [chatMessages, setChatMessages] = useState<WorldChatMessageRow[]>([]);
   const [chatInput, setChatInput] = useState("");
   const [chatCollapsed, setChatCollapsed] = useState(readStoredChatCollapsed);
@@ -215,8 +206,12 @@ export function MultiplayerOverlay() {
 
   const refreshBuildings = useCallback(async () => {
     if (!client) return;
-    setWorldBuildings(await fetchWorldBuildings(client, latestTileRef.current));
-  }, [client]);
+    const buildings = await fetchWorldBuildings(client, latestTileRef.current);
+    const remoteBuildings = buildings
+      .filter((building) => building.ownerPlayerId !== playerId)
+      .map((building) => ({ ...building, isRemoteSharedBuilding: true }) as SharedBuildingState);
+    dispatchRemoteBuildingState(remoteBuildings);
+  }, [client, playerId]);
 
   const refreshCreatures = useCallback(async () => {
     if (!client) return;
@@ -431,7 +426,7 @@ export function MultiplayerOverlay() {
           localBuildingIdsRef.current.add(building.id);
           if (publishedBuildingIdsRef.current.has(building.id)) continue;
           publishedBuildingIdsRef.current.add(building.id);
-          void upsertWorldBuilding(client, building);
+          void upsertWorldBuilding(client, { ...building, ownerPlayerId: playerId, ownerNickname: localPlayer.nickname }, localPlayer.nickname);
         }
       }
     };
@@ -442,17 +437,17 @@ export function MultiplayerOverlay() {
     window.addEventListener("palpalworld:world_snapshot", handleSnapshot);
     window.addEventListener("resize", handleResize);
     return () => { window.removeEventListener("palpalworld:world_snapshot", handleSnapshot); window.removeEventListener("resize", handleResize); };
-  }, [client, enabled, refreshBuildings, refreshChat, refreshCreatures, refreshResources]);
+  }, [client, enabled, playerId, refreshBuildings, refreshChat, refreshCreatures, refreshResources]);
 
   useEffect(() => {
     if (!client || !enabled) return;
     const handleDismantled = (event: Event) => {
       const customEvent = event as BuildingDismantledEvent;
       const buildingId = customEvent.detail?.buildingId;
-      if (!buildingId) return;
+      const building = customEvent.detail?.building as SharedBuildingState | undefined;
+      if (!buildingId || building?.isRemoteSharedBuilding) return;
       localBuildingIdsRef.current.delete(buildingId);
       publishedBuildingIdsRef.current.delete(buildingId);
-      setWorldBuildings((current) => current.filter((building) => building.id !== buildingId));
       void markWorldBuildingDeleted(client, buildingId).then(refreshBuildings);
     };
     window.addEventListener("palpalworld:building-dismantled", handleDismantled);
@@ -464,15 +459,6 @@ export function MultiplayerOverlay() {
     return onlinePlayers.filter((player) => isSameTile(player.currentTile as MapTileRef, camera.currentTile));
   }, [camera, onlinePlayers]);
 
-  const visibleSharedBuildings = useMemo(() => {
-    if (!camera) return [];
-    return worldBuildings.filter((building) => {
-      if (localBuildingIdsRef.current.has(building.id)) return false;
-      const tile = (building as { currentTile?: MapTileRef }).currentTile;
-      return isSameTile(tile, camera.currentTile);
-    });
-  }, [camera, worldBuildings]);
-
   const bubbleMessages = useMemo(() => chatMessages.filter(isFreshMessage).slice(-8), [chatMessages]);
   const latestChatMessage = chatMessages[chatMessages.length - 1];
 
@@ -481,12 +467,6 @@ export function MultiplayerOverlay() {
   return (
     <div className="multiplayer-overlay" aria-label="멀티플레이어 오버레이">
       <div className="multiplayer-status">{status}</div>
-      {visibleSharedBuildings.map((building) => {
-        const left = building.position.x - camera.cameraX;
-        const top = building.position.y - camera.cameraY;
-        if (left < -100 || left > camera.width + 100 || top < -120 || top > camera.height + 100) return null;
-        return <div key={building.id} className="multiplayer-building" style={{ left, top }}><div className="multiplayer-building__sprite">{getSharedBuildingIcon(String(building.type))}</div><div className="multiplayer-building__label">공유 건물</div></div>;
-      })}
       {bubbleMessages.map((message) => {
         const left = message.x - camera.cameraX;
         const top = message.y - camera.cameraY;
