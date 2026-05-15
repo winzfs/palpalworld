@@ -222,93 +222,205 @@
 
 .multiplayer-player {
   position: absolute;
-  width: 56px;
-  height: 72px;
+  width: 64px;
+  height: 82px;
   transform: translate(-50%, -82%);
   display: grid;
   place-items: center;
   filter: drop-shadow(0 8px 10px rgb(0 0 0 / 0.35));
-}
-
-.multiplayer-player::after {
-  content: "";
-  position: absolute;
-  left: 50%;
-  top: 54px;
-  width: 30px;
-  height: 8px;
-  transform: translateX(-50%);
-  border-radius: 999px;
-  background: rgb(0 0 0 / 0.25);
+  transition: left 0.42s linear, top 0.42s linear;
+  will-change: left, top;
 }
 
 .multiplayer-player__avatar {
   position: relative;
   z-index: 1;
-  width: 28px;
-  height: 42px;
+  width: 42px;
+  height: 58px;
+  animation: multiplayer-player-idle 1.5s ease-in-out infinite;
+}
+
+.multiplayer-player__shadow {
+  position: absolute;
+  left: 50%;
+  top: 50px;
+  width: 34px;
+  height: 9px;
+  transform: translateX(-50%);
+  border-radius: 999px;
+  background: rgb(0 0 0 / 0.28);
+}
+
+.multiplayer-player__head,
+.multiplayer-player__hair,
+.multiplayer-player__body,
+.multiplayer-player__arm,
+.multiplayer-player__leg {
+  position: absolute;
+  display: block;
+  box-sizing: border-box;
+  border: 2px solid #0f172a;
+  image-rendering: pixelated;
 }
 
 .multiplayer-player__head {
-  position: absolute;
   left: 50%;
-  top: 0;
-  width: 18px;
-  height: 18px;
+  top: 6px;
+  z-index: 5;
+  width: 20px;
+  height: 20px;
   transform: translateX(-50%);
-  border: 2px solid #0f172a;
-  border-radius: 999px;
+  border-radius: 7px 7px 8px 8px;
   background: #f8d7a4;
 }
 
-.multiplayer-player__body {
+.multiplayer-player__head::before {
+  content: "";
   position: absolute;
+  left: 4px;
+  top: 8px;
+  width: 3px;
+  height: 3px;
+  background: #111827;
+  box-shadow: 8px 0 0 #111827;
+}
+
+.multiplayer-player__hair {
   left: 50%;
-  top: 16px;
-  width: 24px;
-  height: 28px;
+  top: 3px;
+  z-index: 6;
+  width: 22px;
+  height: 10px;
   transform: translateX(-50%);
-  border: 2px solid #0f172a;
-  border-radius: 9px 9px 7px 7px;
-  background: #a78bfa;
+  border-radius: 7px 7px 4px 4px;
+  background: #1f1308;
+}
+
+.multiplayer-player__body {
+  left: 50%;
+  top: 24px;
+  z-index: 3;
+  width: 24px;
+  height: 24px;
+  transform: translateX(-50%);
+  border-radius: 7px 7px 6px 6px;
+  background: linear-gradient(#38bdf8, #2563eb);
+}
+
+.multiplayer-player__arm {
+  top: 27px;
+  z-index: 2;
+  width: 8px;
+  height: 22px;
+  border-radius: 999px;
+  background: #f8d7a4;
+  transform-origin: top center;
+}
+
+.multiplayer-player__arm--front {
+  left: 8px;
+  transform: rotate(13deg);
+}
+
+.multiplayer-player__arm--back {
+  right: 8px;
+  transform: rotate(-13deg);
+}
+
+.multiplayer-player__leg {
+  top: 44px;
+  z-index: 1;
+  width: 9px;
+  height: 17px;
+  border-radius: 999px 999px 4px 4px;
+  background: #1e293b;
+}
+
+.multiplayer-player__leg--front {
+  left: 14px;
+}
+
+.multiplayer-player__leg--back {
+  right: 14px;
 }
 
 .multiplayer-player__avatar--left {
   transform: scaleX(-1);
 }
 
-.multiplayer-player__avatar--right::before,
-.multiplayer-player__avatar--left::before {
-  content: "";
-  position: absolute;
-  z-index: 2;
-  right: 5px;
-  top: 7px;
+.multiplayer-player__avatar--right .multiplayer-player__head::before,
+.multiplayer-player__avatar--left .multiplayer-player__head::before {
+  left: auto;
+  right: 3px;
+  top: 8px;
   width: 4px;
-  height: 4px;
-  border-radius: 999px;
-  background: #111827;
+  box-shadow: none;
 }
 
-.multiplayer-player__avatar--down .multiplayer-player__head::before {
-  content: "";
-  position: absolute;
-  left: 4px;
-  top: 6px;
-  width: 3px;
-  height: 3px;
-  background: #111827;
-  box-shadow: 7px 0 0 #111827;
+.multiplayer-player__avatar--up .multiplayer-player__head::before {
+  display: none;
+}
+
+.multiplayer-player__avatar--up .multiplayer-player__hair {
+  height: 13px;
+}
+
+.multiplayer-player__avatar--right .multiplayer-player__arm--front,
+.multiplayer-player__avatar--left .multiplayer-player__arm--front {
+  animation: multiplayer-arm-swing-front 0.5s ease-in-out infinite;
+}
+
+.multiplayer-player__avatar--right .multiplayer-player__arm--back,
+.multiplayer-player__avatar--left .multiplayer-player__arm--back {
+  animation: multiplayer-arm-swing-back 0.5s ease-in-out infinite;
+}
+
+.multiplayer-player__avatar--right .multiplayer-player__leg--front,
+.multiplayer-player__avatar--left .multiplayer-player__leg--front {
+  animation: multiplayer-leg-swing-front 0.5s ease-in-out infinite;
+}
+
+.multiplayer-player__avatar--right .multiplayer-player__leg--back,
+.multiplayer-player__avatar--left .multiplayer-player__leg--back {
+  animation: multiplayer-leg-swing-back 0.5s ease-in-out infinite;
+}
+
+@keyframes multiplayer-player-idle {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-1px); }
+}
+
+@keyframes multiplayer-arm-swing-front {
+  0%, 100% { transform: rotate(18deg); }
+  50% { transform: rotate(-18deg); }
+}
+
+@keyframes multiplayer-arm-swing-back {
+  0%, 100% { transform: rotate(-18deg); }
+  50% { transform: rotate(18deg); }
+}
+
+@keyframes multiplayer-leg-swing-front {
+  0%, 100% { transform: translateX(-2px); }
+  50% { transform: translateX(3px); }
+}
+
+@keyframes multiplayer-leg-swing-back {
+  0%, 100% { transform: translateX(2px); }
+  50% { transform: translateX(-3px); }
 }
 
 .multiplayer-player__name {
   position: absolute;
   left: 50%;
-  top: -18px;
+  top: -16px;
   z-index: 2;
   transform: translateX(-50%);
-  max-width: 96px;
+  max-width: 108px;
   overflow: hidden;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: rgb(15 23 42 / 0.54);
   color: white;
   font-size: 11px;
   font-weight: 900;
@@ -342,5 +454,9 @@
   .world-chat-bubble {
     max-width: 140px;
     font-size: 11px;
+  }
+
+  .multiplayer-player {
+    transform: translate(-50%, -82%) scale(0.92);
   }
 }
