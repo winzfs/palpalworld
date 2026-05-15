@@ -1,10 +1,11 @@
-import { BUILD_GRID_SIZE, buildGridToWorld } from "../buildings/buildGrid";
+import { BUILD_GRID_SIZE } from "../buildings/buildGrid";
 import { BUILD_PARTS, type BuildPartDefinition, type BuildPartId, type BuildPartRotation, type PlacedBuildPart } from "../buildings/buildPartCatalog";
 import {
   ISO_FOUNDATION_SLAB_DEPTH,
   ISO_LOW_WALL_HEIGHT,
   ISO_SLAB_DEPTH,
   ISO_WALL_HEIGHT,
+  buildGridToIsoCenter,
   getIsoFloorSlab2p5d,
   getIsoRoofPlane2p5d,
   getIsoStairRamp2p5d,
@@ -28,11 +29,11 @@ const WALL_FACE_HEIGHT = ISO_WALL_HEIGHT;
 const HALF_WALL_FACE_HEIGHT = ISO_LOW_WALL_HEIGHT;
 
 export class BuildPartRenderer {
-  drawPlacedPart(ctx: CanvasRenderingContext2D, part: PlacedBuildPart, cameraX: number, cameraY: number) {
+  drawPlacedPart(ctx: CanvasRenderingContext2D, part: PlacedBuildPart, isoCamX: number, isoCamY: number) {
     const definition = BUILD_PARTS[part.partId];
     if (!definition) return;
-    const world = buildGridToWorld(part);
-    this.drawPart(ctx, definition, world.x - cameraX, world.y - cameraY, part.rotation, false, 1, part.floorLevel);
+    const iso = buildGridToIsoCenter(part.gridX, part.gridY);
+    this.drawPart(ctx, definition, iso.x - isoCamX, iso.y - isoCamY, part.rotation, false, 1, part.floorLevel);
   }
 
   drawPreview(ctx: CanvasRenderingContext2D, partId: BuildPartId, x: number, y: number, rotation: BuildPartRotation, valid: boolean, alpha = 0.48, floorLevel = 0) {
@@ -58,12 +59,12 @@ export class BuildPartRenderer {
     if (this.isEdgeAnchored(definition)) this.drawEdgeGuide(ctx, x, visualY, width, height, rotation, valid);
   }
 
-  drawPlacedPartOutline(ctx: CanvasRenderingContext2D, part: PlacedBuildPart, cameraX: number, cameraY: number, options: { strokeStyle: string; lineWidth?: number; alpha?: number; dashed?: boolean; fillStyle?: string | undefined }) {
+  drawPlacedPartOutline(ctx: CanvasRenderingContext2D, part: PlacedBuildPart, isoCamX: number, isoCamY: number, options: { strokeStyle: string; lineWidth?: number; alpha?: number; dashed?: boolean; fillStyle?: string | undefined }) {
     const definition = BUILD_PARTS[part.partId];
     if (!definition) return;
-    const world = buildGridToWorld(part);
-    const x = world.x - cameraX;
-    const y = world.y - cameraY - part.floorLevel * BUILD_2P5D_FLOOR_HEIGHT;
+    const iso = buildGridToIsoCenter(part.gridX, part.gridY);
+    const x = iso.x - isoCamX;
+    const y = iso.y - isoCamY - part.floorLevel * BUILD_2P5D_FLOOR_HEIGHT;
     const width = definition.width * BUILD_GRID_SIZE;
     const height = definition.height * BUILD_GRID_SIZE;
 
