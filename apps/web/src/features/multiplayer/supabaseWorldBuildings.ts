@@ -24,13 +24,30 @@ export type WorldBuildingRow = {
   updated_at: string;
 };
 
+function getLocalMultiplayerPlayerId() {
+  if (typeof window === "undefined") return "unknown";
+  return window.localStorage.getItem("palpalworld.multiplayer.playerId") ?? "unknown";
+}
+
+function getLocalNickname(fallback = "Unknown") {
+  if (typeof window === "undefined") return fallback;
+  return window.localStorage.getItem("palpalworld.nickname") ?? fallback;
+}
+
+function normalizeOwnerPlayerId(ownerPlayerId?: string) {
+  if (!ownerPlayerId || ownerPlayerId === "demo-player" || ownerPlayerId === "unknown") {
+    return getLocalMultiplayerPlayerId();
+  }
+  return ownerPlayerId;
+}
+
 export function buildingToRow(building: SharedBuildingState, ownerNickname = "Unknown"): Omit<WorldBuildingRow, "updated_at"> {
   const currentTile = building.currentTile ?? { regionId: "starter_meadow", tileX: 1, tileY: 1 } as MapTileRef;
   return {
     building_id: building.id,
     building_type: building.type,
-    owner_player_id: building.ownerPlayerId ?? "unknown",
-    owner_nickname: building.ownerNickname ?? ownerNickname,
+    owner_player_id: normalizeOwnerPlayerId(building.ownerPlayerId),
+    owner_nickname: building.ownerNickname ?? getLocalNickname(ownerNickname),
     x: building.position.x,
     y: building.position.y,
     region_id: currentTile.regionId,
