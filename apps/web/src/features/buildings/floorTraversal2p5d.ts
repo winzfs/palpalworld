@@ -1,4 +1,4 @@
-import { BUILD_GRID_SIZE, worldToBuildGrid } from "./buildGrid";
+import { buildGridToWorld, worldToBuildGrid } from "./buildGrid";
 import { BUILD_PARTS, type BuildFloorLevel, type PlacedBuildPart } from "./buildPartCatalog";
 import { BUILD_2P5D_FLOOR_HEIGHT } from "./buildPartVisual2p5d";
 
@@ -15,15 +15,20 @@ export function isWalkableFloorPart(part: PlacedBuildPart) {
 
 export function findWalkableFloorAtPosition(parts: PlacedBuildPart[], x: number, y: number, preferredFloorLevel?: number | null): FloorTraversalHit | null {
   const grid = worldToBuildGrid({ x, y });
-  const centerX = grid.gridX * BUILD_GRID_SIZE + BUILD_GRID_SIZE / 2;
-  const centerY = grid.gridY * BUILD_GRID_SIZE + BUILD_GRID_SIZE / 2;
-  const maxDistance = BUILD_GRID_SIZE * 0.72;
+  const maxDistance = 34;
   let best: FloorTraversalHit | null = null;
 
   for (const part of parts) {
     if (!isWalkableFloorPart(part)) continue;
     if (part.gridX !== grid.gridX || part.gridY !== grid.gridY) continue;
-    const distance = Math.hypot(x - centerX, y - centerY);
+
+    // Only treat same/current floor as walkable unless the caller explicitly
+    // prefers another floor. This prevents a ground-level player from snapping
+    // up onto a roof/upper floor just because that tile visually overlaps.
+    if (typeof preferredFloorLevel === "number" && Math.abs(part.floorLevel - Math.round(preferredFloorLevel)) > 0) continue;
+
+    const center = buildGridToWorld(part);
+    const distance = Math.hypot(x - center.x, y - center.y);
     if (distance > maxDistance) continue;
     const preferredPenalty = typeof preferredFloorLevel === "number" ? Math.abs(part.floorLevel - preferredFloorLevel) * 0.01 : 0;
     const score = distance + preferredPenalty;
