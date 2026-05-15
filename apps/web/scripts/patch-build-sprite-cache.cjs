@@ -51,7 +51,7 @@ replace(
 
   private getPlacedPartSprite(definition: BuildPartDefinition, rotation: BuildPartRotation, floorLevel: number, isOpen: boolean) {
     if (typeof document === "undefined") return null;
-    const key = `${definition.id}:${rotation}:${floorLevel}:${isOpen ? 1 : 0}:${this.liteMode ? 1 : 0}`;
+    const key = definition.id + ":" + rotation + ":" + floorLevel + ":" + (isOpen ? 1 : 0) + ":" + (this.liteMode ? 1 : 0);
     const cached = this.spriteCache.get(key);
     if (cached) return cached;
 
