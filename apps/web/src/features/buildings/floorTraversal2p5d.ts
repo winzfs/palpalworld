@@ -1,5 +1,6 @@
 import { buildGridToWorld, worldToBuildGrid } from "./buildGrid";
 import { BUILD_PARTS, type BuildFloorLevel, type PlacedBuildPart } from "./buildPartCatalog";
+import { getBuildPartsAtGrid } from "./buildPartSpatialIndex2p5d";
 import { BUILD_2P5D_FLOOR_HEIGHT } from "./buildPartVisual2p5d";
 
 export type FloorTraversalHit = {
@@ -18,9 +19,8 @@ export function findWalkableFloorAtPosition(parts: PlacedBuildPart[], x: number,
   const maxDistance = 34;
   let best: FloorTraversalHit | null = null;
 
-  for (const part of parts) {
+  for (const part of getBuildPartsAtGrid(parts, grid)) {
     if (!isWalkableFloorPart(part)) continue;
-    if (part.gridX !== grid.gridX || part.gridY !== grid.gridY) continue;
 
     // Only treat same/current floor as walkable unless the caller explicitly
     // prefers another floor. This prevents a ground-level player from snapping
