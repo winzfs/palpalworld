@@ -119,12 +119,12 @@ if (!source.includes('private drawBuildParts(ctx: CanvasRenderingContext2D')) {
       if (!isPositionInViewport(world, viewport)) continue;
       this.buildPartRenderer.drawPlacedPart(ctx, part, cameraX, cameraY);
       if (part.houseId && part.houseId === this.selectedHouseId) {
-        ctx.save();
-        ctx.strokeStyle = part.id === this.selectedPlacedBuildPartId ? "rgba(250, 204, 21, 0.95)" : "rgba(96, 165, 250, 0.5)";
-        ctx.lineWidth = part.id === this.selectedPlacedBuildPartId ? 3 : 1;
-        ctx.setLineDash(part.id === this.selectedPlacedBuildPartId ? [] : [5, 5]);
-        ctx.strokeRect(world.x - cameraX - 24, world.y - cameraY - 24, 48, 48);
-        ctx.restore();
+        this.buildPartRenderer.drawPlacedPartOutline(ctx, part, cameraX, cameraY, {
+          strokeStyle: part.id === this.selectedPlacedBuildPartId ? "rgba(250, 204, 21, 0.95)" : "rgba(96, 165, 250, 0.5)",
+          lineWidth: part.id === this.selectedPlacedBuildPartId ? 3 : 1,
+          dashed: part.id !== this.selectedPlacedBuildPartId,
+          fillStyle: part.id === this.selectedPlacedBuildPartId ? "rgba(250, 204, 21, 0.08)" : undefined,
+        });
       }
     }
   }
