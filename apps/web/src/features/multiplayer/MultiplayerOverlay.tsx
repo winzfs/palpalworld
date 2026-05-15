@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { BuildingState, CreaturePublicState, PlayerPublicState, WorldSnapshot } from "@palpalworld/shared";
+import type { BuildingState, CreaturePublicState, PlayerPublicState, ResourceNodeState, WorldSnapshot } from "@palpalworld/shared";
 import { MAP_TILE_SIZE, isSameTile, type MapTileRef } from "../../../../../packages/shared/src/worldTiles";
 import {
   fetchOnlinePlayers,
@@ -24,6 +24,13 @@ import {
   upsertWorldCreatures,
   type WorldCreatureRow,
 } from "./supabaseWorldCreatures";
+import {
+  dispatchRemoteResourceState,
+  fetchWorldResources,
+  subscribeWorldResources,
+  upsertWorldResources,
+  type WorldResourceRow,
+} from "./supabaseWorldResources";
 
 type WorldSnapshotEvent = CustomEvent<{ snapshot?: WorldSnapshot; localPlayerId?: string | null }>;
 type BuildingDismantledEvent = CustomEvent<{ buildingId?: string; building?: BuildingState }>;
@@ -86,6 +93,30 @@ function applyRemoteCreatureRows(localCreatures: CreaturePublicState[], rows: Wo
   return changed;
 }
 
+function applyRemoteResourceRows(localResources: ResourceNodeState[], rows: WorldResourceRow[]) {
+  if (localResources.length === 0 || rows.length === 0) return false;
+  const rowById = new Map(rows.map((row) => [row.resource_id, row]));
+  let changed = false;
+
+  for (const resource of localResources) {
+    const row = rowById.get(resource.id);
+    if (!row) continue;
+
+    const remoteAmount = row.depleted ? 0 : Math.max(0, Math.min(row.remaining_amount, row.max_amount));
+    if (remoteAmount < resource.remainingAmount) {
+      resource.remainingAmount = remoteAmount;
+      changed = true;
+    }
+
+    if (row.depleted && resource.remainingAmount !== 0) {
+      resource.remainingAmount = 0;
+      changed = true;
+    }
+  }
+
+  return changed;
+}
+
 export function MultiplayerOverlay() {
   const [enabled] = useState(() => isSupabaseMultiplayerEnabled());
   const [playerId] = useState(() => getOrCreateMultiplayerPlayerId());
@@ -96,10 +127,12 @@ export function MultiplayerOverlay() {
   const latestLocalPlayerRef = useRef<PlayerPublicState | null>(null);
   const latestTileRef = useRef<MapTileRef | null>(null);
   const latestCreaturesRef = useRef<CreaturePublicState[]>([]);
+  const latestResourcesRef = useRef<ResourceNodeState[]>([]);
   const onlinePlayersRef = useRef<PlayerPublicState[]>([]);
   const localBuildingIdsRef = useRef(new Set<string>());
   const publishedBuildingIdsRef = useRef(new Set<string>());
   const lastCreaturePublishAtRef = useRef(0);
+  const lastResourcePublishAtRef = useRef(0);
   const client = useMemo(() => getSupabaseClient(), []);
 
   const refreshPlayers = useCallback(async () => {
@@ -122,6 +155,14 @@ export function MultiplayerOverlay() {
     const changed = applyRemoteCreatureRows(latestCreaturesRef.current, rows);
     dispatchRemoteCreatureState(rows);
     if (changed) window.dispatchEvent(new CustomEvent("palpalworld:remote-creatures-applied"));
+  }, [client]);
+
+  const refreshResources = useCallback(async () => {
+    if (!client) return;
+    const rows = await fetchWorldResources(client, latestTileRef.current);
+    const changed = applyRemoteResourceRows(latestResourcesRef.current, rows);
+    dispatchRemoteResourceState(rows);
+    if (changed) window.dispatchEvent(new CustomEvent("palpalworld:remote-resources-applied"));
   }, [client]);
 
   useEffect(() => {
@@ -159,6 +200,17 @@ export function MultiplayerOverlay() {
 
   useEffect(() => {
     if (!client || !enabled) return;
+    refreshResources();
+    const resourceChannel = subscribeWorldResources(client, refreshResources);
+    const interval = window.setInterval(refreshResources, 1800);
+    return () => {
+      window.clearInterval(interval);
+      client.removeChannel(resourceChannel);
+    };
+  }, [client, enabled, refreshResources]);
+
+  useEffect(() => {
+    if (!client || !enabled) return;
     const publish = async () => {
       const localPlayer = latestLocalPlayerRef.current;
       if (!localPlayer) return;
@@ -189,6 +241,20 @@ export function MultiplayerOverlay() {
   }, [client, enabled]);
 
   useEffect(() => {
+    if (!client || !enabled) return;
+    const publishResources = async () => {
+      const now = performance.now();
+      if (now - lastResourcePublishAtRef.current < 1000) return;
+      lastResourcePublishAtRef.current = now;
+      const resources = latestResourcesRef.current;
+      if (resources.length === 0) return;
+      await upsertWorldResources(client, resources);
+    };
+    const interval = window.setInterval(publishResources, 1000);
+    return () => window.clearInterval(interval);
+  }, [client, enabled]);
+
+  useEffect(() => {
     const handleSnapshot = (event: Event) => {
       const customEvent = event as WorldSnapshotEvent;
       const snapshot = customEvent.detail?.snapshot;
@@ -198,6 +264,7 @@ export function MultiplayerOverlay() {
       latestLocalPlayerRef.current = localPlayer;
       latestTileRef.current = localPlayer.currentTile as MapTileRef;
       latestCreaturesRef.current = snapshot.creatures;
+      latestResourcesRef.current = snapshot.resources;
       setCamera(computeCamera(localPlayer));
 
       if (client && enabled) {
