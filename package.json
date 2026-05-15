@@ -16,7 +16,7 @@
     "dev:server": "pnpm --filter @palpalworld/realtime-server dev",
     "build": "pnpm -r build",
     "build:web": "pnpm --filter @palpalworld/web build",
-    "build:web:npm": "npm --workspace @palpalworld/shared run build && npm --workspace @palpalworld/game-core run build && npm --workspace @palpalworld/web run build",
+    "build:web:npm": "npm --workspace @palpalworld/shared run build && npm --workspace @palpalworld/web run build",
     "typecheck": "pnpm -r typecheck",
     "lint": "pnpm -r lint",
     "format": "prettier --write ."
