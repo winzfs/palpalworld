@@ -35,14 +35,34 @@ export type WorldClickTarget =
 
 type ViewportBounds = { left: number; top: number; right: number; bottom: number };
 type EquipmentChangedEvent = CustomEvent<{ weaponItemId?: string | null }>;
-type BuildingDismantledEvent = CustomEvent<{ buildingId?: string }>;
+type BuildingDismantledEvent = CustomEvent<{ buildingId?: string; building?: BuildingState }>;
+type SharedBuildingState = BuildingState & {
+  currentTile?: MapTileRef;
+  ownerNickname?: string;
+  isRemoteSharedBuilding?: boolean;
+};
+type RemoteBuildingsEvent = CustomEvent<{ buildings?: SharedBuildingState[] }>;
 
 const fallbackPlayerTiles = new Map<string, MapTileRef>();
 const cullPadding = 96;
 const equippedWeaponStorageKey = "palpalworld.demo.equippedWeaponItemId";
+const buildingTypeLabels: Partial<Record<BuildingType | string, string>> = {
+  base_core: "거점 코어",
+  workbench: "작업대",
+  storage_box: "보관함",
+  campfire: "모닥불",
+  farm_plot: "밭",
+  cold_storage: "냉장고",
+};
 
 function distance(a: Vector2, b: Vector2) { return Math.hypot(a.x - b.x, a.y - b.y); }
 function getTileRef(entity: unknown) { return (entity as { currentTile?: MapTileRef })?.currentTile ?? DEFAULT_PLAYER_TILE; }
+function getBuildingDisplayName(building: BuildingState) { return buildingTypeLabels[String(building.type)] ?? String(building.type); }
+function getBuildingOwnerLabel(building: BuildingState) {
+  const shared = building as SharedBuildingState;
+  if (!shared.isRemoteSharedBuilding) return null;
+  return `${shared.ownerNickname ?? "Unknown"}의 ${getBuildingDisplayName(building)}`;
+}
 function readStoredWeaponItemId() {
   if (typeof window === "undefined") return null;
   const directWeaponItemId = window.localStorage.getItem(equippedWeaponStorageKey);
@@ -98,6 +118,7 @@ export class GameWorldScene {
   private keys = new Set<string>();
   private animationFrame = 0;
   private snapshot: WorldSnapshot | null = null;
+  private remoteBuildings: SharedBuildingState[] = [];
   private previousCreatureHpById = new Map<string, number>();
   private previousPlayerPositions = new Map<string, Vector2>();
   private movingPlayerIds = new Set<string>();
@@ -133,6 +154,7 @@ export class GameWorldScene {
     window.addEventListener("keyup", this.handleKeyUp);
     window.addEventListener("palpalworld:equipment-changed", this.handleEquipmentChanged as EventListener);
     window.addEventListener("palpalworld:building-dismantled", this.handleBuildingDismantled as EventListener);
+    window.addEventListener("palpalworld:remote-buildings", this.handleRemoteBuildings as EventListener);
     this.canvas.addEventListener("pointerdown", this.handlePointerDown);
     this.canvas.addEventListener("pointermove", this.handlePointerMove);
     this.canvas.addEventListener("pointerup", this.handlePointerUp);
@@ -149,6 +171,7 @@ export class GameWorldScene {
     window.removeEventListener("keyup", this.handleKeyUp);
     window.removeEventListener("palpalworld:equipment-changed", this.handleEquipmentChanged as EventListener);
     window.removeEventListener("palpalworld:building-dismantled", this.handleBuildingDismantled as EventListener);
+    window.removeEventListener("palpalworld:remote-buildings", this.handleRemoteBuildings as EventListener);
     this.canvas.removeEventListener("pointerdown", this.handlePointerDown);
     this.canvas.removeEventListener("pointermove", this.handlePointerMove);
     this.canvas.removeEventListener("pointerup", this.handlePointerUp);
@@ -209,13 +232,27 @@ export class GameWorldScene {
     const buildingId = event.detail?.buildingId;
     if (!buildingId) return;
     this.hiddenBuildingIds.add(buildingId);
+    this.remoteBuildings = this.remoteBuildings.filter((building) => building.id !== buildingId);
     if (this.hoverBuildingId === buildingId) this.hoverBuildingId = null;
+  };
+  private handleRemoteBuildings = (event: RemoteBuildingsEvent) => {
+    const localIds = new Set((this.snapshot?.buildings ?? []).map((building) => building.id));
+    this.remoteBuildings = (event.detail?.buildings ?? []).filter((building) => {
+      if (!building?.id || this.hiddenBuildingIds.has(building.id)) return false;
+      if (localIds.has(building.id)) return false;
+      return isSameTile(getTileRef(building), this.getCurrentTile());
+    });
   };
   private getLocalPlayer() { return this.snapshot?.players.find((player) => player.id === this.localPlayerId) ?? this.snapshot?.players[0] ?? null; }
   private getCurrentTile() { return getTileRef(this.getLocalPlayer()); }
   private getSceneResources() { return this.snapshot?.resources ?? []; }
   private getSceneCreatures() { return this.snapshot?.creatures ?? []; }
-  private getSceneBuildings() { return (this.snapshot?.buildings ?? []).filter((building) => !this.hiddenBuildingIds.has(building.id)); }
+  private getSceneBuildings() {
+    const localBuildings = (this.snapshot?.buildings ?? []).filter((building) => !this.hiddenBuildingIds.has(building.id));
+    const localIds = new Set(localBuildings.map((building) => building.id));
+    const remoteBuildings = this.remoteBuildings.filter((building) => !localIds.has(building.id) && !this.hiddenBuildingIds.has(building.id));
+    return [...localBuildings, ...remoteBuildings];
+  }
 
   getPlacementValidity(position: Vector2): PlacementValidity {
     if (!this.placementPreviewBuildingType) return { ok: true, reason: "설치 모드가 아닙니다." };
@@ -308,12 +345,32 @@ export class GameWorldScene {
     if (tile.exits.east) { ctx.fillRect(x + MAP_TILE_SIZE.width - edge, y, edge, MAP_TILE_SIZE.height); ctx.strokeRect(x + MAP_TILE_SIZE.width - edge, y, edge, MAP_TILE_SIZE.height); ctx.fillStyle = "rgba(224, 242, 254, 0.95)"; ctx.fillText(portalLabels.east, x + MAP_TILE_SIZE.width - edge / 2, y + MAP_TILE_SIZE.height / 2); }
     ctx.restore();
   }
+  private drawBuildingOwnerLabel(ctx: CanvasRenderingContext2D, building: BuildingState, x: number, y: number) {
+    const label = getBuildingOwnerLabel(building);
+    if (!label) return;
+    ctx.save();
+    ctx.font = "12px system-ui";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    const width = Math.min(190, Math.max(76, ctx.measureText(label).width + 18));
+    ctx.fillStyle = "rgba(15, 23, 42, 0.82)";
+    ctx.strokeStyle = "rgba(250, 204, 21, 0.58)";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.roundRect(x - width / 2, y - 70, width, 24, 8);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = "#fde68a";
+    ctx.fillText(label, x, y - 58, width - 12);
+    ctx.restore();
+  }
   private drawBuildings(ctx: CanvasRenderingContext2D, cameraX: number, cameraY: number, viewport: ViewportBounds) {
     for (const building of this.getSceneBuildings()) {
       if (!isPositionInViewport(building.position, viewport)) continue;
       const x = building.position.x - cameraX;
       const y = building.position.y - cameraY;
       this.renderer.drawBuilding(ctx, building, x, y);
+      this.drawBuildingOwnerLabel(ctx, building, x, y);
       if (building.id === this.hoverBuildingId) { ctx.save(); ctx.strokeStyle = "rgba(250, 204, 21, 0.9)"; ctx.lineWidth = 2; ctx.beginPath(); ctx.ellipse(x, y + 24, 32, 12, 0, 0, Math.PI * 2); ctx.stroke(); ctx.restore(); }
     }
   }
