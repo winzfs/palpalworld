@@ -1,16 +1,12 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import type { BuildingState, InventoryState, ItemStack } from "@palpalworld/shared";
 import { getCraftingStationByBuildingType, getProgressionBuilding, type CraftingStationId } from "../crafting/progressionCatalog";
 import { addInventoryStack, createFallbackInventory, getInventoryAmount, readStoredInventory, removeInventoryStack, writeStoredInventory } from "../inventory/inventoryStore";
-import { getItemLabel } from "../items/itemLabels";
 import { StorageBoxPanel } from "../storage/StorageBoxPanel";
 import { addStorageStack, readStorageBoxItems, removeStorageStack, writeStorageBoxItems } from "../storage/storageStore";
-
-type SharedBuildingState = BuildingState & {
-  ownerNickname?: string;
-  isRemoteSharedBuilding?: boolean;
-};
+import { BuildingPanelHeader } from "./BuildingPanelHeader";
+import { canDismantleBuilding } from "./buildingPanelRules";
 
 function getBuildingAction(buildingType: string) {
   const station = getCraftingStationByBuildingType(buildingType);
@@ -54,57 +50,6 @@ function cloneInventoryForView(inventory: InventoryState): InventoryState {
     items: inventory.items.map((item) => ({ itemId: item.itemId, amount: item.amount })).filter((item) => item.amount > 0),
     itemInstances: inventory.itemInstances.map((item) => ({ ...item, traitIds: [...item.traitIds] })),
   };
-}
-
-function getLocalMultiplayerPlayerId() {
-  if (typeof window === "undefined") return null;
-  return window.localStorage.getItem("palpalworld.multiplayer.playerId");
-}
-
-function canDismantleBuilding(building: BuildingState) {
-  const sharedBuilding = building as SharedBuildingState;
-  if (sharedBuilding.isRemoteSharedBuilding) return false;
-  const localMultiplayerPlayerId = getLocalMultiplayerPlayerId();
-  const ownerPlayerId = building.ownerPlayerId;
-  if (!ownerPlayerId || ownerPlayerId === "demo-player") return true;
-  return Boolean(localMultiplayerPlayerId && ownerPlayerId === localMultiplayerPlayerId);
-}
-
-function getDismantleRefunds(buildingType: string): ItemStack[] {
-  const definition = getProgressionBuilding(buildingType);
-  if (!definition) return [];
-  return definition.requires
-    .map((item) => ({ itemId: item.itemId, amount: Math.max(1, Math.floor(item.amount / 2)) }))
-    .filter((item) => item.amount > 0);
-}
-
-function DismantleHeaderAction({
-  building,
-  onDismantle,
-}: {
-  building: BuildingState;
-  onDismantle: (building: BuildingState, refunds: ItemStack[]) => void;
-}) {
-  const [confirming, setConfirming] = useState(false);
-  const refunds = useMemo(() => getDismantleRefunds(building.type), [building.type]);
-  const refundText = refunds.length > 0 ? refunds.map((item) => `${getItemLabel(item.itemId)} ${item.amount}`).join(" · ") : "회수 재료 없음";
-
-  if (!canDismantleBuilding(building)) return null;
-
-  if (confirming) {
-    return (
-      <span className="building-interaction__header-confirm" title={`회수: ${refundText}`}>
-        <button className="building-interaction__header-danger" onClick={() => onDismantle(building, refunds)}>분해 확정</button>
-        <button className="draggable-panel__toggle" onClick={() => setConfirming(false)}>취소</button>
-      </span>
-    );
-  }
-
-  return (
-    <button className="building-interaction__header-danger" title={`분해 시 회수: ${refundText}`} onClick={() => setConfirming(true)}>
-      분해
-    </button>
-  );
 }
 
 export function BuildingInteractionPanel({
@@ -198,13 +143,14 @@ export function BuildingInteractionPanel({
   if (isStorageBuilding(building.type)) {
     const storageWindow = (
       <div className="storage-overlay-panel storage-overlay-panel--with-real-header" aria-label="보관함">
-        <div className="building-interaction__header storage-overlay-panel__header">
-          <strong>{title}</strong>
-          <span className="building-interaction__header-actions">
-            <DismantleHeaderAction building={building} onDismantle={handleFallbackDismantle} />
-            <button className="storage-overlay-panel__close storage-overlay-panel__close--inline" onClick={onClose} aria-label="보관함 닫기">×</button>
-          </span>
-        </div>
+        <BuildingPanelHeader
+          title={title}
+          building={building}
+          onDismantle={handleFallbackDismantle}
+          onClose={onClose}
+          closeLabel="보관함 닫기"
+          className="building-interaction__header storage-overlay-panel__header"
+        />
         <StorageBoxPanel
           inventory={activeInventory}
           storageItems={storageItems}
@@ -225,13 +171,13 @@ export function BuildingInteractionPanel({
   return (
     <div className="feature-panel feature-panel--building-interaction">
       <div className="feature-panel__section-title">건설물 상호작용</div>
-      <div className="building-interaction__header">
-        <strong>{title}</strong>
-        <span className="building-interaction__header-actions">
-          <DismantleHeaderAction building={building} onDismantle={handleFallbackDismantle} />
-          <button className="draggable-panel__toggle" onClick={onClose}>닫기</button>
-        </span>
-      </div>
+      <BuildingPanelHeader
+        title={title}
+        building={building}
+        onDismantle={handleFallbackDismantle}
+        onClose={onClose}
+        closeLabel="건설물 창 닫기"
+      />
       <p className="feature-panel__hint">{definition?.description ?? "설치된 건설물입니다."}</p>
       <div className="building-interaction__stats">
         <span>내구도</span>
