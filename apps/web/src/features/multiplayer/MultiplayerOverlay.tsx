@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type PointerEvent } from "react";
 import type { BuildingState, CreaturePublicState, PlayerPublicState, ResourceNodeState, WorldSnapshot } from "@palpalworld/shared";
 import { MAP_TILE_SIZE, isSameTile, type MapTileRef } from "../../../../../packages/shared/src/worldTiles";
 import {
@@ -51,8 +51,64 @@ type CameraState = {
   currentTile: MapTileRef;
 };
 
+type ChatPanelPosition = { x: number; y: number };
+type ChatPanelDragState = {
+  pointerId: number;
+  startX: number;
+  startY: number;
+  panelX: number;
+  panelY: number;
+};
+
 const emotes = ["👋", "❤️", "⚔️", "🆘"];
 const chatBubbleVisibleMs = 12_000;
+const chatPanelStorageKey = "palpalworld.ui.chatPanelPosition";
+const chatPanelCollapsedStorageKey = "palpalworld.ui.chatPanelCollapsed";
+const chatPanelWidth = 330;
+const chatPanelCollapsedWidth = 210;
+const chatPanelExpandedHeight = 226;
+const chatPanelCollapsedHeight = 48;
+
+function getViewportSize() {
+  if (typeof window === "undefined") return { width: 1280, height: 720 };
+  return { width: window.innerWidth, height: window.innerHeight };
+}
+
+function clampChatPanelPosition(position: ChatPanelPosition, collapsed = false): ChatPanelPosition {
+  const viewport = getViewportSize();
+  const width = Math.min(collapsed ? chatPanelCollapsedWidth : chatPanelWidth, Math.max(220, viewport.width - 16));
+  const height = collapsed ? chatPanelCollapsedHeight : chatPanelExpandedHeight;
+  return {
+    x: Math.max(8, Math.min(viewport.width - width - 8, position.x)),
+    y: Math.max(8, Math.min(viewport.height - height - 8, position.y)),
+  };
+}
+
+function getDefaultChatPanelPosition(collapsed = false): ChatPanelPosition {
+  const viewport = getViewportSize();
+  const width = Math.min(collapsed ? chatPanelCollapsedWidth : chatPanelWidth, Math.max(220, viewport.width - 16));
+  const preferredX = viewport.width - width - 12;
+  const preferredY = viewport.width <= 720 ? Math.max(72, viewport.height - 310) : 256;
+  return clampChatPanelPosition({ x: preferredX, y: preferredY }, collapsed);
+}
+
+function readStoredChatPanelPosition(collapsed = false): ChatPanelPosition {
+  if (typeof window === "undefined") return getDefaultChatPanelPosition(collapsed);
+  try {
+    const raw = window.localStorage.getItem(chatPanelStorageKey);
+    if (!raw) return getDefaultChatPanelPosition(collapsed);
+    const parsed = JSON.parse(raw) as Partial<ChatPanelPosition>;
+    if (typeof parsed.x !== "number" || typeof parsed.y !== "number") return getDefaultChatPanelPosition(collapsed);
+    return clampChatPanelPosition({ x: parsed.x, y: parsed.y }, collapsed);
+  } catch {
+    return getDefaultChatPanelPosition(collapsed);
+  }
+}
+
+function readStoredChatCollapsed() {
+  if (typeof window === "undefined") return false;
+  return window.localStorage.getItem(chatPanelCollapsedStorageKey) === "true";
+}
 
 function computeCamera(player: PlayerPublicState): CameraState {
   const width = typeof window === "undefined" ? 1280 : window.innerWidth;
@@ -134,6 +190,8 @@ export function MultiplayerOverlay() {
   const [worldBuildings, setWorldBuildings] = useState<BuildingState[]>([]);
   const [chatMessages, setChatMessages] = useState<WorldChatMessageRow[]>([]);
   const [chatInput, setChatInput] = useState("");
+  const [chatCollapsed, setChatCollapsed] = useState(readStoredChatCollapsed);
+  const [chatPanelPosition, setChatPanelPosition] = useState(() => readStoredChatPanelPosition(readStoredChatCollapsed()));
   const [status, setStatus] = useState(enabled ? "온라인 연결 중" : "오프라인 모드");
   const latestLocalPlayerRef = useRef<PlayerPublicState | null>(null);
   const latestTileRef = useRef<MapTileRef | null>(null);
@@ -144,6 +202,7 @@ export function MultiplayerOverlay() {
   const publishedBuildingIdsRef = useRef(new Set<string>());
   const lastCreaturePublishAtRef = useRef(0);
   const lastResourcePublishAtRef = useRef(0);
+  const chatDragRef = useRef<ChatPanelDragState | null>(null);
   const client = useMemo(() => getSupabaseClient(), []);
 
   const refreshPlayers = useCallback(async () => {
@@ -209,6 +268,50 @@ export function MultiplayerOverlay() {
     void sendChat(next, "chat");
   }, [chatInput, sendChat]);
 
+  const handleChatPanelPointerDown = useCallback((event: PointerEvent<HTMLElement>) => {
+    event.preventDefault();
+    chatDragRef.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      panelX: chatPanelPosition.x,
+      panelY: chatPanelPosition.y,
+    };
+    event.currentTarget.setPointerCapture(event.pointerId);
+  }, [chatPanelPosition]);
+
+  const handleChatPanelPointerMove = useCallback((event: PointerEvent<HTMLElement>) => {
+    const drag = chatDragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    event.preventDefault();
+    const next = clampChatPanelPosition({
+      x: drag.panelX + event.clientX - drag.startX,
+      y: drag.panelY + event.clientY - drag.startY,
+    }, chatCollapsed);
+    setChatPanelPosition(next);
+    if (typeof window !== "undefined") window.localStorage.setItem(chatPanelStorageKey, JSON.stringify(next));
+  }, [chatCollapsed]);
+
+  const stopChatPanelDrag = useCallback((event: PointerEvent<HTMLElement>) => {
+    const drag = chatDragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    chatDragRef.current = null;
+    event.currentTarget.releasePointerCapture(event.pointerId);
+  }, []);
+
+  const toggleChatCollapsed = useCallback(() => {
+    setChatCollapsed((current) => {
+      const nextCollapsed = !current;
+      if (typeof window !== "undefined") window.localStorage.setItem(chatPanelCollapsedStorageKey, String(nextCollapsed));
+      setChatPanelPosition((position) => {
+        const nextPosition = clampChatPanelPosition(position, nextCollapsed);
+        if (typeof window !== "undefined") window.localStorage.setItem(chatPanelStorageKey, JSON.stringify(nextPosition));
+        return nextPosition;
+      });
+      return nextCollapsed;
+    });
+  }, []);
+
   useEffect(() => {
     if (!client || !enabled) return;
     refreshPlayers();
@@ -251,6 +354,18 @@ export function MultiplayerOverlay() {
     const interval = window.setInterval(refreshChat, 12_000);
     return () => { window.clearInterval(interval); client.removeChannel(chatChannel); };
   }, [client, enabled, refreshChat]);
+
+  useEffect(() => {
+    const handleResize = () => {
+      setChatPanelPosition((position) => {
+        const next = clampChatPanelPosition(position, chatCollapsed);
+        if (typeof window !== "undefined") window.localStorage.setItem(chatPanelStorageKey, JSON.stringify(next));
+        return next;
+      });
+    };
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, [chatCollapsed]);
 
   useEffect(() => {
     if (!client || !enabled) return;
@@ -359,6 +474,7 @@ export function MultiplayerOverlay() {
   }, [camera, worldBuildings]);
 
   const bubbleMessages = useMemo(() => chatMessages.filter(isFreshMessage).slice(-8), [chatMessages]);
+  const latestChatMessage = chatMessages[chatMessages.length - 1];
 
   if (!enabled || !camera) return null;
 
@@ -383,15 +499,41 @@ export function MultiplayerOverlay() {
         if (left < -80 || left > camera.width + 80 || top < -100 || top > camera.height + 80) return null;
         return <div key={player.id} className="multiplayer-player" style={{ left, top }}><div className={`multiplayer-player__avatar multiplayer-player__avatar--${player.direction ?? "down"}`}><span className="multiplayer-player__head" /><span className="multiplayer-player__body" /></div><div className="multiplayer-player__name">{player.nickname}</div></div>;
       })}
-      <section className="world-chat-panel" aria-label="근처 채팅">
-        <div className="world-chat-log">
-          {chatMessages.slice(-5).map((message) => <div key={message.message_id} className="world-chat-log__line"><b>{message.nickname}</b><span>{message.message}</span></div>)}
-        </div>
-        <div className="world-chat-emotes">{emotes.map((emote) => <button key={emote} type="button" onClick={() => void sendChat(emote, "emote")}>{emote}</button>)}</div>
-        <form className="world-chat-form" onSubmit={handleSubmitChat}>
-          <input value={chatInput} onChange={(event) => setChatInput(event.target.value)} maxLength={80} placeholder="근처 채팅" />
-          <button type="submit">전송</button>
-        </form>
+      <section
+        className={`world-chat-panel ${chatCollapsed ? "world-chat-panel--collapsed" : ""}`}
+        style={{ left: chatPanelPosition.x, top: chatPanelPosition.y }}
+        aria-label="근처 채팅"
+      >
+        <header
+          className="world-chat-panel__header"
+          onPointerDown={handleChatPanelPointerDown}
+          onPointerMove={handleChatPanelPointerMove}
+          onPointerUp={stopChatPanelDrag}
+          onPointerCancel={stopChatPanelDrag}
+        >
+          <strong>근처 채팅</strong>
+          <span>{latestChatMessage ? `${latestChatMessage.nickname}: ${latestChatMessage.message}` : "대화 없음"}</span>
+          <button
+            type="button"
+            onPointerDown={(event) => event.stopPropagation()}
+            onClick={toggleChatCollapsed}
+            aria-expanded={!chatCollapsed}
+          >
+            {chatCollapsed ? "펼치기" : "접기"}
+          </button>
+        </header>
+        {!chatCollapsed ? (
+          <>
+            <div className="world-chat-log">
+              {chatMessages.slice(-6).map((message) => <div key={message.message_id} className="world-chat-log__line"><b>{message.nickname}</b><span>{message.message}</span></div>)}
+            </div>
+            <div className="world-chat-emotes">{emotes.map((emote) => <button key={emote} type="button" onClick={() => void sendChat(emote, "emote")}>{emote}</button>)}</div>
+            <form className="world-chat-form" onSubmit={handleSubmitChat}>
+              <input value={chatInput} onChange={(event) => setChatInput(event.target.value)} maxLength={80} placeholder="근처 채팅" />
+              <button type="submit">전송</button>
+            </form>
+          </>
+        ) : null}
       </section>
     </div>
   );
