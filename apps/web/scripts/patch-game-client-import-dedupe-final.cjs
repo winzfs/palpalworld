@@ -52,3 +52,18 @@ if (changed) {
 
 require("./patch-build-render-hotpath-final.cjs");
 require("./patch-smooth-movement-snapshot-throttle.cjs");
+
+const tileMapPath = path.join(__dirname, "..", "src", "features", "rendering", "TileMapRenderer.ts");
+let tileMap = fs.readFileSync(tileMapPath, "utf8");
+let tileMapChanged = false;
+if (tileMap.includes("const cacheBufferTiles = 8;")) {
+  tileMap = tileMap.replace("const cacheBufferTiles = 8;", "const cacheBufferTiles = 24;");
+  tileMapChanged = true;
+  console.log("[patch-game-client-import-dedupe-final] patched tilemap cache buffer 24");
+}
+if (tileMap.includes("const rerenderThresholdTiles = 4;")) {
+  tileMap = tileMap.replace("const rerenderThresholdTiles = 4;", "const rerenderThresholdTiles = 8;");
+  tileMapChanged = true;
+  console.log("[patch-game-client-import-dedupe-final] patched tilemap rerender threshold 8");
+}
+if (tileMapChanged) fs.writeFileSync(tileMapPath, tileMap);
