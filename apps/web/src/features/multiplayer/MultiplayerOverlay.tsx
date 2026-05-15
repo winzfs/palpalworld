@@ -316,6 +316,10 @@ export function MultiplayerOverlay() {
   }, [client, enabled, refreshPlayers]);
 
   useEffect(() => {
+    window.dispatchEvent(new CustomEvent("palpalworld:remote-players", { detail: { players: onlinePlayers } }));
+  }, [onlinePlayers]);
+
+  useEffect(() => {
     if (!client || !enabled) return;
     refreshBuildings();
     const buildingChannel = subscribeWorldBuildings(client, refreshBuildings);
@@ -477,7 +481,21 @@ export function MultiplayerOverlay() {
         const left = player.position.x - camera.cameraX;
         const top = player.position.y - camera.cameraY;
         if (left < -80 || left > camera.width + 80 || top < -100 || top > camera.height + 80) return null;
-        return <div key={player.id} className="multiplayer-player" style={{ left, top }}><div className={`multiplayer-player__avatar multiplayer-player__avatar--${player.direction ?? "down"}`}><span className="multiplayer-player__head" /><span className="multiplayer-player__body" /></div><div className="multiplayer-player__name">{player.nickname}</div></div>;
+        return (
+          <div key={player.id} className="multiplayer-player" style={{ left, top }}>
+            <div className={`multiplayer-player__avatar multiplayer-player__avatar--${player.direction ?? "down"}`}>
+              <span className="multiplayer-player__shadow" />
+              <span className="multiplayer-player__leg multiplayer-player__leg--back" />
+              <span className="multiplayer-player__leg multiplayer-player__leg--front" />
+              <span className="multiplayer-player__body" />
+              <span className="multiplayer-player__arm multiplayer-player__arm--back" />
+              <span className="multiplayer-player__arm multiplayer-player__arm--front" />
+              <span className="multiplayer-player__head" />
+              <span className="multiplayer-player__hair" />
+            </div>
+            <div className="multiplayer-player__name">{player.nickname}</div>
+          </div>
+        );
       })}
       <section
         className={`world-chat-panel ${chatCollapsed ? "world-chat-panel--collapsed" : ""}`}
