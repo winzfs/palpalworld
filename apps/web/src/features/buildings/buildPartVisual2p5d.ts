@@ -11,6 +11,16 @@ export const BUILD_2P5D_ROOF_RISE = 34;
 export type BuildVisualAnchor = "tile" | "front-edge" | "back-edge" | "center" | "corner";
 export type BuildVisualLayer = "ground" | "floor" | "structure" | "stairs" | "roof" | "decor" | "overlay";
 
+export type BuildMaterialPalette = {
+  base: string;
+  side: string;
+  dark: string;
+  light: string;
+  face: string;
+  roof: string;
+  fill: string;
+};
+
 export type BuildPartVisual2p5d = {
   anchor: BuildVisualAnchor;
   visualLayer: BuildVisualLayer;
@@ -40,7 +50,7 @@ const visualLayerOrder: Record<BuildVisualLayer, number> = {
   overlay: 80,
 };
 
-export function getMaterialPalette(material: BuildPartMaterial) {
+export function getMaterialPalette(material: BuildPartMaterial): BuildMaterialPalette {
   if (material === "stone") return {
     base: "#6b7280",
     side: "#4b5563",
@@ -48,6 +58,7 @@ export function getMaterialPalette(material: BuildPartMaterial) {
     light: "#a8b0bd",
     face: "#7d8795",
     roof: "#596273",
+    fill: "#6b7280",
   };
   if (material === "cloth") return {
     base: "#b45309",
@@ -56,6 +67,7 @@ export function getMaterialPalette(material: BuildPartMaterial) {
     light: "#fbbf24",
     face: "#d97706",
     roof: "#c2410c",
+    fill: "#d97706",
   };
   if (material === "metal") return {
     base: "#64748b",
@@ -64,6 +76,7 @@ export function getMaterialPalette(material: BuildPartMaterial) {
     light: "#cbd5e1",
     face: "#94a3b8",
     roof: "#475569",
+    fill: "#64748b",
   };
   return {
     base: "#8b5a2b",
@@ -72,6 +85,7 @@ export function getMaterialPalette(material: BuildPartMaterial) {
     light: "#d19a55",
     face: "#a96f38",
     roof: "#7c2d12",
+    fill: "#8b5a2b",
   };
 }
 
@@ -101,7 +115,7 @@ export function getBuildPartVisual2p5d(definition: BuildPartDefinition): BuildPa
     anchor: definition.category === "wall" || definition.category === "door" || definition.category === "window" ? "back-edge" : "tile",
     visualLayer: getCategoryVisualLayer(definition.category),
     renderHeightPx,
-    floorYOffsetPx: definition.floorLevel * BUILD_2P5D_FLOOR_HEIGHT,
+    floorYOffsetPx: 0,
     shadow: definition.category !== "floor" || definition.layer === "foundation",
     depthBias: layerDepthBias[definition.layer] ?? 0,
   };
