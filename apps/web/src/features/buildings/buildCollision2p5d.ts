@@ -2,6 +2,7 @@ import type { Vector2 } from "@palpalworld/shared";
 import { BUILD_GRID_SIZE, buildGridToWorld, worldToBuildGrid } from "./buildGrid";
 import { BUILD_PARTS, type PlacedBuildPart } from "./buildPartCatalog";
 import { getEdgeFromRotation } from "./buildPartOccupancy";
+import { getBuildPartsAtGrid, getBuildPartsNearGrid } from "./buildPartSpatialIndex2p5d";
 import { findStairAtPosition } from "./stairTraversal2p5d";
 
 export type BuildCollisionResult = {
@@ -56,7 +57,8 @@ function isObjectCollisionPart(part: PlacedBuildPart) {
 }
 
 export function isOnStairTransition(parts: PlacedBuildPart[], position: Vector2) {
-  return Boolean(findStairAtPosition(parts, position.x, position.y));
+  const grid = worldToBuildGrid(position);
+  return Boolean(findStairAtPosition(getBuildPartsNearGrid(parts, grid, 2), position.x, position.y));
 }
 
 export function getBuildCollisionAtPosition({
@@ -68,26 +70,24 @@ export function getBuildCollisionAtPosition({
   position: Vector2;
   floorLevel: number;
 }): BuildCollisionResult {
-  const onStair = isOnStairTransition(parts, position);
+  const grid = worldToBuildGrid(position);
+  const candidates = getBuildPartsNearGrid(parts, grid, 2);
+  const onStair = Boolean(findStairAtPosition(candidates, position.x, position.y));
   const activeFloor = Math.round(floorLevel);
 
-  for (const part of parts) {
+  for (const part of candidates) {
     if (Math.abs(part.floorLevel - activeFloor) > 0) continue;
     if (onStair && BUILD_PARTS[part.partId]?.category !== "floor") continue;
 
     if (isWallCollisionPart(part)) {
       const segment = getWallSegment(part);
-      const distance = distancePointToSegment(position, segment.a, segment.b);
-      if (distance <= PLAYER_COLLISION_RADIUS + WALL_COLLISION_THICKNESS) {
-        return { blocked: true, reason: "wall", part };
-      }
+      const segmentDistance = distancePointToSegment(position, segment.a, segment.b);
+      if (segmentDistance <= PLAYER_COLLISION_RADIUS + WALL_COLLISION_THICKNESS) return { blocked: true, reason: "wall", part };
     }
 
     if (isObjectCollisionPart(part)) {
       const center = buildGridToWorld(part);
-      if (Math.hypot(position.x - center.x, position.y - center.y) <= PLAYER_COLLISION_RADIUS + OBJECT_COLLISION_RADIUS) {
-        return { blocked: true, reason: "object", part };
-      }
+      if (Math.hypot(position.x - center.x, position.y - center.y) <= PLAYER_COLLISION_RADIUS + OBJECT_COLLISION_RADIUS) return { blocked: true, reason: "object", part };
     }
   }
 
@@ -96,8 +96,8 @@ export function getBuildCollisionAtPosition({
 
 export function isOverWalkableBuildCell(parts: PlacedBuildPart[], position: Vector2, floorLevel: number) {
   const grid = worldToBuildGrid(position);
-  return parts.some((part) => {
+  return getBuildPartsAtGrid(parts, grid).some((part) => {
     const definition = BUILD_PARTS[part.partId];
-    return definition?.category === "floor" && part.floorLevel === Math.round(floorLevel) && part.gridX === grid.gridX && part.gridY === grid.gridY;
+    return definition?.category === "floor" && part.floorLevel === Math.round(floorLevel);
   });
 }
