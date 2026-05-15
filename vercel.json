@@ -1,6 +1,6 @@
 {
   "installCommand": "cd apps/web && npm install",
-  "buildCommand": "cd apps/web && npm run build",
+  "buildCommand": "cd apps/web && node -e \"const fs=require('fs');const p='src/features/game/GameClientTileDemoStation.tsx';const s=fs.readFileSync(p,'utf8').replace(/}\\\\nfunction/g,'}\\nfunction');fs.writeFileSync(p,s);\" && npm run build",
   "outputDirectory": "apps/web/.next",
   "framework": "nextjs"
 }
