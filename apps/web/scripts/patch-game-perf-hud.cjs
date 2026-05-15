@@ -29,8 +29,8 @@ function replaceAll(search, replacement, label) {
   console.log(`[patch-game-perf-hud] patched ${label}`);
 }
 
-const hudStyle = "position:absolute;left:50%;top:42px;transform:translateX(-50%);z-index:60;max-width:230px;padding:7px 9px;border-radius:8px;background:rgba(2,6,23,.78);color:#dbeafe;font:10px/1.32 monospace;white-space:pre;pointer-events:none;display:none";
-const buttonStyle = "position:absolute;left:50%;top:8px;transform:translateX(-50%);z-index:61;padding:5px 8px;border-radius:999px;border:1px solid rgba(147,197,253,.55);background:rgba(15,23,42,.72);color:#bfdbfe;font:11px system-ui";
+const hudStyle = "position:absolute;left:50%;top:50px;transform:translateX(-50%);z-index:80;width:260px;max-width:calc(100% - 24px);min-height:92px;padding:8px 10px;border-radius:10px;border:1px solid rgba(147,197,253,.42);background:rgba(2,6,23,.88);color:#e0f2fe;font:11px/1.35 monospace;white-space:pre;pointer-events:none;display:none;box-sizing:border-box;text-align:left;box-shadow:0 8px 24px rgba(0,0,0,.28)";
+const buttonStyle = "position:absolute;left:50%;top:10px;transform:translateX(-50%);z-index:81;width:64px;height:30px;min-width:64px;min-height:30px;display:flex;align-items:center;justify-content:center;padding:0;border-radius:999px;border:1px solid rgba(147,197,253,.75);background:rgba(15,23,42,.92);color:#e0f2fe;font:700 12px/1 system-ui;letter-spacing:.3px;pointer-events:auto;box-sizing:border-box;box-shadow:0 4px 14px rgba(0,0,0,.25)";
 
 replace(
   `  private onWorldClick: (target: WorldClickTarget) => void;`,
@@ -86,7 +86,7 @@ replace(
 
   private updatePerfHudVisibility() {
     if (this.perfHudEl) this.perfHudEl.style.display = this.perfHudEnabled ? "block" : "none";
-    if (this.perfToggleEl) this.perfToggleEl.style.opacity = this.perfHudEnabled ? "1" : ".55";
+    if (this.perfToggleEl) this.perfToggleEl.style.opacity = this.perfHudEnabled ? "1" : ".75";
   }
 
   private updatePerfHud() {
@@ -107,26 +107,17 @@ replace(
   "perf hud methods",
 );
 
-replaceAll(
+for (const oldHud of [
   "position:absolute;right:8px;top:42px;z-index:30;max-width:260px;padding:7px 9px;border-radius:8px;background:rgba(2,6,23,.78);color:#dbeafe;font:11px/1.35 monospace;white-space:pre;pointer-events:none;display:none",
-  hudStyle,
-  "move old right perf hud to top center",
-);
-replaceAll(
-  "position:absolute;right:8px;top:8px;z-index:31;padding:5px 8px;border-radius:999px;border:1px solid rgba(147,197,253,.55);background:rgba(15,23,42,.72);color:#bfdbfe;font:11px system-ui",
-  buttonStyle,
-  "move old right perf button to top center",
-);
-replaceAll(
   "position:absolute;left:8px;top:42px;z-index:60;max-width:230px;padding:7px 9px;border-radius:8px;background:rgba(2,6,23,.78);color:#dbeafe;font:10px/1.32 monospace;white-space:pre;pointer-events:none;display:none",
-  hudStyle,
-  "move old left perf hud to top center",
-);
-replaceAll(
+  "position:absolute;left:50%;top:42px;transform:translateX(-50%);z-index:60;max-width:230px;padding:7px 9px;border-radius:8px;background:rgba(2,6,23,.78);color:#dbeafe;font:10px/1.32 monospace;white-space:pre;pointer-events:none;display:none"
+]) replaceAll(oldHud, hudStyle, "normalize perf hud style");
+
+for (const oldButton of [
+  "position:absolute;right:8px;top:8px;z-index:31;padding:5px 8px;border-radius:999px;border:1px solid rgba(147,197,253,.55);background:rgba(15,23,42,.72);color:#bfdbfe;font:11px system-ui",
   "position:absolute;left:8px;top:8px;z-index:61;padding:5px 8px;border-radius:999px;border:1px solid rgba(147,197,253,.55);background:rgba(15,23,42,.72);color:#bfdbfe;font:11px system-ui",
-  buttonStyle,
-  "move old left perf button to top center",
-);
+  "position:absolute;left:50%;top:8px;transform:translateX(-50%);z-index:61;padding:5px 8px;border-radius:999px;border:1px solid rgba(147,197,253,.55);background:rgba(15,23,42,.72);color:#bfdbfe;font:11px system-ui"
+]) replaceAll(oldButton, buttonStyle, "normalize perf button style");
 
 replace(
   `    if (event.key.toLowerCase() === "e") this.onInteract();`,
