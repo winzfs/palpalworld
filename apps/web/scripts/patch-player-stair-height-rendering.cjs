@@ -15,17 +15,6 @@ function replaceOnce(search, replacement, label) {
   console.log(`[patch-player-stair-height-rendering] patched ${label}`);
 }
 
-function ensureAfter(anchor, insertion, label) {
-  if (source.includes(insertion)) return;
-  replaceOnce(anchor, `${anchor}\n${insertion}`, label);
-}
-
-ensureAfter(
-  'import { findStairAtPosition, getFloorLevelOnStair, getFloorYOffsetOnStair } from "../buildings/stairTraversal2p5d";',
-  'import type { Vector2 as StairVector2 } from "@palpalworld/shared";',
-  "stair vector import marker",
-);
-
 replaceOnce(
   '  private updateStairTraversalFloorState() {\n    const player = this.getLocalPlayerPosition();',
   '  private getPlayerFloorYOffset(position: Vector2, isLocal: boolean) {\n    if (isLocal) return this.localPlayerFloorYOffset;\n    const stair = findStairAtPosition(this.getSceneBuildParts(), position.x, position.y);\n    return stair ? getFloorYOffsetOnStair(stair.segment, position.x, position.y) : 0;\n  }\n\n  private updateStairTraversalFloorState() {\n    const player = this.getLocalPlayerPosition();',
