@@ -4,11 +4,15 @@
   left: 72px;
   top: 96px;
   z-index: 110;
-  display: grid;
+  display: flex;
+  flex-direction: column;
   gap: 9px;
   width: min(380px, calc(100vw - 92px));
   max-height: min(620px, calc(100vh - 132px));
-  overflow: hidden;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
   padding: 10px;
   border: 2px solid rgb(242 209 107 / 0.42);
   border-radius: 16px;
@@ -74,6 +78,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 8px;
+  flex: 0 0 auto;
 }
 
 .build-mode-panel__floor-tabs {
@@ -98,6 +103,7 @@
 .build-mode-panel__edit-card,
 .build-mode-panel__selected {
   display: grid;
+  flex: 0 0 auto;
   gap: 7px;
   padding: 9px;
   border: 1px solid rgb(250 204 21 / 0.2);
@@ -203,9 +209,10 @@
 .build-mode-panel__groups {
   display: grid;
   gap: 10px;
-  min-height: 0;
-  overflow: auto;
+  min-height: auto;
+  overflow: visible;
   padding-right: 2px;
+  padding-bottom: 18px;
 }
 
 .build-mode-panel__group {
@@ -284,7 +291,7 @@
     top: auto;
     bottom: calc(96px + var(--safe-bottom));
     width: auto;
-    max-height: min(52vh, 440px);
+    max-height: min(60vh, 500px);
     padding: 8px;
     border-width: 1px;
     border-radius: 14px;
