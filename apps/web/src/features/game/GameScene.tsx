@@ -97,6 +97,7 @@ export class GameWorldScene {
   private keys = new Set<string>();
   private animationFrame = 0;
   private snapshot: WorldSnapshot | null = null;
+  private previousCreatureHpById = new Map<string, number>();
   private previousPlayerPositions = new Map<string, Vector2>();
   private movingPlayerIds = new Set<string>();
   private localPlayerId: string | null = null;
@@ -155,9 +156,17 @@ export class GameWorldScene {
       if (moved) this.movingPlayerIds.add(player.id);
       this.previousPlayerPositions.set(player.id, { ...player.position });
     }
+
+    const damagedCreature = normalizedSnapshot.creatures.find((creature) => {
+      const previousHp = this.previousCreatureHpById.get(creature.id);
+      return previousHp !== undefined && creature.hp > 0 && creature.hp < previousHp;
+    });
+    if (damagedCreature) this.highlightedCreatureId = damagedCreature.id;
+
     if (this.highlightedCreatureId && !normalizedSnapshot.creatures.some((creature) => creature.id === this.highlightedCreatureId && creature.hp > 0)) {
       this.highlightedCreatureId = null;
     }
+    this.previousCreatureHpById = new Map(normalizedSnapshot.creatures.map((creature) => [creature.id, creature.hp]));
     this.snapshot = normalizedSnapshot;
     this.localPlayerId = localPlayerId;
     this.localEquippedWeaponItemId = readStoredWeaponItemId();
@@ -209,7 +218,7 @@ export class GameWorldScene {
     this.pointerWorldPosition = position;
     if (!this.placementPreviewBuildingType) {
       const creature = this.getCreatureAt(position);
-      if (creature) { this.highlightedCreatureId = creature.id; this.onWorldClick({ kind: "creature", creature }); this.emitPrimaryTap(); return; }
+      if (creature) { this.onWorldClick({ kind: "creature", creature }); this.emitPrimaryTap(); return; }
       const building = this.getBuildingAt(position);
       if (building) { this.onWorldClick({ kind: "building", building }); return; }
     }
@@ -275,11 +284,10 @@ export class GameWorldScene {
       const y = creature.position.y - cameraY;
       this.renderer.drawCreature(ctx, creature, x, y);
       if (creature.id === this.highlightedCreatureId) {
-        const isCapture = creature.hp > 0 && creature.hp / creature.maxHp <= 0.3;
         ctx.save();
-        ctx.strokeStyle = isCapture ? "rgba(74, 222, 128, 0.98)" : "rgba(248, 113, 113, 0.95)";
+        ctx.strokeStyle = "rgba(250, 204, 21, 0.96)";
         ctx.lineWidth = 3;
-        ctx.setLineDash(isCapture ? [8, 5] : []);
+        ctx.setLineDash([]);
         ctx.beginPath();
         ctx.ellipse(x, y + 22, 29, 11, 0, 0, Math.PI * 2);
         ctx.stroke();
