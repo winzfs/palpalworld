@@ -34,6 +34,16 @@
   background: linear-gradient(rgb(58 45 28 / 0.88), rgb(22 18 28 / 0.88));
 }
 
+.build-mode-panel__header--draggable {
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+
+.build-mode-panel__header--draggable:active {
+  cursor: grabbing;
+}
+
 .build-mode-panel__header div {
   display: grid;
   min-width: 0;
@@ -286,11 +296,9 @@
 
 @media (max-width: 720px) {
   .build-mode-panel {
-    left: 8px;
-    right: 8px;
-    top: auto;
-    bottom: calc(96px + var(--safe-bottom));
-    width: auto;
+    right: auto;
+    bottom: auto;
+    width: min(420px, calc(100vw - 16px));
     max-height: min(60vh, 500px);
     padding: 8px;
     border-width: 1px;
