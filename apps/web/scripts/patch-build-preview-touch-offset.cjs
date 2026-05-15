@@ -44,6 +44,16 @@ ${placementHelpers}`,
   );
 }
 
+// Build-part logical storage remains grid-based, but the visible build lattice
+// lives in iso/world space. Range and tile-bound checks must therefore use the
+// rendered iso center, not buildGridToWorld(grid), otherwise valid visible cells
+// are incorrectly rejected after moving the player/camera.
+replaceOnce(
+  '    const grid = worldToBuildGrid(position);\n    const snapped = buildGridToWorld(grid);\n    if (snapped.x < 0 || snapped.x > MAP_TILE_SIZE.width || snapped.y < 0 || snapped.y > MAP_TILE_SIZE.height) return { ok: false, reason: "타일 밖에는 설치할 수 없습니다." };\n    if (distance(localPlayer, snapped) > WORLD.buildRange) return { ok: false, reason: "너무 멀리 설치할 수 없습니다." };',
+  '    const grid = worldToBuildGrid(position);\n    const snapped = buildGridToWorld(grid);\n    const visualCenter = buildGridToIsoCenter(grid.gridX, grid.gridY);\n    if (visualCenter.x < 0 || visualCenter.x > MAP_TILE_SIZE.width || visualCenter.y < 0 || visualCenter.y > MAP_TILE_SIZE.height) return { ok: false, reason: "타일 밖에는 설치할 수 없습니다." };\n    if (distance(localPlayer, visualCenter) > WORLD.buildRange) return { ok: false, reason: "너무 멀리 설치할 수 없습니다." };',
+  "validity uses iso visual center",
+);
+
 // Preview must use the same isometric inverse grid as the renderer. Using
 // worldToBuildGrid here makes the preview jump to a different diamond lattice
 // cell because build parts are drawn with buildGridToIsoCenter().
@@ -53,17 +63,12 @@ replaceOnce(
   "preview uses iso inverse grid",
 );
 
-// Convert the original non-lifted iso preview block too, in case this patch runs
-// before a prior touch-offset conversion on a fresh source tree.
 replaceOnce(
   '    const previewPosition = this.buildPartDragPosition ?? this.pointerWorldPosition;\n    const grid = worldToBuildGrid(previewPosition);\n    const isoPos = buildGridToIsoCenter(grid.gridX, grid.gridY);\n    const snapped = buildGridToWorld(grid);\n    const validity = this.getBuildPartPlacementValidity(snapped);\n    this.buildPartRenderer.drawPreview(ctx, this.selectedBuildPartId, isoPos.x - isoCamX, isoPos.y - isoCamY, this.selectedBuildPartRotation, validity.ok, this.buildPartDragPointerId !== null ? 0.52 : 0.42, this.selectedBuildFloorLevel);',
   '    const previewPosition = this.buildPartDragPosition ?? this.pointerWorldPosition;\n    const grid = this.getBuildPartTouchPlacementGrid(previewPosition);\n    const isoPos = buildGridToIsoCenter(grid.gridX, grid.gridY);\n    const snapped = buildGridToWorld(grid);\n    const validity = this.getBuildPartPlacementValidity(snapped);\n    this.buildPartRenderer.drawPreview(ctx, this.selectedBuildPartId, isoPos.x - isoCamX, isoPos.y - isoCamY, this.selectedBuildPartRotation, validity.ok, this.buildPartDragPointerId !== null ? 0.52 : 0.42, this.selectedBuildFloorLevel);',
   "fresh preview uses iso inverse grid",
 );
 
-// New part placement should commit to the exact same cell used by the visible
-// preview. Convert the pointer position into iso grid first, then back to the
-// normal world grid shape expected by commitBuildPartPlacement().
 replaceOnce(
   '      this.commitBuildPartPlacement(this.getBuildPartTouchPlacementPosition(position));',
   '      this.commitBuildPartPlacement(this.getBuildPartTouchPlacementWorld(position));',
