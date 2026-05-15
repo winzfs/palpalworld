@@ -45,6 +45,11 @@ export class PrimitiveRenderer {
   }
 
   drawBuilding(ctx: CanvasRenderingContext2D, building: BuildingState, x: number, y: number) {
+    if (String(building.type) === "farm_plot") {
+      this.drawFarmPlot(ctx, building, x, y);
+      return;
+    }
+
     this.drawShadow(ctx, x, y + 20, 56, 14);
     ctx.fillStyle = "#7c4a1d"; ctx.strokeStyle = "#2a1608"; ctx.lineWidth = 3;
     ctx.beginPath(); ctx.roundRect(x - 27, y - 23, 54, 46, 5); ctx.fill(); ctx.stroke();
@@ -63,6 +68,80 @@ export class PrimitiveRenderer {
     ctx.fillStyle = "#1f1308"; ctx.fillRect(x - 5, y - 20, 3, 3); ctx.fillRect(x + 3, y - 20, 3, 3);
     this.drawLabel(ctx, player.nickname, x, y - 33, "13px system-ui");
     this.drawMiniBar(ctx, x, y + 23, 44, player.hp / player.maxHp, "#22c55e");
+  }
+
+  private drawFarmPlot(ctx: CanvasRenderingContext2D, building: BuildingState, x: number, y: number) {
+    const width = 104;
+    const height = 72;
+    const left = x - width / 2;
+    const top = y - height / 2;
+
+    this.drawShadow(ctx, x, y + 36, 112, 22);
+    ctx.save();
+    ctx.lineJoin = "round";
+    ctx.lineCap = "round";
+
+    ctx.fillStyle = "#365314";
+    ctx.strokeStyle = "#1f1308";
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.roundRect(left - 5, top - 5, width + 10, height + 10, 10);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = "#5b3418";
+    ctx.strokeStyle = "#2a1608";
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.roundRect(left, top, width, height, 8);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = "#9a6732";
+    ctx.strokeStyle = "#3b2413";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.roundRect(left - 3, top - 3, width + 6, 9, 5);
+    ctx.roundRect(left - 3, top + height - 6, width + 6, 9, 5);
+    ctx.roundRect(left - 3, top - 3, 9, height + 6, 5);
+    ctx.roundRect(left + width - 6, top - 3, 9, height + 6, 5);
+    ctx.fill();
+    ctx.stroke();
+
+    for (let row = 0; row < 5; row += 1) {
+      const rowY = top + 15 + row * 10;
+      const shade = row % 2 === 0 ? "#4a2815" : "#6b3d1d";
+      ctx.fillStyle = shade;
+      ctx.beginPath();
+      ctx.roundRect(left + 12, rowY, width - 24, 7, 999);
+      ctx.fill();
+      ctx.strokeStyle = "rgba(29, 16, 8, 0.58)";
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    }
+
+    ctx.fillStyle = "#7c4a1d";
+    for (let index = 0; index < 20; index += 1) {
+      const seed = this.hashText(`${building.id}-${index}`);
+      const px = left + 14 + (seed % 76);
+      const py = top + 13 + ((seed * 7) % 46);
+      ctx.fillRect(px, py, 2 + (seed % 3), 2);
+    }
+
+    ctx.strokeStyle = "#84cc16";
+    ctx.lineWidth = 3;
+    for (const [gx, gy, len] of [[left + 8, top + 6, 8], [left + width - 10, top + 12, 9], [left + 20, top + height + 2, 7], [left + width - 24, top - 2, 7]] as const) {
+      ctx.beginPath();
+      ctx.moveTo(gx, gy);
+      ctx.lineTo(gx + 2, gy - len);
+      ctx.moveTo(gx, gy);
+      ctx.lineTo(gx - 4, gy - len + 3);
+      ctx.stroke();
+    }
+
+    this.drawMiniBar(ctx, x, y + 48, 72, building.hp / building.maxHp, "#22c55e");
+    this.drawLabel(ctx, "밭", x, y - 48);
+    ctx.restore();
   }
 
   private drawBreezewing(ctx: CanvasRenderingContext2D, x: number, y: number, wiggle: number, time: number) {
