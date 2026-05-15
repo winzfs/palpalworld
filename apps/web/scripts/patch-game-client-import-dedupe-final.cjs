@@ -52,6 +52,7 @@ if (changed) {
 
 require("./patch-build-render-hotpath-final.cjs");
 require("./patch-smooth-movement-snapshot-throttle.cjs");
+require("./patch-mobile-ui-quickslots-online.cjs");
 
 const tileMapPath = path.join(__dirname, "..", "src", "features", "rendering", "TileMapRenderer.ts");
 let tileMap = fs.readFileSync(tileMapPath, "utf8");
