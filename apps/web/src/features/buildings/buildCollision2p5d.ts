@@ -11,9 +11,9 @@ export type BuildCollisionResult = {
   part?: PlacedBuildPart;
 };
 
-const PLAYER_COLLISION_RADIUS = 15;
-const WALL_COLLISION_THICKNESS = 12;
-const OBJECT_COLLISION_RADIUS = 24;
+const PLAYER_COLLISION_RADIUS = 10;
+const WALL_COLLISION_THICKNESS = 4;
+const OBJECT_COLLISION_RADIUS = 20;
 
 function distancePointToSegment(point: Vector2, a: Vector2, b: Vector2) {
   const vx = b.x - a.x;
@@ -58,7 +58,7 @@ function isObjectCollisionPart(part: PlacedBuildPart) {
 
 export function isOnStairTransition(parts: PlacedBuildPart[], position: Vector2) {
   const grid = worldToBuildGrid(position);
-  return Boolean(findStairAtPosition(getBuildPartsNearGrid(parts, grid, 2), position.x, position.y));
+  return Boolean(findStairAtPosition(getBuildPartsNearGrid(parts, grid, 1), position.x, position.y));
 }
 
 export function getBuildCollisionAtPosition({
@@ -71,7 +71,7 @@ export function getBuildCollisionAtPosition({
   floorLevel: number;
 }): BuildCollisionResult {
   const grid = worldToBuildGrid(position);
-  const candidates = getBuildPartsNearGrid(parts, grid, 2);
+  const candidates = getBuildPartsNearGrid(parts, grid, 1);
   const onStair = Boolean(findStairAtPosition(candidates, position.x, position.y));
   const activeFloor = Math.round(floorLevel);
 
