@@ -63,6 +63,15 @@ function getBuildingOwnerLabel(building: BuildingState) {
   if (!shared.isRemoteSharedBuilding) return null;
   return `${shared.ownerNickname ?? "Unknown"}의 ${getBuildingDisplayName(building)}`;
 }
+function getBuildingHitRadius(building: Pick<BuildingState, "type">) {
+  return String(building.type) === "farm_plot" ? 62 : 42;
+}
+function getBuildingOverlapRadius(building: Pick<BuildingState, "type">) {
+  return String(building.type) === "farm_plot" ? 76 : WORLD.tileSize;
+}
+function getBuildingHoverEllipse(building: Pick<BuildingState, "type">) {
+  return String(building.type) === "farm_plot" ? { rx: 58, ry: 22, offsetY: 34 } : { rx: 32, ry: 12, offsetY: 24 };
+}
 function readStoredWeaponItemId() {
   if (typeof window === "undefined") return null;
   const directWeaponItemId = window.localStorage.getItem(equippedWeaponStorageKey);
@@ -260,10 +269,14 @@ export class GameWorldScene {
     if (!localPlayer) return { ok: false, reason: "플레이어 위치를 찾을 수 없습니다." };
     if (position.x < 0 || position.x > MAP_TILE_SIZE.width || position.y < 0 || position.y > MAP_TILE_SIZE.height) return { ok: false, reason: "타일 밖에는 설치할 수 없습니다." };
     if (distance(localPlayer, position) > WORLD.buildRange) return { ok: false, reason: "너무 멀리 설치할 수 없습니다." };
-    for (const building of this.getSceneBuildings()) if (distance(building.position, position) < WORLD.tileSize) return { ok: false, reason: "이미 다른 건물이 있는 위치입니다." };
+    const previewRadius = getBuildingOverlapRadius({ type: this.placementPreviewBuildingType });
+    for (const building of this.getSceneBuildings()) {
+      const existingRadius = getBuildingOverlapRadius(building);
+      if (distance(building.position, position) < Math.max(previewRadius, existingRadius)) return { ok: false, reason: "이미 다른 건물이 있는 위치입니다." };
+    }
     return { ok: true, reason: this.placementDragStart ? "손을 떼면 설치됩니다." : "드래그해서 위치 선택" };
   }
-  private getBuildingAt(position: Vector2) { let nearest: BuildingState | null = null; let nearestDistance = Number.POSITIVE_INFINITY; for (const building of this.getSceneBuildings()) { const hitDistance = distance(building.position, position); if (hitDistance <= 42 && hitDistance < nearestDistance) { nearest = building; nearestDistance = hitDistance; } } return nearest; }
+  private getBuildingAt(position: Vector2) { let nearest: BuildingState | null = null; let nearestDistance = Number.POSITIVE_INFINITY; for (const building of this.getSceneBuildings()) { const hitDistance = distance(building.position, position); const hitRadius = getBuildingHitRadius(building); if (hitDistance <= hitRadius && hitDistance < nearestDistance) { nearest = building; nearestDistance = hitDistance; } } return nearest; }
   private getCreatureAt(position: Vector2) { let nearest: CreaturePublicState | null = null; let nearestDistance = Number.POSITIVE_INFINITY; for (const creature of this.getSceneCreatures()) { if (creature.hp <= 0) continue; const hitDistance = distance(creature.position, position); if (hitDistance <= 46 && hitDistance < nearestDistance) { nearest = creature; nearestDistance = hitDistance; } } return nearest; }
   private getCameraOffset() { const rect = this.root.getBoundingClientRect(); const localPlayer = this.getLocalPlayer(); const target = localPlayer?.position ?? { x: rect.width / 2, y: rect.height / 2 }; return { x: Math.max(0, Math.min(Math.max(0, MAP_TILE_SIZE.width - rect.width), target.x - rect.width / 2)), y: Math.max(0, Math.min(Math.max(0, MAP_TILE_SIZE.height - rect.height), target.y - rect.height / 2)) }; }
   private getViewportBounds(cameraX: number, cameraY: number): ViewportBounds { const rect = this.root.getBoundingClientRect(); return { left: cameraX, top: cameraY, right: cameraX + rect.width, bottom: cameraY + rect.height }; }
@@ -371,7 +384,7 @@ export class GameWorldScene {
       const y = building.position.y - cameraY;
       this.renderer.drawBuilding(ctx, building, x, y);
       this.drawBuildingOwnerLabel(ctx, building, x, y);
-      if (building.id === this.hoverBuildingId) { ctx.save(); ctx.strokeStyle = "rgba(250, 204, 21, 0.9)"; ctx.lineWidth = 2; ctx.beginPath(); ctx.ellipse(x, y + 24, 32, 12, 0, 0, Math.PI * 2); ctx.stroke(); ctx.restore(); }
+      if (building.id === this.hoverBuildingId) { const hover = getBuildingHoverEllipse(building); ctx.save(); ctx.strokeStyle = "rgba(250, 204, 21, 0.9)"; ctx.lineWidth = 2; ctx.beginPath(); ctx.ellipse(x, y + hover.offsetY, hover.rx, hover.ry, 0, 0, Math.PI * 2); ctx.stroke(); ctx.restore(); }
     }
   }
   private drawResources(ctx: CanvasRenderingContext2D, cameraX: number, cameraY: number, viewport: ViewportBounds) { for (const resource of this.getSceneResources()) if (isPositionInViewport(resource.position, viewport)) this.renderer.drawResource(ctx, resource, resource.position.x - cameraX, resource.position.y - cameraY); }
@@ -412,7 +425,8 @@ export class GameWorldScene {
     const y = this.pointerWorldPosition.y - cameraY;
     const accent = validity.ok ? "34, 197, 94" : "239, 68, 68";
     ctx.save(); ctx.globalAlpha = validity.ok ? 0.5 : 0.34; this.renderer.drawBuilding(ctx, previewBuilding, x, y); ctx.restore();
-    ctx.save(); ctx.strokeStyle = `rgba(${accent}, 0.9)`; ctx.fillStyle = `rgba(${accent}, 0.16)`; ctx.lineWidth = 2; ctx.setLineDash([6, 4]); ctx.beginPath(); ctx.ellipse(x, y + 24, 30, 11, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke(); ctx.restore();
+    const hover = getBuildingHoverEllipse(previewBuilding);
+    ctx.save(); ctx.strokeStyle = `rgba(${accent}, 0.9)`; ctx.fillStyle = `rgba(${accent}, 0.16)`; ctx.lineWidth = 2; ctx.setLineDash([6, 4]); ctx.beginPath(); ctx.ellipse(x, y + hover.offsetY, hover.rx, hover.ry, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke(); ctx.restore();
     ctx.save(); ctx.fillStyle = "rgba(15, 23, 42, 0.86)"; ctx.strokeStyle = `rgba(${accent}, 0.82)`; ctx.lineWidth = 1; ctx.beginPath(); ctx.roundRect(x - 98, y - 70, 196, 32, 8); ctx.fill(); ctx.stroke(); ctx.fillStyle = validity.ok ? "#bbf7d0" : "#fecaca"; ctx.font = "12px system-ui"; ctx.textAlign = "center"; ctx.fillText(validity.reason, x, y - 50); ctx.restore();
   }
   private drawInteractionHint(ctx: CanvasRenderingContext2D, cameraX: number, cameraY: number) {
