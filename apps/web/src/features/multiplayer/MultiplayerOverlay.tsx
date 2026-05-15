@@ -22,6 +22,7 @@ import {
   fetchWorldCreatures,
   subscribeWorldCreatures,
   upsertWorldCreatures,
+  type WorldCreatureRow,
 } from "./supabaseWorldCreatures";
 
 type WorldSnapshotEvent = CustomEvent<{ snapshot?: WorldSnapshot; localPlayerId?: string | null }>;
@@ -61,6 +62,30 @@ function getSharedBuildingIcon(type: string) {
   return "🏗";
 }
 
+function applyRemoteCreatureRows(localCreatures: CreaturePublicState[], rows: WorldCreatureRow[]) {
+  if (localCreatures.length === 0 || rows.length === 0) return false;
+  const rowById = new Map(rows.map((row) => [row.creature_id, row]));
+  let changed = false;
+
+  for (const creature of localCreatures) {
+    const row = rowById.get(creature.id);
+    if (!row) continue;
+
+    const remoteHp = row.defeated ? 0 : Math.max(0, Math.min(row.hp, row.max_hp));
+    if (remoteHp < creature.hp) {
+      creature.hp = remoteHp;
+      changed = true;
+    }
+
+    if (row.defeated && creature.hp !== 0) {
+      creature.hp = 0;
+      changed = true;
+    }
+  }
+
+  return changed;
+}
+
 export function MultiplayerOverlay() {
   const [enabled] = useState(() => isSupabaseMultiplayerEnabled());
   const [playerId] = useState(() => getOrCreateMultiplayerPlayerId());
@@ -94,7 +119,9 @@ export function MultiplayerOverlay() {
   const refreshCreatures = useCallback(async () => {
     if (!client) return;
     const rows = await fetchWorldCreatures(client, latestTileRef.current);
+    const changed = applyRemoteCreatureRows(latestCreaturesRef.current, rows);
     dispatchRemoteCreatureState(rows);
+    if (changed) window.dispatchEvent(new CustomEvent("palpalworld:remote-creatures-applied"));
   }, [client]);
 
   useEffect(() => {
