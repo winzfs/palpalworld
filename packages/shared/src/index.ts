@@ -1,4 +1,4 @@
-import type { MapTileRef } from "./worldTiles";
+import type { MapDirection, MapTileRef } from "./worldTiles";
 
 export type EntityId = string;
 export type PlayerId = string;
@@ -284,6 +284,7 @@ export type PlayerInputPayload = {
 export type ClientToServerEvents = {
   "client:join_world": (payload: { nickname: string; worldId?: WorldId }) => void;
   "client:player_input": (payload: PlayerInputPayload) => void;
+  "client:travel_tile": (payload: { direction?: MapDirection }) => void;
   "client:chat_message": (payload: { message: string }) => void;
   "client:interact_entity": (payload: { entityId: EntityId }) => void;
   "client:craft_item": (payload: { recipeId: string }) => void;
