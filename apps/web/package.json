@@ -11,7 +11,7 @@
     "lint": "next lint"
   },
   "dependencies": {
-    "@palpalworld/shared": "workspace:*",
+    "@palpalworld/shared": "file:../../packages/shared",
     "@supabase/supabase-js": "^2.87.1",
     "next": "^15.1.4",
     "phaser": "^3.87.0",
