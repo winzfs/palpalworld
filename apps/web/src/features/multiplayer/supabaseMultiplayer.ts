@@ -26,6 +26,12 @@ export type LocalPresencePayload = {
   equippedWeaponItemId?: string | null;
 };
 
+export type WorldHostClaimResult = {
+  isHost: boolean;
+  hostPlayerId: string | null;
+  lastHeartbeatAt: string | null;
+};
+
 const defaultSupabaseUrl = "https://bbpqhwexbdozkxsfoyrn.supabase.co";
 const defaultSupabasePublishableKey = "sb_publishable_gZu3HGdokX2wQsvnaS6SaA__xjvRrn4";
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? defaultSupabaseUrl;
@@ -110,24 +116,34 @@ export async function fetchOnlinePlayers(client: SupabaseClient, localPlayerId: 
   return (data as WorldPlayerPresenceRow[]).map(rowToPlayer);
 }
 
-export async function isCurrentPlayerWorldHost(client: SupabaseClient, localPlayerId: string, tile: MapTileRef | null) {
-  if (!localPlayerId || localPlayerId === "unknown") return false;
-  const since = new Date(Date.now() - 15_000).toISOString();
-  let query = client
-    .from("world_players")
-    .select("player_id,updated_at")
-    .gt("updated_at", since)
-    .order("updated_at", { ascending: true })
-    .order("player_id", { ascending: true })
-    .limit(1);
-
-  if (tile) {
-    query = query.eq("region_id", tile.regionId).eq("tile_x", tile.tileX).eq("tile_y", tile.tileY);
+export async function claimWorldHost(client: SupabaseClient, localPlayerId: string, tile: MapTileRef | null, timeoutSeconds = 5): Promise<WorldHostClaimResult> {
+  if (!tile || !localPlayerId || localPlayerId === "unknown") {
+    return { isHost: false, hostPlayerId: null, lastHeartbeatAt: null };
   }
 
-  const { data, error } = await query;
-  if (error || !data || data.length <= 0) return true;
-  return data[0]?.player_id === localPlayerId;
+  const { data, error } = await client.rpc("claim_world_host", {
+    p_region_id: tile.regionId,
+    p_tile_x: tile.tileX,
+    p_tile_y: tile.tileY,
+    p_player_id: localPlayerId,
+    p_timeout_seconds: timeoutSeconds,
+  });
+
+  if (error || !data || data.length <= 0) {
+    return { isHost: false, hostPlayerId: null, lastHeartbeatAt: null };
+  }
+
+  const row = data[0] as { is_host?: boolean; host_player_id?: string; last_heartbeat_at?: string };
+  return {
+    isHost: Boolean(row.is_host),
+    hostPlayerId: row.host_player_id ?? null,
+    lastHeartbeatAt: row.last_heartbeat_at ?? null,
+  };
+}
+
+export async function isCurrentPlayerWorldHost(client: SupabaseClient, localPlayerId: string, tile: MapTileRef | null) {
+  const result = await claimWorldHost(client, localPlayerId, tile);
+  return result.isHost;
 }
 
 export function subscribeOnlinePlayers(
