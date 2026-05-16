@@ -27,20 +27,18 @@ patchFile(demoPath, (source) => {
 
   next = next.replace(
     /\s*const handleTogglePixiStage = useCallback\(\(\) => \{[\s\S]*?\n\s*\}, \[pixiStageEnabled\]\);/,
-    '\n  const handleTogglePixiStage = useCallback(() => {\n    if (typeof window !== "undefined") {\n      window.localStorage.setItem(pixiStageFlagStorageKey, "true");\n      window.dispatchEvent(new Event("palpalworld:pixi-stage-forced"));\n    }\n  }, []);'
+    '\n  const handleTogglePixiStage = useCallback(() => {}, []);'
   );
 
   next = next.replace(
     /<button className=\{pixiStageEnabled \? "hud-pixi-toggle hud-pixi-toggle--on" : "hud-pixi-toggle"\} onClick=\{handleTogglePixiStage\} aria-pressed=\{pixiStageEnabled\}>\{pixiStageEnabled \? "Pixi ON" : "Pixi OFF"\}<\/button>/,
-    '<button className="hud-pixi-toggle hud-pixi-toggle--on" onClick={handleTogglePixiStage} aria-pressed="true" title="Pixi 렌더러 고정">Pixi ON</button>'
+    ''
   );
 
-  if (!next.includes('window.localStorage.setItem(pixiStageFlagStorageKey, "true");\n    window.dispatchEvent(new Event("palpalworld:pixi-stage-forced-init"));')) {
-    next = next.replace(
-      '  const handleSceneReady = useCallback((scene: GameWorldScene) => { sceneRef.current = scene; }, []);',
-      '  useEffect(() => {\n    if (typeof window === "undefined") return;\n    window.localStorage.setItem(pixiStageFlagStorageKey, "true");\n    window.dispatchEvent(new Event("palpalworld:pixi-stage-forced-init"));\n  }, []);\n  const handleSceneReady = useCallback((scene: GameWorldScene) => { sceneRef.current = scene; }, []);'
-    );
-  }
+  next = next.replace(
+    /\s*useEffect\(\(\) => \{\n\s*if \(typeof window === "undefined"\) return;\n\s*window\.localStorage\.setItem\(pixiStageFlagStorageKey, "true"\);\n\s*window\.dispatchEvent\(new Event\("palpalworld:pixi-stage-forced-init"\)\);\n\s*\}, \[\]\);/,
+    ''
+  );
 
   return next;
 }, 'tile demo pixi lock final');
@@ -50,7 +48,7 @@ patchFile(onlinePath, (source) => {
 
   next = next.replace(
     /function readPixiStageEnabled\(\) \{[\s\S]*?\n\}/,
-    'function readPixiStageEnabled() {\n  if (typeof window !== "undefined") window.localStorage.setItem(pixiStageFlagStorageKey, "true");\n  return true;\n}'
+    'function readPixiStageEnabled() {\n  return true;\n}'
   );
 
   next = next.replace(
