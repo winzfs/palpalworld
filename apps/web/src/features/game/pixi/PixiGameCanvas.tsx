@@ -273,7 +273,7 @@ export function PixiGameCanvas({ enabled = false, snapshot, localPlayerId }: Pix
       const resourceNodes = new Map<string, NodeRecord>();
       const buildingNodes = new Map<string, NodeRecord>();
       const lightingGraphics = new PIXI.Graphics();
-      const debugText = new PIXI.Text({ text: "pixi boot", style: { fill: 0xffffff, fontSize: 12, fontFamily: "monospace" } });
+      const debugText = new PIXI.Text({ text: "pixi boot", style: { fill: 0xffffff, fontSize: 12, fontFamily: "monospace", stroke: { color: 0x000000, width: 3 } } });
       layers.lighting.addChild(lightingGraphics);
       layers.debug.addChild(debugText);
 
@@ -354,7 +354,7 @@ export function PixiGameCanvas({ enabled = false, snapshot, localPlayerId }: Pix
 
         drawNight(lightingGraphics, host.clientWidth || 1, host.clientHeight || 1, camera.x, camera.y, players);
         debugText.text = `pixi p:${players.length} c:${creatures.length} r:${resources.length} b:${buildings.length} snap:${currentSnapshot ? 1 : 0}`;
-        debugText.position.set(8, 8);
+        debugText.position.set(10, Math.max(72, (host.clientHeight || 120) - 34));
       });
 
       cleanup = () => {
