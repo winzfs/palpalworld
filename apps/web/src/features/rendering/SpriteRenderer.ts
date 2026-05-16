@@ -102,12 +102,10 @@ function drawMountedFlyingBreezewing(ctx: CanvasRenderingContext2D, x: number, y
   ctx.lineWidth = 2;
   ctx.lineJoin = "round";
   ctx.lineCap = "round";
-
   ctx.fillStyle = "rgba(0,0,0,0.18)";
   ctx.beginPath();
   ctx.ellipse(x, y + 30, 42, 9, 0, 0, Math.PI * 2);
   ctx.fill();
-
   ctx.strokeStyle = "rgba(0,0,0,0.72)";
   ctx.lineWidth = 3;
   ctx.fillStyle = "#bfdbfe";
@@ -119,24 +117,20 @@ function drawMountedFlyingBreezewing(ctx: CanvasRenderingContext2D, x: number, y
   ctx.ellipse(x + 28, bodyY - 1 - flap * 7, 30, 9, 0.72, 0, Math.PI * 2);
   ctx.fill();
   ctx.stroke();
-
   ctx.fillStyle = "#7dd3fc";
   ctx.beginPath();
   ctx.ellipse(x, bodyY, 18, 22, 0, 0, Math.PI * 2);
   ctx.fill();
   ctx.stroke();
-
   ctx.fillStyle = "#dbeafe";
   ctx.beginPath();
   ctx.ellipse(x, bodyY + 7, 10, 9, 0, 0, Math.PI * 2);
   ctx.fill();
-
   ctx.fillStyle = "#38bdf8";
   ctx.beginPath();
   ctx.arc(headX, bodyY - 18, 9, 0, Math.PI * 2);
   ctx.fill();
   ctx.stroke();
-
   ctx.fillStyle = "#0ea5e9";
   ctx.beginPath();
   ctx.moveTo(headX - 7, bodyY - 25);
@@ -145,7 +139,6 @@ function drawMountedFlyingBreezewing(ctx: CanvasRenderingContext2D, x: number, y
   ctx.closePath();
   ctx.fill();
   ctx.stroke();
-
   ctx.fillStyle = "#fef3c7";
   ctx.beginPath();
   if (direction === "up") {
@@ -160,17 +153,12 @@ function drawMountedFlyingBreezewing(ctx: CanvasRenderingContext2D, x: number, y
   ctx.closePath();
   ctx.fill();
   ctx.stroke();
-
   ctx.fillStyle = "#111827";
   if (direction === "up") {
     ctx.fillRect(headX - 4, bodyY - 20, 2, 2);
     ctx.fillRect(headX + 2, bodyY - 20, 2, 2);
-  } else if (facingLeft) {
-    ctx.fillRect(headX - 4, bodyY - 20, 2, 2);
-  } else {
-    ctx.fillRect(headX + 2, bodyY - 20, 2, 2);
-  }
-
+  } else if (facingLeft) ctx.fillRect(headX - 4, bodyY - 20, 2, 2);
+  else ctx.fillRect(headX + 2, bodyY - 20, 2, 2);
   ctx.fillStyle = "#93c5fd";
   ctx.beginPath();
   ctx.moveTo(x + tailSide * 13, bodyY + 4);
@@ -179,7 +167,6 @@ function drawMountedFlyingBreezewing(ctx: CanvasRenderingContext2D, x: number, y
   ctx.closePath();
   ctx.fill();
   ctx.stroke();
-
   ctx.strokeStyle = "#92400e";
   ctx.lineWidth = 2;
   ctx.beginPath();
@@ -188,21 +175,10 @@ function drawMountedFlyingBreezewing(ctx: CanvasRenderingContext2D, x: number, y
   ctx.moveTo(x + 5, bodyY + 18);
   ctx.lineTo(x + 5, bodyY + 25);
   ctx.stroke();
-
   ctx.restore();
 }
 
-function drawAnimatedFallbackPlayer(
-  ctx: CanvasRenderingContext2D,
-  player: PlayerPublicState,
-  x: number,
-  y: number,
-  isLocal: boolean,
-  direction: SpriteDirection,
-  isMoving: boolean,
-  now: number,
-  hideGroundShadow = false,
-) {
+function drawAnimatedFallbackPlayer(ctx: CanvasRenderingContext2D, player: PlayerPublicState, x: number, y: number, isLocal: boolean, direction: SpriteDirection, isMoving: boolean, now: number, hideGroundShadow = false) {
   const fill = isLocal ? "#38bdf8" : "#a78bfa";
   const outline = "#0f172a";
   const skin = "#f8d7a4";
@@ -214,24 +190,20 @@ function drawAnimatedFallbackPlayer(
   const side = direction === "left" ? -1 : 1;
   const isSide = direction === "left" || direction === "right";
   const isBack = direction === "up";
-
   ctx.save();
   ctx.lineWidth = 3;
   ctx.lineCap = "round";
   ctx.lineJoin = "round";
-
   if (!hideGroundShadow) {
     ctx.fillStyle = "rgba(0,0,0,0.28)";
     ctx.beginPath();
     ctx.ellipse(x, y + 17, isMoving ? 17 : 14, isMoving ? 6 : 8, 0, 0, Math.PI * 2);
     ctx.fill();
   }
-
   const leftLegSwing = isSide ? run * 7 * side : run * 5;
   const rightLegSwing = isSide ? runOpp * 7 * side : runOpp * 5;
   const leftArmSwing = isSide ? runOpp * 8 * side : runOpp * 5;
   const rightArmSwing = isSide ? run * 8 * side : run * 5;
-
   ctx.strokeStyle = outline;
   ctx.lineWidth = 5;
   ctx.beginPath();
@@ -240,7 +212,6 @@ function drawAnimatedFallbackPlayer(
   ctx.moveTo(x + 7, bodyY + 8);
   ctx.lineTo(x + 9 + rightLegSwing, bodyY + 19);
   ctx.stroke();
-
   ctx.strokeStyle = "#1e40af";
   ctx.lineWidth = 3;
   ctx.beginPath();
@@ -249,7 +220,6 @@ function drawAnimatedFallbackPlayer(
   ctx.moveTo(x + 7, bodyY + 8);
   ctx.lineTo(x + 9 + rightLegSwing, bodyY + 19);
   ctx.stroke();
-
   ctx.fillStyle = fill;
   ctx.strokeStyle = outline;
   ctx.lineWidth = 3;
@@ -257,7 +227,6 @@ function drawAnimatedFallbackPlayer(
   ctx.roundRect(x - 12, bodyY - 14, 24, 29, 7);
   ctx.fill();
   ctx.stroke();
-
   ctx.strokeStyle = outline;
   ctx.lineWidth = 5;
   ctx.beginPath();
@@ -274,7 +243,6 @@ function drawAnimatedFallbackPlayer(
   ctx.moveTo(x + 11, bodyY - 8);
   ctx.lineTo(x + 17 + rightArmSwing, bodyY + 5);
   ctx.stroke();
-
   const headX = x + (isSide ? side * 3 : 0);
   const headY = bodyY - 20;
   ctx.fillStyle = skin;
@@ -284,7 +252,6 @@ function drawAnimatedFallbackPlayer(
   ctx.arc(headX, headY, 10, 0, Math.PI * 2);
   ctx.fill();
   ctx.stroke();
-
   ctx.fillStyle = hair;
   if (isBack) {
     ctx.beginPath();
@@ -302,7 +269,6 @@ function drawAnimatedFallbackPlayer(
     ctx.fill();
     ctx.fillRect(headX - 8, headY - 10, 16, 5);
   }
-
   if (!isBack) {
     ctx.fillStyle = hair;
     if (isSide) ctx.fillRect(headX + side * 3, headY - 2, 3, 3);
@@ -318,7 +284,6 @@ function drawAnimatedFallbackPlayer(
     ctx.lineTo(headX + 5, headY + 2);
     ctx.stroke();
   }
-
   ctx.font = "13px system-ui";
   ctx.textAlign = "center";
   ctx.lineWidth = 3;
@@ -326,7 +291,6 @@ function drawAnimatedFallbackPlayer(
   ctx.strokeText(player.nickname, x, bodyY - 35);
   ctx.fillStyle = "#ffffff";
   ctx.fillText(player.nickname, x, bodyY - 35);
-
   ctx.fillStyle = "rgba(0,0,0,0.45)";
   ctx.fillRect(x - 22, y + 24, 44, 5);
   ctx.fillStyle = "#22c55e";
@@ -346,6 +310,7 @@ function drawSpriteSheetFrame(ctx: CanvasRenderingContext2D, image: HTMLImageEle
 
 function getWeaponStyle(weaponItemId: string | null | undefined) {
   if (!weaponItemId) return null;
+  if (weaponItemId === "torch") return { length: 34, handle: "#7c2d12", blade: "#f97316", kind: "torch" as const };
   if (weaponItemId.includes("pickaxe")) return { length: 30, handle: "#92400e", blade: "#cbd5e1", kind: "pickaxe" as const };
   if (weaponItemId.includes("axe")) return { length: 28, handle: "#92400e", blade: "#e5e7eb", kind: "axe" as const };
   if (weaponItemId.includes("sickle")) return { length: 25, handle: "#166534", blade: "#ecfccb", kind: "sickle" as const };
@@ -383,7 +348,27 @@ function drawEquippedWeapon(ctx: CanvasRenderingContext2D, x: number, y: number,
   ctx.fillStyle = style.blade;
   ctx.strokeStyle = "rgba(0,0,0,0.72)";
   ctx.lineWidth = 1.5;
-  if (style.kind === "axe") {
+  if (style.kind === "torch") {
+    const flame = 0.8 + Math.sin(performance.now() / 86) * 0.18;
+    const tipX = style.length + 4;
+    ctx.fillStyle = "rgba(255, 198, 92, 0.18)";
+    ctx.beginPath();
+    ctx.arc(tipX, 0, 18 * flame, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "#facc15";
+    ctx.beginPath();
+    ctx.moveTo(tipX, -15 * flame);
+    ctx.quadraticCurveTo(tipX + 12, -1, tipX + 2, 14 * flame);
+    ctx.quadraticCurveTo(tipX - 10, 2, tipX, -15 * flame);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = "#f97316";
+    ctx.beginPath();
+    ctx.moveTo(tipX + 1, -9 * flame);
+    ctx.quadraticCurveTo(tipX + 7, 1, tipX + 1, 9 * flame);
+    ctx.quadraticCurveTo(tipX - 5, 2, tipX + 1, -9 * flame);
+    ctx.fill();
+  } else if (style.kind === "axe") {
     ctx.beginPath(); ctx.ellipse(style.length + 2, -4, 6, 9, 0.5, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
   } else if (style.kind === "pickaxe") {
     ctx.beginPath(); ctx.moveTo(style.length - 7, -7); ctx.lineTo(style.length + 10, -2); ctx.lineTo(style.length - 7, 6); ctx.stroke();
