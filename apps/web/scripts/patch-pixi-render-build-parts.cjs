@@ -20,7 +20,7 @@ function replaceOnce(search, replacement, label) {
 if (!source.includes('PlacedBuildPart')) {
   replaceOnce(
     'import { createPixiCamera, resizePixiCamera, centerPixiCameraOn } from "./PixiCamera";',
-    'import { createPixiCamera, resizePixiCamera, centerPixiCameraOn } from "./PixiCamera";\nimport { BUILD_GRID_SIZE } from "../buildings/buildGrid";\nimport { BUILD_PARTS, type BuildPartId, type BuildPartRotation, type BuildFloorLevel, type PlacedBuildPart } from "../buildings/buildPartCatalog";\nimport { buildGridToIsoCenter, getIsoTilePolygon2p5d, getIsoWallPlane2p5d } from "../buildings/buildProjection2p5d";\nimport { BUILD_2P5D_FLOOR_HEIGHT, getMaterialPalette } from "../buildings/buildPartVisual2p5d";',
+    'import { createPixiCamera, resizePixiCamera, centerPixiCameraOn } from "./PixiCamera";\nimport { BUILD_GRID_SIZE } from "../../buildings/buildGrid";\nimport { BUILD_PARTS, type BuildPartId, type BuildPartRotation, type BuildFloorLevel, type PlacedBuildPart } from "../../buildings/buildPartCatalog";\nimport { buildGridToIsoCenter, getIsoTilePolygon2p5d, getIsoWallPlane2p5d } from "../../buildings/buildProjection2p5d";\nimport { BUILD_2P5D_FLOOR_HEIGHT, getMaterialPalette } from "../../buildings/buildPartVisual2p5d";',
     'build part imports',
   );
 }
@@ -62,7 +62,6 @@ function drawPixiIsoFloorPart(graphics: PixiGraphics, part: PlacedBuildPart, pre
   const definition = BUILD_PARTS[part.partId];
   if (!definition) return;
   const palette = getPixiBuildPartPalette(part);
-  const iso = buildGridToIsoCenter(part.gridX, part.gridY);
   const width = definition.width * BUILD_GRID_SIZE;
   const height = definition.height * BUILD_GRID_SIZE;
   const visualY = -part.floorLevel * BUILD_2P5D_FLOOR_HEIGHT;
