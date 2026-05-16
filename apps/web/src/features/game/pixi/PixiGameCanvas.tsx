@@ -1,6 +1,6 @@
 "use client";
 
-import type { PlayerPublicState, WorldSnapshot } from "@palpalworld/shared";
+import type { Direction, PlayerPublicState, WorldSnapshot } from "@palpalworld/shared";
 import { useEffect, useRef } from "react";
 import { createPixiCamera, resizePixiCamera, centerPixiCameraOn } from "./PixiCamera";
 import { createPixiGameLayers } from "./PixiLayers";
@@ -21,6 +21,9 @@ declare global {
         moveTo: (x: number, y: number) => void;
         lineTo: (x: number, y: number) => void;
         stroke: (options: { width: number; color: number; alpha?: number }) => void;
+        rect: (x: number, y: number, width: number, height: number) => void;
+        roundRect: (x: number, y: number, width: number, height: number, radius: number) => void;
+        ellipse: (x: number, y: number, halfWidth: number, halfHeight: number) => void;
         circle: (x: number, y: number, radius: number) => void;
         fill: (options: { color: number; alpha?: number }) => void;
       };
@@ -66,31 +69,87 @@ function loadPixiRuntime() {
   return pixiLoaderPromise;
 }
 
-function getPlayerColor(player: PlayerPublicState, isLocal: boolean) {
-  if (isLocal) return 0x60a5fa;
-  const hasTorch = (player as PlayerPublicState & { equippedWeaponItemId?: string | null }).equippedWeaponItemId === "torch";
-  return hasTorch ? 0xfacc15 : 0xa78bfa;
+function hasTorchEquipped(player: PlayerPublicState) {
+  return (player as PlayerPublicState & { equippedWeaponItemId?: string | null }).equippedWeaponItemId === "torch";
 }
 
-function drawPlayerMarker(graphics: PixiGraphics, player: PlayerPublicState, isLocal: boolean) {
-  const color = getPlayerColor(player, isLocal);
-  const radius = isLocal ? 18 : 15;
-  const hasTorch = (player as PlayerPublicState & { equippedWeaponItemId?: string | null }).equippedWeaponItemId === "torch";
+function getPlayerPalette(player: PlayerPublicState, isLocal: boolean) {
+  if (isLocal) {
+    return { jacket: 0x2563eb, trim: 0x93c5fd, hair: 0x1e293b, skin: 0xffd3a7 };
+  }
+  const seed = player.id.split("").reduce((sum, char) => sum + char.charCodeAt(0), 0);
+  const jackets = [0x7c3aed, 0x059669, 0xdc2626, 0xd97706, 0x0891b2, 0xbe185d];
+  return { jacket: jackets[seed % jackets.length], trim: 0xe9d5ff, hair: 0x111827, skin: 0xf8caa2 };
+}
 
-  if (hasTorch) {
-    graphics.circle(player.position.x, player.position.y, 44);
-    graphics.fill({ color: 0xfacc15, alpha: 0.12 });
+function getDirectionOffset(direction: Direction | undefined) {
+  switch (direction) {
+    case "left": return { x: -1, y: 0 };
+    case "right": return { x: 1, y: 0 };
+    case "up": return { x: 0, y: -1 };
+    case "down":
+    default: return { x: 0, y: 1 };
+  }
+}
+
+function drawPixiCharacter(graphics: PixiGraphics, player: PlayerPublicState, isLocal: boolean) {
+  const x = player.position.x;
+  const y = player.position.y;
+  const palette = getPlayerPalette(player, isLocal);
+  const direction = getDirectionOffset(player.direction);
+  const torch = hasTorchEquipped(player);
+
+  if (torch) {
+    graphics.circle(x, y + 2, 74);
+    graphics.fill({ color: 0xfacc15, alpha: 0.08 });
+    graphics.circle(x, y + 2, 42);
+    graphics.fill({ color: 0xf97316, alpha: 0.08 });
   }
 
-  graphics.circle(player.position.x, player.position.y, radius);
-  graphics.fill({ color, alpha: isLocal ? 0.28 : 0.34 });
-  graphics.circle(player.position.x, player.position.y, Math.max(6, radius - 7));
-  graphics.fill({ color, alpha: 0.88 });
-  graphics.moveTo(player.position.x - radius, player.position.y);
-  graphics.lineTo(player.position.x + radius, player.position.y);
-  graphics.moveTo(player.position.x, player.position.y - radius);
-  graphics.lineTo(player.position.x, player.position.y + radius);
-  graphics.stroke({ width: 2, color, alpha: 0.76 });
+  graphics.ellipse(x, y + 19, 18, 6);
+  graphics.fill({ color: 0x000000, alpha: 0.24 });
+
+  const step = Math.sin(Date.now() / 150 + x * 0.01 + y * 0.01) * 1.4;
+  graphics.roundRect(x - 8, y + 9 + step, 5, 12, 3);
+  graphics.roundRect(x + 3, y + 9 - step, 5, 12, 3);
+  graphics.fill({ color: 0x1e293b, alpha: 1 });
+
+  graphics.roundRect(x - 11, y - 8, 22, 25, 7);
+  graphics.fill({ color: palette.jacket, alpha: isLocal ? 1 : 0.94 });
+  graphics.roundRect(x - 4, y - 5, 8, 19, 3);
+  graphics.fill({ color: palette.trim, alpha: 0.52 });
+
+  const armOffsetX = direction.x * 5;
+  const armOffsetY = direction.y * 3;
+  graphics.roundRect(x - 16 + armOffsetX, y - 4 + armOffsetY, 6, 17, 4);
+  graphics.roundRect(x + 10 + armOffsetX, y - 4 + armOffsetY, 6, 17, 4);
+  graphics.fill({ color: palette.jacket, alpha: 0.92 });
+
+  graphics.circle(x, y - 19, 11);
+  graphics.fill({ color: palette.skin, alpha: 1 });
+  graphics.roundRect(x - 9, y - 30, 18, 9, 6);
+  graphics.fill({ color: palette.hair, alpha: 1 });
+
+  const eyeY = y - 18 + Math.max(0, direction.y) * 1.2;
+  const eyeX = direction.x * 2.2;
+  graphics.circle(x - 4 + eyeX, eyeY, 1.4);
+  graphics.circle(x + 4 + eyeX, eyeY, 1.4);
+  graphics.fill({ color: 0x0f172a, alpha: 0.9 });
+
+  graphics.moveTo(x, y - 34);
+  graphics.lineTo(x + direction.x * 8, y - 34 + direction.y * 8);
+  graphics.stroke({ width: 3, color: isLocal ? 0x60a5fa : 0xc4b5fd, alpha: 0.72 });
+
+  if (torch) {
+    const handX = x + 17 + direction.x * 8;
+    const handY = y - 2 + direction.y * 4;
+    graphics.roundRect(handX - 2, handY - 8, 4, 18, 2);
+    graphics.fill({ color: 0x7c2d12, alpha: 1 });
+    graphics.circle(handX, handY - 12, 7);
+    graphics.fill({ color: 0xfacc15, alpha: 0.5 });
+    graphics.circle(handX, handY - 12, 3.5);
+    graphics.fill({ color: 0xfb923c, alpha: 0.9 });
+  }
 }
 
 function isSamePlayerTile(a: PlayerPublicState | null | undefined, b: PlayerPublicState | null | undefined) {
@@ -146,8 +205,8 @@ export function PixiGameCanvas({ enabled = false, snapshot, localPlayerId }: Pix
       host.appendChild(app.canvas);
       const camera = createPixiCamera(host.clientWidth, host.clientHeight);
       const layers = createPixiGameLayers(app, PIXI);
-      const playerMarkers = new PIXI.Graphics();
-      layers.players.addChild(playerMarkers as never);
+      const playerGraphics = new PIXI.Graphics();
+      layers.players.addChild(playerGraphics as never);
 
       const resize = () => resizePixiCamera(camera, host.clientWidth, host.clientHeight);
       const resizeObserver = new ResizeObserver(resize);
@@ -161,13 +220,16 @@ export function PixiGameCanvas({ enabled = false, snapshot, localPlayerId }: Pix
         root.position.set(-camera.x * camera.zoom, -camera.y * camera.zoom);
         root.scale.set(camera.zoom);
 
-        playerMarkers.clear();
-        if (localPlayer) drawPlayerMarker(playerMarkers, localPlayer, true);
-        for (const remotePlayer of remotePlayersRef.current) {
-          if (remotePlayer.id === localPlayerIdRef.current) continue;
-          if (localPlayer && !isSamePlayerTile(localPlayer, remotePlayer)) continue;
-          drawPlayerMarker(playerMarkers, remotePlayer, false);
-        }
+        playerGraphics.clear();
+        const drawablePlayers = [
+          ...(localPlayer ? [{ player: localPlayer, isLocal: true }] : []),
+          ...remotePlayersRef.current
+            .filter((remotePlayer) => remotePlayer.id !== localPlayerIdRef.current)
+            .filter((remotePlayer) => !localPlayer || isSamePlayerTile(localPlayer, remotePlayer))
+            .map((remotePlayer) => ({ player: remotePlayer, isLocal: false })),
+        ].sort((a, b) => a.player.position.y - b.player.position.y);
+
+        for (const entry of drawablePlayers) drawPixiCharacter(playerGraphics, entry.player, entry.isLocal);
       });
 
       cleanup = () => {
