@@ -8,10 +8,25 @@ let changed = false;
 function patch(label) { changed = true; console.log(`[patch-existing-client-broadcast-finalize] ${label}`); }
 function addAfter(anchor, text, label) { if (source.includes(text)) return; if (!source.includes(anchor)) { console.log(`[patch-existing-client-broadcast-finalize] skip ${label}`); return; } source = source.replace(anchor, anchor + text); patch(label); }
 function ensureRef(anchor, text, label) { if (source.includes(text)) return; addAfter(anchor, text, label); }
+function ensureConst(name, value) {
+  const line = `const ${name} = ${value};\n`;
+  const regex = new RegExp(`const ${name} = [^;]+;\\n`, 'g');
+  const matches = source.match(regex) ?? [];
+  if (matches.length === 0) {
+    addAfter('const creatureMapSize = creatureMapMax - creatureMapMin;\n', line, `ensure ${name}`);
+    return;
+  }
+  source = source.replace(regex, '');
+  addAfter('const creatureMapSize = creatureMapMax - creatureMapMin;\n', line, `dedupe ${name}`);
+}
 
 addAfter('import { PixiGameCanvas } from "./pixi/PixiGameCanvas";\n', 'import { broadcastCreaturePositions, createCreatureBroadcastChannel, type CreaturePositionsBroadcastPayload } from "../multiplayer/supabaseCreatureBroadcast";\nimport { claimWorldHost, getCurrentMultiplayerPlayerId, getSupabaseClient, isSupabaseMultiplayerEnabled } from "../multiplayer/supabaseMultiplayer";\nimport { updateWorldCreaturePositions } from "../multiplayer/supabaseWorldCreatures";\n', 'ensure broadcast imports');
 addAfter('type CreatureWanderTarget = { x: number; y: number; nextRetargetAt: number };\n', 'type CreatureBroadcastTarget = { x: number; y: number; hp: number; maxHp: number; receivedAt: number };\n', 'ensure broadcast target type');
-addAfter('const creatureMapSize = creatureMapMax - creatureMapMin;\n', 'const creatureBroadcastMs = 250;\nconst creatureSnapshotSaveMs = 1000;\nconst creatureHostClaimMs = 0;\nconst creatureBroadcastLerpPerSecond = 9;\nconst creatureBroadcastSnapDistance = 520;\n', 'ensure broadcast constants');
+ensureConst('creatureBroadcastMs', '250');
+ensureConst('creatureSnapshotSaveMs', '1000');
+ensureConst('creatureHostClaimMs', '0');
+ensureConst('creatureBroadcastLerpPerSecond', '9');
+ensureConst('creatureBroadcastSnapDistance', '520');
 
 const smoothHelper = `
 function smoothRemoteCreatures(creatures: CreaturePublicState[], targets: Map<string, CreatureBroadcastTarget>, deltaSeconds: number, now: number) {
@@ -98,8 +113,6 @@ const guardedLoop = `      const client = supabaseClientRef.current;
 const localLoop = '      moveDemoCreatures(getCurrentCreatures(), deltaSeconds, now, demoPositionRef.current);\n      applyDemoSnapshot(false);';
 if (source.includes(localLoop)) { source = source.split(localLoop).join(guardedLoop); patch('replace standalone local creature loop'); }
 
-source = source.replaceAll('const creatureSnapshotSaveMs = 8000;', 'const creatureSnapshotSaveMs = 1000;');
-source = source.replaceAll('const creatureHostClaimMs = 2200;', 'const creatureHostClaimMs = 0;');
 source = source.replaceAll('const lastCreatureHostClaimAtRef = useRef(0);', 'const lastCreatureHostClaimAtRef = useRef(-999999);');
 
 if (changed) fs.writeFileSync(target, source);
