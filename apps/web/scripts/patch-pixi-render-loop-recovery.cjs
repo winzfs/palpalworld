@@ -15,12 +15,19 @@ function replaceAll(search, replacement, label) {
   console.log(`[patch-pixi-render-loop-recovery] patched ${label}`);
 }
 
+function replaceRegex(regex, replacement, label) {
+  if (!regex.test(source)) {
+    console.log(`[patch-pixi-render-loop-recovery] skipped ${label}`);
+    return;
+  }
+  source = source.replace(regex, replacement);
+  changed = true;
+  console.log(`[patch-pixi-render-loop-recovery] patched ${label}`);
+}
+
 replaceAll('async function hashTerrainTile', 'function hashTerrainTile', 'hashTerrainTile sync');
 
-const brokenNightStart = source.indexOf('function carvePixiNightLight(');
-const brokenNightEnd = source.indexOf('\nfunction isSamePlayerTile', brokenNightStart);
-if (brokenNightStart >= 0 && brokenNightEnd > brokenNightStart) {
-  const safePixiNight = `function drawPixiNightLighting(graphics: PixiGraphics, width: number, height: number, cameraX: number, cameraY: number, drawablePlayers: DrawablePlayer[]) {
+const safePixiNight = `function drawPixiNightLighting(graphics: PixiGraphics, width: number, height: number, cameraX: number, cameraY: number, drawablePlayers: DrawablePlayer[]) {
   graphics.clear();
   if (!isNightModeActive()) return;
 
@@ -48,21 +55,29 @@ if (brokenNightStart >= 0 && brokenNightEnd > brokenNightStart) {
   }
 }
 `;
-  source = source.slice(0, brokenNightStart) + safePixiNight + source.slice(brokenNightEnd);
+
+// Replace any older broken night implementation, whether it starts at carvePixiNightLight
+// or directly at drawPixiNightLighting.
+const carveStart = source.indexOf('function carvePixiNightLight(');
+const samePlayerAfterCarve = source.indexOf('\nfunction isSamePlayerTile', carveStart);
+if (carveStart >= 0 && samePlayerAfterCarve > carveStart) {
+  source = source.slice(0, carveStart) + safePixiNight + source.slice(samePlayerAfterCarve);
   changed = true;
-  console.log('[patch-pixi-render-loop-recovery] replaced broken canvas-mask night helpers');
+  console.log('[patch-pixi-render-loop-recovery] replaced carve-based night helpers');
+} else {
+  const drawStart = source.indexOf('function drawPixiNightLighting(');
+  const samePlayerAfterDraw = source.indexOf('\nfunction isSamePlayerTile', drawStart);
+  if (drawStart >= 0 && samePlayerAfterDraw > drawStart && source.slice(drawStart, samePlayerAfterDraw).includes('nightMask')) {
+    source = source.slice(0, drawStart) + safePixiNight + source.slice(samePlayerAfterDraw);
+    changed = true;
+    console.log('[patch-pixi-render-loop-recovery] replaced broken drawPixiNightLighting');
+  }
 }
 
-replaceAll(
-  `        const lighting = nightMaskSprite as unknown as PixiTransformNode;
-        lighting.position.set(0, 0);
-        lighting.scale.set(1);
-        nightMaskSprite.width = host.clientWidth;
-        nightMaskSprite.height = host.clientHeight;`,
-  `        const lighting = lightingGraphics as unknown as PixiTransformNode;
-        lighting.position.set(0, 0);
-        lighting.scale.set(1);`,
-  'nightMaskSprite transform to lightingGraphics',
+replaceRegex(
+  /\n\s*const lighting = nightMaskSprite as unknown as PixiTransformNode;\n\s*lighting\.position\.set\(0, 0\);\n\s*lighting\.scale\.set\(1\);\n\s*nightMaskSprite\.width = host\.clientWidth;\n\s*nightMaskSprite\.height = host\.clientHeight;/g,
+  '\n        const lighting = lightingGraphics as unknown as PixiTransformNode;\n        lighting.position.set(0, 0);\n        lighting.scale.set(1);',
+  'nightMaskSprite transform regex',
 );
 
 replaceAll(
@@ -71,8 +86,14 @@ replaceAll(
   'nightMask draw call to lightingGraphics',
 );
 
+replaceRegex(
+  /drawPixiNightLighting\(nightMaskCanvas, nightMaskContext, nightMaskTexture, ([^;]+)\);/g,
+  'drawPixiNightLighting(lightingGraphics, $1);',
+  'nightMask draw call regex',
+);
+
 if (source.includes('nightMaskSprite') || source.includes('nightMaskCanvas') || source.includes('nightMaskContext') || source.includes('nightMaskTexture')) {
-  throw new Error('[patch-pixi-render-loop-recovery] unresolved nightMask references remain');
+  throw new Error('[patch-pixi-render-loop-recovery] unresolved nightMask references remain after recovery');
 }
 
 if (changed) fs.writeFileSync(filePath, source);
