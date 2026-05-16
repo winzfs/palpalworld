@@ -14,9 +14,9 @@
     "dev": "pnpm -r --parallel dev",
     "dev:web": "pnpm --filter @palpalworld/web dev",
     "dev:server": "pnpm --filter @palpalworld/realtime-server dev",
-    "build": "pnpm -r build",
-    "build:web": "pnpm --filter @palpalworld/web build",
-    "build:web:npm": "npm --workspace @palpalworld/shared run build && npm --workspace @palpalworld/web run build",
+    "build": "pnpm --filter @palpalworld/shared build && pnpm --dir apps/web run prebuild && pnpm --filter @palpalworld/web build",
+    "build:web": "pnpm --filter @palpalworld/shared build && pnpm --dir apps/web run prebuild && pnpm --filter @palpalworld/web build",
+    "build:web:npm": "npm --workspace @palpalworld/shared run build && cd apps/web && npm run prebuild && npm run build",
     "typecheck": "pnpm -r typecheck",
     "lint": "pnpm -r lint",
     "format": "prettier --write ."
