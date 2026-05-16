@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { RealtimeChannel } from "@supabase/supabase-js";
 import type { BuildingState, CreaturePublicState, Direction, PlayerPublicState, ResourceNodeState, Vector2, WorldSnapshot } from "@palpalworld/shared";
 import { DEFAULT_PLAYER_TILE, clampPositionToTile, type MapTileRef } from "../../../../../packages/shared/src/worldTiles";
 import {
@@ -22,8 +23,8 @@ import {
   fetchWorldCreatures,
   rowToCreature,
   seedMissingWorldCreatures,
-  updateWorldCreaturePositions,
   subscribeWorldCreatures,
+  updateWorldCreaturePositions,
 } from "../multiplayer/supabaseWorldCreatures";
 import {
   fetchWorldResources,
@@ -210,7 +211,7 @@ export function GameClientSupabaseWorld() {
   const enabled = Boolean(client) && isSupabaseMultiplayerEnabled();
   const [playerId] = useState(getOrCreateMultiplayerPlayerId);
   const [nickname] = useState(createClientNickname);
-  const [currentTile, setCurrentTile] = useState<MapTileRef>({ ...DEFAULT_PLAYER_TILE });
+  const [currentTile] = useState<MapTileRef>({ ...DEFAULT_PLAYER_TILE });
   const [playerPosition, setPlayerPosition] = useState<Vector2>({ x: 1500, y: 1500 });
   const [playerDirection, setPlayerDirection] = useState<Direction>("down");
   const [onlinePlayers, setOnlinePlayers] = useState<PlayerPublicState[]>([]);
@@ -224,6 +225,7 @@ export function GameClientSupabaseWorld() {
   const directionRef = useRef<Direction>("down");
   const tileRef = useRef<MapTileRef>({ ...DEFAULT_PLAYER_TILE });
   const creaturesRef = useRef<CreaturePublicState[]>([]);
+  const creatureBroadcastChannelRef = useRef<RealtimeChannel | null>(null);
   const isHostRef = useRef(false);
   const lastHostClaimAtRef = useRef(0);
   const lastBroadcastAtRef = useRef(0);
@@ -322,6 +324,7 @@ export function GameClientSupabaseWorld() {
     const buildingChannel = subscribeWorldBuildings(client, () => void refreshWorld());
     const playerChannel = subscribeOnlinePlayers(client, () => void refreshWorld());
     const broadcastChannel = createCreatureBroadcastChannel(client, tileRef.current, handleCreatureBroadcast);
+    creatureBroadcastChannelRef.current = broadcastChannel;
     const refreshInterval = window.setInterval(() => void refreshWorld(), 5000);
     return () => {
       window.clearInterval(refreshInterval);
@@ -330,6 +333,7 @@ export function GameClientSupabaseWorld() {
       client.removeChannel(buildingChannel);
       client.removeChannel(playerChannel);
       client.removeChannel(broadcastChannel);
+      if (creatureBroadcastChannelRef.current === broadcastChannel) creatureBroadcastChannelRef.current = null;
     };
   }, [client, enabled, handleCreatureBroadcast, refreshWorld]);
 
@@ -386,9 +390,10 @@ export function GameClientSupabaseWorld() {
 
       if (now - lastBroadcastAtRef.current >= creatureBroadcastMs) {
         lastBroadcastAtRef.current = now;
-        const channel = createCreatureBroadcastChannel(client, tileRef.current, () => undefined);
-        void broadcastCreaturePositions({ channel, hostId: playerId, tile: tileRef.current, creatures: creaturesRef.current })
-          .finally(() => client.removeChannel(channel));
+        const channel = creatureBroadcastChannelRef.current;
+        if (channel) {
+          void broadcastCreaturePositions({ channel, hostId: playerId, tile: tileRef.current, creatures: creaturesRef.current });
+        }
       }
       if (now - lastSnapshotSaveAtRef.current >= creatureSnapshotSaveMs) {
         lastSnapshotSaveAtRef.current = now;
