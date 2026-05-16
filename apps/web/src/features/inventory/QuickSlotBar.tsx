@@ -1,5 +1,5 @@
 import type { EquipmentState, InventoryState } from "@palpalworld/shared";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type PointerEvent } from "react";
 import { createEmptyEquipment, equipItemInstance, findItemInstance, getEquipmentSlotForItemId, isEquippableItemId } from "../equipment/equipmentRules";
 import { getPetItemLabel, isPetItemId } from "../pets/petInventory";
 import { findInventoryEntryByKey } from "./inventoryUiModel";
@@ -103,28 +103,70 @@ export function QuickSlotBar({
   onClearQuickSlot: (slotIndex: number) => void;
 }) {
   const mountedPetItemId = useMountedPet();
+  const lastPointerUseAtRef = useRef(0);
+
+  const useSlot = useCallback((slotIndex: number, entryKey: string | null) => {
+    const entry = findInventoryEntryByKey(inventory, entryKey);
+    if (!entry) return;
+    const equipped = equipQuickSlotItem(inventory, entryKey);
+    if (!equipped) onUseQuickSlot(slotIndex);
+  }, [inventory, onUseQuickSlot]);
+
+  const handleQuickSlotPointerDown = useCallback((event: PointerEvent<HTMLButtonElement>, slotIndex: number, entryKey: string | null) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (!entryKey) return;
+    lastPointerUseAtRef.current = performance.now();
+    useSlot(slotIndex, entryKey);
+  }, [useSlot]);
+
+  const handleQuickSlotClick = useCallback((event: React.MouseEvent<HTMLButtonElement>, slotIndex: number, entryKey: string | null) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (performance.now() - lastPointerUseAtRef.current < 350) return;
+    useSlot(slotIndex, entryKey);
+  }, [useSlot]);
+
+  const handleDismount = useCallback((event?: PointerEvent<HTMLButtonElement> | React.MouseEvent<HTMLButtonElement>) => {
+    event?.preventDefault();
+    event?.stopPropagation();
+    persistMountedPet(null);
+  }, []);
 
   return (
     <>
       {mountedPetItemId ? (
-        <button className="pet-dismount-button" onClick={() => persistMountedPet(null)}>
+        <button
+          type="button"
+          className="pet-dismount-button"
+          onPointerDown={handleDismount}
+          onClick={(event) => handleDismount(event)}
+        >
           내리기 · {getPetItemLabel(mountedPetItemId)}
         </button>
       ) : null}
-      <div className="quick-slot-bar" aria-label="퀵슬롯">
+      <div
+        className="quick-slot-bar"
+        aria-label="퀵슬롯"
+        onPointerDown={(event) => event.stopPropagation()}
+        onPointerMove={(event) => event.stopPropagation()}
+        onPointerUp={(event) => event.stopPropagation()}
+        onTouchStart={(event) => event.stopPropagation()}
+        onTouchMove={(event) => event.stopPropagation()}
+        onTouchEnd={(event) => event.stopPropagation()}
+      >
         {quickSlots.map((entryKey, index) => {
           const entry = findInventoryEntryByKey(inventory, entryKey);
           return (
             <button
               key={index}
+              type="button"
               className={entry ? "quick-slot" : "quick-slot quick-slot--empty"}
-              onClick={() => {
-                if (!entry) return;
-                const equipped = equipQuickSlotItem(inventory, entryKey);
-                if (!equipped) onUseQuickSlot(index);
-              }}
+              onPointerDown={(event) => handleQuickSlotPointerDown(event, index, entryKey)}
+              onClick={(event) => handleQuickSlotClick(event, index, entryKey)}
               onContextMenu={(event) => {
                 event.preventDefault();
+                event.stopPropagation();
                 onClearQuickSlot(index);
               }}
               title={entry ? entry.label : `퀵슬롯 ${index + 1}`}
