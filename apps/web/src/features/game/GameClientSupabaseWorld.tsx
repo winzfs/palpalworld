@@ -45,8 +45,11 @@ const simulationMs = 50;
 const creatureMapMin = 120;
 const creatureMapMax = 2880;
 const creatureMapSize = creatureMapMax - creatureMapMin;
+const creatureBroadcastSnapDistance = 520;
+const creatureBroadcastLerpPerSecond = 9;
 
 type CreatureWanderTarget = { x: number; y: number; nextRetargetAt: number };
+type CreatureBroadcastTarget = { x: number; y: number; hp: number; maxHp: number; receivedAt: number };
 const creatureWanderTargets = new Map<string, CreatureWanderTarget>();
 
 function createClientNickname() {
@@ -148,6 +151,39 @@ function moveHostCreatures(creatures: CreaturePublicState[], deltaSeconds: numbe
   }
 }
 
+function smoothRemoteCreatures(
+  creatures: CreaturePublicState[],
+  targets: Map<string, CreatureBroadcastTarget>,
+  deltaSeconds: number,
+  now: number,
+) {
+  if (targets.size <= 0 || creatures.length <= 0) return false;
+  let changed = false;
+  const alpha = Math.max(0.08, Math.min(0.72, 1 - Math.exp(-creatureBroadcastLerpPerSecond * deltaSeconds)));
+  for (const creature of creatures) {
+    const target = targets.get(creature.id);
+    if (!target) continue;
+    if (now - target.receivedAt > 2500) {
+      targets.delete(creature.id);
+      continue;
+    }
+    const dx = target.x - creature.position.x;
+    const dy = target.y - creature.position.y;
+    const distance = Math.hypot(dx, dy);
+    if (distance > creatureBroadcastSnapDistance) {
+      creature.position.x = target.x;
+      creature.position.y = target.y;
+    } else if (distance > 0.5) {
+      creature.position.x += dx * alpha;
+      creature.position.y += dy * alpha;
+    }
+    creature.hp = target.hp;
+    creature.maxHp = target.maxHp;
+    changed = true;
+  }
+  return changed;
+}
+
 function rowToResource(row: WorldResourceRow): ResourceNodeState {
   return {
     id: row.resource_id,
@@ -225,6 +261,7 @@ export function GameClientSupabaseWorld() {
   const directionRef = useRef<Direction>("down");
   const tileRef = useRef<MapTileRef>({ ...DEFAULT_PLAYER_TILE });
   const creaturesRef = useRef<CreaturePublicState[]>([]);
+  const creatureBroadcastTargetsRef = useRef(new Map<string, CreatureBroadcastTarget>());
   const creatureBroadcastChannelRef = useRef<RealtimeChannel | null>(null);
   const isHostRef = useRef(false);
   const lastHostClaimAtRef = useRef(0);
@@ -299,21 +336,18 @@ export function GameClientSupabaseWorld() {
   const handleCreatureBroadcast = useCallback((payload: CreaturePositionsBroadcastPayload) => {
     if (payload.hostId === playerId) return;
     if (!isSameTile(payload.tile, tileRef.current)) return;
-    const byId = new Map(creaturesRef.current.map((creature) => [creature.id, creature]));
-    let changed = false;
+    const now = performance.now();
+    const byId = new Set(creaturesRef.current.map((creature) => creature.id));
     for (const packet of payload.creatures) {
-      const creature = byId.get(packet.id);
-      if (!creature) continue;
-      creature.position.x = packet.x;
-      creature.position.y = packet.y;
-      creature.hp = packet.hp;
-      creature.maxHp = packet.maxHp;
-      changed = true;
+      if (!byId.has(packet.id)) continue;
+      creatureBroadcastTargetsRef.current.set(packet.id, {
+        x: packet.x,
+        y: packet.y,
+        hp: packet.hp,
+        maxHp: packet.maxHp,
+        receivedAt: now,
+      });
     }
-    if (!changed) return;
-    const nextCreatures = [...creaturesRef.current];
-    creaturesRef.current = nextCreatures;
-    setCreatures(nextCreatures);
   }, [playerId]);
 
   useEffect(() => {
@@ -378,24 +412,28 @@ export function GameClientSupabaseWorld() {
         lastHostClaimAtRef.current = now;
         void claimWorldHost(client, playerId, tileRef.current).then((result) => {
           isHostRef.current = result.isHost;
+          if (result.isHost) creatureBroadcastTargetsRef.current.clear();
           setStatus(`${result.isHost ? "HOST" : "CLIENT"} · host ${result.hostPlayerId ?? "none"}`);
         });
       }
 
-      if (!isHostRef.current) return;
-      moveHostCreatures(creaturesRef.current, deltaSeconds, now, positionRef.current);
+      if (isHostRef.current) {
+        moveHostCreatures(creaturesRef.current, deltaSeconds, now, positionRef.current);
+      } else {
+        smoothRemoteCreatures(creaturesRef.current, creatureBroadcastTargetsRef.current, deltaSeconds, now);
+      }
       const nextCreatures = [...creaturesRef.current];
       creaturesRef.current = nextCreatures;
       setCreatures(nextCreatures);
 
-      if (now - lastBroadcastAtRef.current >= creatureBroadcastMs) {
+      if (isHostRef.current && now - lastBroadcastAtRef.current >= creatureBroadcastMs) {
         lastBroadcastAtRef.current = now;
         const channel = creatureBroadcastChannelRef.current;
         if (channel) {
           void broadcastCreaturePositions({ channel, hostId: playerId, tile: tileRef.current, creatures: creaturesRef.current });
         }
       }
-      if (now - lastSnapshotSaveAtRef.current >= creatureSnapshotSaveMs) {
+      if (isHostRef.current && now - lastSnapshotSaveAtRef.current >= creatureSnapshotSaveMs) {
         lastSnapshotSaveAtRef.current = now;
         void updateWorldCreaturePositions(client, creaturesRef.current);
       }
