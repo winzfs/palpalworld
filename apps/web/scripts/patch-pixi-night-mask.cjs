@@ -8,6 +8,18 @@ let css = fs.readFileSync(cssPath, 'utf8');
 let changed = false;
 let cssChanged = false;
 
+function replaceOnce(search, replacement, label) {
+  if (source.includes(replacement)) return true;
+  if (!source.includes(search)) {
+    console.log(`[patch-pixi-night-mask] skipped ${label}`);
+    return false;
+  }
+  source = source.replace(search, replacement);
+  changed = true;
+  console.log(`[patch-pixi-night-mask] patched ${label}`);
+  return true;
+}
+
 function replaceFunction(functionName, nextFunctionName, replacement) {
   if (source.includes(replacement.trim())) return;
   const start = source.indexOf(`function ${functionName}`);
@@ -25,7 +37,8 @@ replaceFunction('drawPixiNightLighting', 'isSamePlayerTile', `function drawPixiN
   graphics.clear();
   if (!isNightModeActive()) return;
 
-  // Base darkness. Keep this on the Pixi layer so pointer/click handling stays on the original game canvas.
+  // Screen-space darkness. This graphics object is attached directly to app.stage,
+  // so it must use screen coordinates, not world/root coordinates.
   graphics.rect(0, 0, width, height);
   graphics.fill({ color: 0x01030a, alpha: 0.72 });
 
@@ -38,8 +51,6 @@ replaceFunction('drawPixiNightLighting', 'isSamePlayerTile', `function drawPixiN
     const innerRadius = torch ? 62 : entry.isLocal ? 20 : 0;
     if (outerRadius <= 0) continue;
 
-    // Fake radial light: large low-alpha bloom + smaller bright core.
-    // It does not erase the dark layer, but visually preserves darkness outside the radius.
     graphics.circle(screenX, screenY, outerRadius);
     graphics.fill({ color: torch ? 0xfacc15 : 0x93c5fd, alpha: torch ? 0.16 : 0.075 });
     graphics.circle(screenX, screenY, midRadius);
@@ -54,6 +65,18 @@ replaceFunction('drawPixiNightLighting', 'isSamePlayerTile', `function drawPixiN
     }
   }
 }`);
+
+replaceOnce(
+  '      const lightingGraphics = new PIXI.Graphics();\n      layers.lighting.addChild(lightingGraphics as unknown as PixiContainer);',
+  '      const lightingGraphics = new PIXI.Graphics();\n      app.stage.addChild(lightingGraphics as unknown as PixiContainer);\n      layers.lighting.visible = false;',
+  'move lighting to screen stage',
+);
+
+replaceOnce(
+  '      const lightingGraphics = new PIXI.Graphics();\n      const feedbackGraphics = new PIXI.Graphics();\n      layers.effects.addChild(feedbackGraphics as unknown as PixiContainer);\n      layers.lighting.addChild(lightingGraphics as unknown as PixiContainer);',
+  '      const lightingGraphics = new PIXI.Graphics();\n      const feedbackGraphics = new PIXI.Graphics();\n      layers.effects.addChild(feedbackGraphics as unknown as PixiContainer);\n      app.stage.addChild(lightingGraphics as unknown as PixiContainer);\n      layers.lighting.visible = false;',
+  'move lighting to screen stage with feedback',
+);
 
 if (!css.includes('/* pixi night ownership */')) {
   css = `${css.trimEnd()}\n\n/* pixi night ownership */\n.game-shell--pixi-stage.game-shell--night .night-field-overlay,\n.game-shell--pixi-stage.game-shell--night .night-player-light {\n  display: none !important;\n}\n\n.game-shell--pixi-stage.game-shell--night .pixi-game-canvas {\n  filter: saturate(0.92) contrast(1.04);\n}\n`;
