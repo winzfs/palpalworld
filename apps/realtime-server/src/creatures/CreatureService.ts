@@ -2,6 +2,8 @@ import { CREATURE_CATALOG, STARTER_CREATURE_SPAWNS, type CreaturePublicState } f
 import { TraitService } from "../traits/TraitService";
 import type { WorldState } from "../world/WorldState";
 
+const combatEffectTestHpMultiplier = 3;
+
 export class CreatureService {
   constructor(
     private readonly world: WorldState,
@@ -14,11 +16,11 @@ export class CreatureService {
 
   calculateMaxHp(creature: CreaturePublicState) {
     const species = this.getSpecies(creature);
-    if (!species) return creature.maxHp;
+    if (!species) return Math.max(1, Math.floor(creature.maxHp * combatEffectTestHpMultiplier));
 
     const baseMaxHp = species.baseHp + creature.level * 8;
     const hpMultiplier = this.traits.getMultiplier(creature.traitIds, "max_hp_multiplier");
-    return Math.max(1, Math.floor(baseMaxHp * hpMultiplier));
+    return Math.max(1, Math.floor(baseMaxHp * hpMultiplier * combatEffectTestHpMultiplier));
   }
 
   calculateDefense(creature: CreaturePublicState) {
