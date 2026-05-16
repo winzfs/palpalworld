@@ -67,8 +67,6 @@ function drawPixiIsoFloorPart(graphics: PixiGraphics, part: PlacedBuildPart, pre
   const visualY = -part.floorLevel * BUILD_2P5D_FLOOR_HEIGHT;
   const points = getIsoTilePolygon2p5d({ x: 0, y: visualY, width, height: height * 0.62 });
   const color = preview ? (valid ? 0x22c55e : 0xef4444) : palette.base;
-  graphics.ellipse(0, visualY + 13, width * 0.42, Math.max(5, height * 0.11));
-  graphics.fill({ color: 0x000000, alpha: preview ? 0.08 : 0.16 });
   drawPixiPolygon(graphics, points, color, preview ? 0.22 : 0.94, preview ? color : palette.dark, preview ? 0.9 : 0.66, preview ? 2 : 1.2);
   const grooveColor = definition.material === 'stone' ? palette.dark : palette.light;
   for (const t of [0.28, 0.5, 0.72]) {
@@ -90,8 +88,6 @@ function drawPixiIsoWallPart(graphics: PixiGraphics, part: PlacedBuildPart, prev
   const visualY = -part.floorLevel * BUILD_2P5D_FLOOR_HEIGHT;
   const plane = getIsoWallPlane2p5d({ x: 0, y: visualY, width, height, rotation: part.rotation, wallHeight });
   const color = preview ? (valid ? 0x22c55e : 0xef4444) : palette.side;
-  graphics.ellipse(0, visualY + 18, width * 0.36, 7);
-  graphics.fill({ color: 0x000000, alpha: preview ? 0.07 : 0.15 });
   drawPixiPolygon(graphics, [plane.baseStart, plane.baseEnd, plane.topEnd, plane.topStart], color, preview ? 0.25 : 0.92, preview ? color : palette.dark, preview ? 0.95 : 0.72, preview ? 2 : 1.2);
   graphics.moveTo(plane.baseStart.x, plane.baseStart.y);
   graphics.lineTo(plane.baseEnd.x, plane.baseEnd.y);
