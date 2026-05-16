@@ -69,6 +69,10 @@ function loadPixiRuntime() {
   return pixiLoaderPromise;
 }
 
+function isNightModeActive() {
+  return typeof document !== "undefined" && Boolean(document.querySelector(".game-shell--night"));
+}
+
 function hasTorchEquipped(player: PlayerPublicState) {
   return (player as PlayerPublicState & { equippedWeaponItemId?: string | null }).equippedWeaponItemId === "torch";
 }
@@ -152,6 +156,27 @@ function drawPixiCharacter(graphics: PixiGraphics, player: PlayerPublicState, is
   }
 }
 
+function drawPixiNightLighting(graphics: PixiGraphics, width: number, height: number, cameraX: number, cameraY: number, drawablePlayers: { player: PlayerPublicState; isLocal: boolean }[]) {
+  graphics.clear();
+  if (!isNightModeActive()) return;
+
+  graphics.rect(0, 0, width, height);
+  graphics.fill({ color: 0x02040d, alpha: 0.58 });
+
+  for (const entry of drawablePlayers) {
+    const screenX = entry.player.position.x - cameraX;
+    const screenY = entry.player.position.y - cameraY + 2;
+    const torch = hasTorchEquipped(entry.player);
+    const radius = torch ? 132 : entry.isLocal ? 44 : 0;
+    if (radius <= 0) continue;
+
+    graphics.circle(screenX, screenY, radius);
+    graphics.fill({ color: torch ? 0xfacc15 : 0x93c5fd, alpha: torch ? 0.16 : 0.08 });
+    graphics.circle(screenX, screenY, Math.max(18, radius * 0.48));
+    graphics.fill({ color: torch ? 0xffedd5 : 0xbfdbfe, alpha: torch ? 0.15 : 0.08 });
+  }
+}
+
 function isSamePlayerTile(a: PlayerPublicState | null | undefined, b: PlayerPublicState | null | undefined) {
   if (!a || !b) return false;
   return String(a.currentTile?.regionId) === String(b.currentTile?.regionId)
@@ -206,7 +231,9 @@ export function PixiGameCanvas({ enabled = false, snapshot, localPlayerId }: Pix
       const camera = createPixiCamera(host.clientWidth, host.clientHeight);
       const layers = createPixiGameLayers(app, PIXI);
       const playerGraphics = new PIXI.Graphics();
+      const lightingGraphics = new PIXI.Graphics();
       layers.players.addChild(playerGraphics as never);
+      layers.lighting.addChild(lightingGraphics as never);
 
       const resize = () => resizePixiCamera(camera, host.clientWidth, host.clientHeight);
       const resizeObserver = new ResizeObserver(resize);
@@ -219,6 +246,9 @@ export function PixiGameCanvas({ enabled = false, snapshot, localPlayerId }: Pix
         const root = layers.root as unknown as PixiTransformNode;
         root.position.set(-camera.x * camera.zoom, -camera.y * camera.zoom);
         root.scale.set(camera.zoom);
+        const lighting = lightingGraphics as unknown as PixiTransformNode;
+        lighting.position.set(0, 0);
+        lighting.scale.set(1);
 
         playerGraphics.clear();
         const drawablePlayers = [
@@ -230,6 +260,7 @@ export function PixiGameCanvas({ enabled = false, snapshot, localPlayerId }: Pix
         ].sort((a, b) => a.player.position.y - b.player.position.y);
 
         for (const entry of drawablePlayers) drawPixiCharacter(playerGraphics, entry.player, entry.isLocal);
+        drawPixiNightLighting(lightingGraphics, host.clientWidth, host.clientHeight, camera.x, camera.y, drawablePlayers);
       });
 
       cleanup = () => {
