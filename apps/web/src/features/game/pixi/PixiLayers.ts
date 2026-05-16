@@ -1,29 +1,40 @@
-import { Container, type Application } from "pixi.js";
-
-export type PixiGameLayers = {
-  root: Container;
-  terrain: Container;
-  resources: Container;
-  buildingsBack: Container;
-  creatures: Container;
-  players: Container;
-  buildingsFront: Container;
-  effects: Container;
-  lighting: Container;
-  debug: Container;
+type PixiContainer = {
+  sortableChildren?: boolean;
+  addChild: (...children: PixiContainer[]) => void;
 };
 
-export function createPixiGameLayers(app: Application): PixiGameLayers {
-  const root = new Container();
-  const terrain = new Container();
-  const resources = new Container();
-  const buildingsBack = new Container();
-  const creatures = new Container();
-  const players = new Container();
-  const buildingsFront = new Container();
-  const effects = new Container();
-  const lighting = new Container();
-  const debug = new Container();
+type PixiApplication = {
+  stage: PixiContainer;
+};
+
+type PixiRuntime = {
+  Container: new () => PixiContainer;
+};
+
+export type PixiGameLayers = {
+  root: PixiContainer;
+  terrain: PixiContainer;
+  resources: PixiContainer;
+  buildingsBack: PixiContainer;
+  creatures: PixiContainer;
+  players: PixiContainer;
+  buildingsFront: PixiContainer;
+  effects: PixiContainer;
+  lighting: PixiContainer;
+  debug: PixiContainer;
+};
+
+export function createPixiGameLayers(app: PixiApplication, PIXI: PixiRuntime): PixiGameLayers {
+  const root = new PIXI.Container();
+  const terrain = new PIXI.Container();
+  const resources = new PIXI.Container();
+  const buildingsBack = new PIXI.Container();
+  const creatures = new PIXI.Container();
+  const players = new PIXI.Container();
+  const buildingsFront = new PIXI.Container();
+  const effects = new PIXI.Container();
+  const lighting = new PIXI.Container();
+  const debug = new PIXI.Container();
 
   root.sortableChildren = true;
   players.sortableChildren = true;
