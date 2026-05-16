@@ -68,9 +68,7 @@ function loadPixiRuntime() {`,
   'terrain sample helpers',
 );
 
-replaceOnce(
-  'function upsertPixiBuildingNodes(PIXI: NonNullable<Window["PIXI"]>, buildingLayer: PixiContainer, nodes: Map<string, PixiBuildingNode>, buildings: BuildingState[], frameId: number) {',
-  `function drawPixiTerrainTileAtOrigin(graphics: PixiGraphics, tileX: number, tileY: number) {
+const terrainUpsertBlock = `function drawPixiTerrainTileAtOrigin(graphics: PixiGraphics, tileX: number, tileY: number) {
   const tileId = samplePixiTerrainTile(tileX, tileY);
   const color = getPixiTerrainColor(tileId);
   graphics.rect(0, 0, terrainTileSize, terrainTileSize);
@@ -85,60 +83,14 @@ replaceOnce(
     }
   }
   if (tileId === "water") {
-    graphics.moveTo(3, 10 + ((tileX + tileY) % 3));
-    graphics.lineTo(29, 10 + ((tileX + tileY) % 3));
-    graphics.moveTo(1, 22 + ((tileX - tileY) % 2));
-    graphics.lineTo(26, 22 + ((tileX - tileY) % 2));
+    const waveA = 10 + ((tileX + tileY) % 3);
+    const waveB = 22 + ((tileX - tileY) % 2);
+    graphics.moveTo(3, waveA);
+    graphics.lineTo(29, waveA);
+    graphics.moveTo(1, waveB);
+    graphics.lineTo(26, waveB);
     graphics.stroke({ width: 1, color: 0xbae6fd, alpha: 0.38 });
   }
-}
-
-function upsertPixiTerrainNodes(PIXI: NonNullable<Window["PIXI"]>, terrainLayer: PixiContainer, nodes: Map<string, PixiTerrainNode>, cameraX: number, cameraY: number, width: number, height: number, frameId: number) {
-  const startTileX = Math.floor(cameraX / terrainTileSize) - terrainPaddingTiles;
-  const startTileY = Math.floor(cameraY / terrainTileSize) - terrainPaddingTiles;
-  const endTileX = Math.ceil((cameraX + width) / terrainTileSize) + terrainPaddingTiles;
-  const endTileY = Math.ceil((cameraY + height) / terrainTileSize) + terrainPaddingTiles;
-  for (let tileY = startTileY; tileY <= endTileY; tileY += 1) {
-    for (let tileX = startTileX; tileX <= endTileX; tileX += 1) {
-      const key = \\`
-        \\${tileX}:\\${tileY}
-      \\`.trim();
-      let node = nodes.get(key);
-      if (!node) {
-        const container = new PIXI.Container();
-        const graphics = new PIXI.Graphics();
-        container.addChild(graphics as unknown as PixiContainer);
-        terrainLayer.addChild(container);
-        node = { container, graphics, lastSeenFrame: frameId };
-        nodes.set(key, node);
-      }
-      node.lastSeenFrame = frameId;
-      node.container.visible = true;
-      node.container.zIndex = -100000 + tileY;
-      node.container.position?.set(tileX * terrainTileSize, tileY * terrainTileSize);
-      node.graphics.clear();
-      drawPixiTerrainTileAtOrigin(node.graphics, tileX, tileY);
-    }
-  }
-  for (const [key, node] of nodes.entries()) {
-    if (node.lastSeenFrame === frameId) continue;
-    node.container.visible = false;
-    terrainLayer.removeChild?.(node.container);
-    node.container.destroy?.({ children: true });
-    nodes.delete(key);
-  }
-}
-
-function upsertPixiBuildingNodes(PIXI: NonNullable<Window["PIXI"]>, buildingLayer: PixiContainer, nodes: Map<string, PixiBuildingNode>, buildings: BuildingState[], frameId: number) {`,
-  'terrain node upsert before buildings',
-);
-replaceOnce(
-  'function upsertPixiCreatureNodes(PIXI: NonNullable<Window["PIXI"]>, creatureLayer: PixiContainer, nodes: Map<string, PixiCreatureNode>, creatures: CreaturePublicState[], frameId: number) {',
-  `function drawPixiTerrainTileAtOrigin(graphics: PixiGraphics, tileX: number, tileY: number) {
-  const tileId = samplePixiTerrainTile(tileX, tileY);
-  const color = getPixiTerrainColor(tileId);
-  graphics.rect(0, 0, terrainTileSize, terrainTileSize);
-  graphics.fill({ color, alpha: 1 });
 }
 
 function upsertPixiTerrainNodes(PIXI: NonNullable<Window["PIXI"]>, terrainLayer: PixiContainer, nodes: Map<string, PixiTerrainNode>, cameraX: number, cameraY: number, width: number, height: number, frameId: number) {
@@ -175,7 +127,16 @@ function upsertPixiTerrainNodes(PIXI: NonNullable<Window["PIXI"]>, terrainLayer:
   }
 }
 
-function upsertPixiCreatureNodes(PIXI: NonNullable<Window["PIXI"]>, creatureLayer: PixiContainer, nodes: Map<string, PixiCreatureNode>, creatures: CreaturePublicState[], frameId: number) {`,
+`;
+
+replaceOnce(
+  'function upsertPixiBuildingNodes(PIXI: NonNullable<Window["PIXI"]>, buildingLayer: PixiContainer, nodes: Map<string, PixiBuildingNode>, buildings: BuildingState[], frameId: number) {',
+  terrainUpsertBlock + 'function upsertPixiBuildingNodes(PIXI: NonNullable<Window["PIXI"]>, buildingLayer: PixiContainer, nodes: Map<string, PixiBuildingNode>, buildings: BuildingState[], frameId: number) {',
+  'terrain node upsert before buildings',
+);
+replaceOnce(
+  'function upsertPixiCreatureNodes(PIXI: NonNullable<Window["PIXI"]>, creatureLayer: PixiContainer, nodes: Map<string, PixiCreatureNode>, creatures: CreaturePublicState[], frameId: number) {',
+  terrainUpsertBlock + 'function upsertPixiCreatureNodes(PIXI: NonNullable<Window["PIXI"]>, creatureLayer: PixiContainer, nodes: Map<string, PixiCreatureNode>, creatures: CreaturePublicState[], frameId: number) {',
   'terrain node upsert fallback',
 );
 
