@@ -92,10 +92,10 @@ function saveOnlineBadgePosition(position: { x: number; y: number }) {
   "online badge helpers",
 );
 
+const minimapLine = '        <section className={`hud-minimap hud-minimap--${minimapSize}`} aria-label="미니맵"><button className="hud-minimap__size-button" onClick={cycleMinimapSize} aria-label="미니맵 크기 변경">{minimapSizeLabels[minimapSize]}</button><MiniMapPanel snapshot={snapshot} localPlayerId={demoPlayerId} /></section>';
 replaceClient(
-  `        <section className={\`hud-minimap hud-minimap--${minimapSize}\`} aria-label="미니맵"><button className="hud-minimap__size-button" onClick={cycleMinimapSize} aria-label="미니맵 크기 변경">{minimapSizeLabels[minimapSize]}</button><MiniMapPanel snapshot={snapshot} localPlayerId={demoPlayerId} /></section>`,
-  `        <OnlineCountBadge count={snapshot?.players.length ?? 1} />
-        <section className={\`hud-minimap hud-minimap--${minimapSize}\`} aria-label="미니맵"><button className="hud-minimap__size-button" onClick={cycleMinimapSize} aria-label="미니맵 크기 변경">{minimapSizeLabels[minimapSize]}</button><MiniMapPanel snapshot={snapshot} localPlayerId={demoPlayerId} /></section>`,
+  minimapLine,
+  `        <OnlineCountBadge count={snapshot?.players.length ?? 1} />\n${minimapLine}`,
   "online count badge render",
 );
 
@@ -109,7 +109,7 @@ replaceClient(
     <button
       className="hud-online-badge"
       style={{ left: position.x, top: position.y }}
-      aria-label={\`온라인 ${count}명\`}
+      aria-label={\`온라인 \${count}명\`}
       title="드래그해서 위치 이동"
       onPointerDown={(event) => {
         event.preventDefault();
