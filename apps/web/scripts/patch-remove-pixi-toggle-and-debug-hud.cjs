@@ -64,6 +64,7 @@ for (const script of [
   './patch-db-pos-once.cjs',
   './patch-supabase-authoritative-creature-start.cjs',
   './patch-force-creature-db-hydrate.cjs',
+  './patch-creature-hydrate-once-final.cjs',
 ]) {
   require(script);
 }
