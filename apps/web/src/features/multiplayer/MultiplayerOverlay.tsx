@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type PointerEvent } from "react";
 import type { BuildingState, PlayerPublicState, ResourceNodeState, WorldSnapshot } from "@palpalworld/shared";
 import { MAP_TILE_SIZE, isSameTile, type MapTileRef } from "../../../../../packages/shared/src/worldTiles";
-import { getPetSpeciesDefinition, isFlyingPetSpecies } from "../pets/petCatalog";
 import {
   fetchOnlinePlayers,
   getOrCreateMultiplayerPlayerId,
@@ -48,28 +47,18 @@ type CameraState = { width: number; height: number; cameraX: number; cameraY: nu
 type ChatPanelPosition = { x: number; y: number };
 type ChatPanelDragState = { pointerId: number; startX: number; startY: number; panelX: number; panelY: number };
 type SmoothRemotePlayer = { player: PlayerPublicState; lastSeenAt: number };
-type MultiplayerMountedPetInfo = { itemId: string; speciesId: string; label: string; flying: boolean };
 
 const emotes = ["👋", "❤️", "⚔️", "🆘"];
 const chatBubbleVisibleMs = 12_000;
 const chatPanelStorageKey = "palpalworld.ui.chatPanelPosition";
 const chatPanelCollapsedStorageKey = "palpalworld.ui.chatPanelCollapsed";
 const mountedPetStorageKey = "palpalworld.demo.mountedPetItemId";
-const pixiStageFlagStorageKey = "palpalworld.dev.pixiStage";
 const chatPanelWidth = 330;
 const chatPanelCollapsedWidth = 210;
 const chatPanelExpandedHeight = 226;
 const chatPanelCollapsedHeight = 48;
 
 function readMountedPetItemId() { if (typeof window === "undefined") return null; return window.localStorage.getItem(mountedPetStorageKey); }
-function readPixiStageEnabled() { if (typeof window === "undefined") return false; return window.localStorage.getItem(pixiStageFlagStorageKey) === "true"; }
-function getMountedPetInfo(player: PlayerPublicState): MultiplayerMountedPetInfo | null {
-  const mountedPetItemId = (player as PlayerPublicState & { mountedPetItemId?: string | null }).mountedPetItemId;
-  if (!mountedPetItemId?.startsWith("pet_")) return null;
-  const speciesId = mountedPetItemId.slice(4);
-  const species = getPetSpeciesDefinition(speciesId);
-  return { itemId: mountedPetItemId, speciesId, label: species.name, flying: isFlyingPetSpecies(speciesId) };
-}
 function getViewportSize() { if (typeof window === "undefined") return { width: 1280, height: 720 }; return { width: window.innerWidth, height: window.innerHeight }; }
 function cloneRemotePlayer(player: PlayerPublicState): PlayerPublicState { return { ...player, position: { x: player.position.x, y: player.position.y }, currentTile: { ...(player.currentTile as MapTileRef) } } as PlayerPublicState; }
 function distanceBetweenPlayers(a: PlayerPublicState, b: PlayerPublicState) { return Math.hypot(a.position.x - b.position.x, a.position.y - b.position.y); }
@@ -141,7 +130,6 @@ export function MultiplayerOverlay() {
   const [chatCollapsed, setChatCollapsed] = useState(readStoredChatCollapsed);
   const [chatPanelPosition, setChatPanelPosition] = useState(() => readStoredChatPanelPosition(readStoredChatCollapsed()));
   const [status, setStatus] = useState(enabled ? "온라인 연결 중" : "오프라인 모드");
-  const [pixiStageEnabled, setPixiStageEnabled] = useState(readPixiStageEnabled);
   const latestLocalPlayerRef = useRef<PlayerPublicState | null>(null);
   const latestTileRef = useRef<MapTileRef | null>(null);
   const latestResourcesRef = useRef<ResourceNodeState[]>([]);
@@ -242,7 +230,6 @@ export function MultiplayerOverlay() {
     });
   }, []);
 
-  useEffect(() => { const sync = () => setPixiStageEnabled(readPixiStageEnabled()); sync(); const interval = window.setInterval(sync, 700); return () => window.clearInterval(interval); }, []);
   useEffect(() => { if (!client || !enabled) return; refreshPlayers(); const channel = subscribeOnlinePlayers(client, refreshPlayers); const interval = window.setInterval(refreshPlayers, 2500); return () => { window.clearInterval(interval); client.removeChannel(channel); }; }, [client, enabled, refreshPlayers]);
 
   useEffect(() => {
@@ -317,13 +304,12 @@ export function MultiplayerOverlay() {
     return () => window.removeEventListener("palpalworld:building-dismantled", handleDismantled);
   }, [client, enabled, refreshBuildings]);
 
-  const visiblePlayers = useMemo(() => { if (!camera) return []; return smoothOnlinePlayers.filter((player) => isSameTile(player.currentTile as MapTileRef, camera.currentTile)); }, [camera, smoothOnlinePlayers]);
   const bubbleMessages = useMemo(() => chatMessages.filter(isFreshMessage).slice(-8), [chatMessages]);
   const latestChatMessage = chatMessages[chatMessages.length - 1];
   if (!enabled || !camera) return null;
 
   return (
-    <div className={pixiStageEnabled ? "multiplayer-overlay multiplayer-overlay--pixi-players" : "multiplayer-overlay"} aria-label="멀티플레이어 오버레이">
+    <div className="multiplayer-overlay multiplayer-overlay--pixi-players" aria-label="멀티플레이어 오버레이">
       <div className="multiplayer-status">{status}</div>
       {bubbleMessages.map((message) => {
         const left = message.x - camera.cameraX;
@@ -331,44 +317,6 @@ export function MultiplayerOverlay() {
         if (left < -120 || left > camera.width + 120 || top < -140 || top > camera.height + 100) return null;
         return <div key={message.message_id} className={`world-chat-bubble world-chat-bubble--${message.message_type}`} style={{ left, top }}>{message.message}</div>;
       })}
-      {!pixiStageEnabled ? visiblePlayers.map((player) => {
-        const mountedPet = getMountedPetInfo(player);
-        const left = player.position.x - camera.cameraX;
-        const top = player.position.y - camera.cameraY;
-        if (left < -90 || left > camera.width + 90 || top < -120 || top > camera.height + 100) return null;
-        return (
-          <div key={player.id} className={`multiplayer-player ${mountedPet ? "multiplayer-player--mounted" : ""} ${mountedPet?.flying ? "multiplayer-player--flying-mounted" : ""}`} style={{ left, top }}>
-            {mountedPet ? (
-              <div className={`multiplayer-mounted-pet multiplayer-mounted-pet--${mountedPet.speciesId} ${mountedPet.flying ? "multiplayer-mounted-pet--flying" : ""}`} aria-label={`${mountedPet.label} 탑승 중`}>
-                <span className="multiplayer-mounted-pet__shadow" />
-                <span className="multiplayer-mounted-pet__tail" />
-                <span className="multiplayer-mounted-pet__body" />
-                <span className="multiplayer-mounted-pet__belly" />
-                <span className="multiplayer-mounted-pet__head" />
-                <span className="multiplayer-mounted-pet__ear multiplayer-mounted-pet__ear--left" />
-                <span className="multiplayer-mounted-pet__ear multiplayer-mounted-pet__ear--right" />
-                <span className="multiplayer-mounted-pet__eye" />
-                <span className="multiplayer-mounted-pet__leg multiplayer-mounted-pet__leg--1" />
-                <span className="multiplayer-mounted-pet__leg multiplayer-mounted-pet__leg--2" />
-                <span className="multiplayer-mounted-pet__leg multiplayer-mounted-pet__leg--3" />
-                <span className="multiplayer-mounted-pet__leg multiplayer-mounted-pet__leg--4" />
-                {mountedPet.flying ? <><span className="multiplayer-mounted-pet__wing multiplayer-mounted-pet__wing--left" /><span className="multiplayer-mounted-pet__wing multiplayer-mounted-pet__wing--right" /></> : null}
-              </div>
-            ) : null}
-            <div className={`multiplayer-player__avatar multiplayer-player__avatar--${player.direction ?? "down"}`}>
-              <span className="multiplayer-player__shadow" />
-              <span className="multiplayer-player__leg multiplayer-player__leg--back" />
-              <span className="multiplayer-player__leg multiplayer-player__leg--front" />
-              <span className="multiplayer-player__body" />
-              <span className="multiplayer-player__arm multiplayer-player__arm--back" />
-              <span className="multiplayer-player__arm multiplayer-player__arm--front" />
-              <span className="multiplayer-player__head" />
-              <span className="multiplayer-player__hair" />
-            </div>
-            <div className="multiplayer-player__name">{player.nickname}</div>
-          </div>
-        );
-      }) : null}
       <section className={`world-chat-panel ${chatCollapsed ? "world-chat-panel--collapsed" : ""}`} style={{ left: chatPanelPosition.x, top: chatPanelPosition.y }} aria-label="근처 채팅">
         <header className="world-chat-panel__header" onPointerDown={handleChatPanelPointerDown} onPointerMove={handleChatPanelPointerMove} onPointerUp={stopChatPanelDrag} onPointerCancel={stopChatPanelDrag}>
           <strong>근처 채팅</strong>
