@@ -86,7 +86,14 @@ function createPlayer(socketId: string, nickname: string): PlayerPublicState {
     currentTile: { ...DEFAULT_PLAYER_TILE },
     hp: profile.stats.maxHp,
     maxHp: profile.stats.maxHp,
+    equippedWeaponItemId: null,
   };
+}
+
+function syncPlayerEquipmentState(playerId: string) {
+  const player = world.players.get(playerId);
+  if (!player) return;
+  player.equippedWeaponItemId = equipment.getEquippedMainHandItemId(playerId);
 }
 
 function travelPlayerIfAtPortal(player: PlayerPublicState, forcedDirection?: MapDirection) {
@@ -220,6 +227,7 @@ io.on("connection", (socket) => {
     if (player) {
       player.maxHp = profile.stats.maxHp;
       player.hp = Math.min(player.hp, player.maxHp);
+      player.equippedWeaponItemId = equipment.getEquippedMainHandItemId(socket.id);
     }
     socket.emit("server:equipment_updated", result.equipment);
     socket.emit("server:player_profile_updated", profile);
@@ -238,6 +246,7 @@ io.on("connection", (socket) => {
     if (player) {
       player.maxHp = profile.stats.maxHp;
       player.hp = Math.min(player.hp, player.maxHp);
+      player.equippedWeaponItemId = equipment.getEquippedMainHandItemId(socket.id);
     }
     socket.emit("server:equipment_updated", result.equipment);
     socket.emit("server:player_profile_updated", profile);
@@ -306,6 +315,7 @@ setInterval(() => {
   creatures.tickRespawns(now);
 
   for (const [playerId, player] of world.players.entries()) {
+    syncPlayerEquipmentState(playerId);
     const input = lastInputs.get(playerId) ?? { x: 0, y: 0 };
     const movement = normalizeVector(input);
     const profile = players.getPlayerProfile(playerId);
