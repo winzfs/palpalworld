@@ -74,6 +74,7 @@ const usableItemIds = new Set([
   "cooked_berry",
   "herb",
   "healing_salve",
+  "torch",
 ]);
 
 export function getInventoryEntryCategory(itemId: string, kind: InventoryEntryKind): InventoryCategory {
@@ -97,6 +98,7 @@ export function getInventoryItemLabel(itemId: string) {
 
 export function getInventoryItemDescription(entry: InventoryEntry) {
   if (entry.category === "pet") return getPetItemDescription(entry.itemId);
+  if (entry.itemId === "torch") return "밤에 캐릭터 주변을 더 넓게 밝혀주는 광원 아이템입니다. 보유 중이면 밤 시야가 확장됩니다.";
   if (entry.buildPartId) return "집을 조립하는 건축 부품입니다. 건설 모드에서 선택하면 그리드에 맞춰 설치됩니다.";
   if (entry.category === "building") return "필드에 배치할 수 있는 건설 아이템입니다. 선택하면 배치 모드로 전환됩니다.";
   if (entry.category === "equipment") return "장착하거나 퀵슬롯에 등록해 빠르게 사용할 수 있는 장비입니다.";
