@@ -18,14 +18,6 @@ export type WorldCreatureRow = {
   updated_at: string;
 };
 
-const creatureStateFreshnessMs = 15_000;
-
-function isFreshCreatureRow(row: WorldCreatureRow, now = Date.now()) {
-  const updatedAt = new Date(row.updated_at).getTime();
-  if (!Number.isFinite(updatedAt)) return false;
-  return now - updatedAt <= creatureStateFreshnessMs;
-}
-
 function sanitizeCreatureHp(hp: number, maxHp: number) {
   const safeMaxHp = Number.isFinite(maxHp) && maxHp > 0 ? maxHp : 1;
   const safeHp = Number.isFinite(hp) ? hp : safeMaxHp;
@@ -80,11 +72,9 @@ export async function upsertWorldCreatures(client: SupabaseClient, creatures: Cr
 }
 
 export async function fetchWorldCreatures(client: SupabaseClient, tile: MapTileRef | null) {
-  const freshnessCutoff = new Date(Date.now() - creatureStateFreshnessMs).toISOString();
   let query = client
     .from("world_creatures")
-    .select("creature_id,species_id,level,x,y,hp,max_hp,region_id,tile_x,tile_y,trait_ids,defeated,updated_at")
-    .gte("updated_at", freshnessCutoff);
+    .select("creature_id,species_id,level,x,y,hp,max_hp,region_id,tile_x,tile_y,trait_ids,defeated,updated_at");
 
   if (tile) {
     query = query.eq("region_id", tile.regionId).eq("tile_x", tile.tileX).eq("tile_y", tile.tileY);
@@ -92,8 +82,26 @@ export async function fetchWorldCreatures(client: SupabaseClient, tile: MapTileR
 
   const { data, error } = await query;
   if (error || !data) return [];
-  const now = Date.now();
-  return (data as WorldCreatureRow[]).filter((row) => isFreshCreatureRow(row, now));
+  return data as WorldCreatureRow[];
+}
+
+export async function seedMissingWorldCreatures(client: SupabaseClient, creatures: CreaturePublicState[]) {
+  if (creatures.length === 0) return;
+  const ids = creatures.map((creature) => creature.id);
+  const { data } = await client
+    .from("world_creatures")
+    .select("creature_id")
+    .in("creature_id", ids);
+  const existingIds = new Set((data ?? []).map((row: { creature_id: string }) => row.creature_id));
+  const missing = creatures.filter((creature) => !existingIds.has(creature.id));
+  await upsertWorldCreatures(client, missing);
+}
+
+export async function applyWorldCreatureDamage(client: SupabaseClient, creature: CreaturePublicState, damage: number) {
+  const nextHp = Math.max(0, creature.hp - damage);
+  const nextCreature = { ...creature, hp: nextHp } as CreaturePublicState;
+  await upsertWorldCreature(client, nextCreature);
+  return nextCreature;
 }
 
 export function subscribeWorldCreatures(client: SupabaseClient, onChange: () => void): RealtimeChannel {
