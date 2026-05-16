@@ -144,8 +144,13 @@ appendCss("pixi stage scaffold", `/* pixi stage scaffold */
   display: none !important;
 }
 
+.game-shell--pixi-stage .night-field-overlay,
+.game-shell--pixi-stage .night-player-light {
+  display: none !important;
+}
+
 .game-shell--pixi-stage .multiplayer-status::after {
-  content: " · Pixi 플레이어 렌더";
+  content: " · Pixi 플레이어/밤 렌더";
   color: #bae6fd;
   font-weight: 800;
 }
