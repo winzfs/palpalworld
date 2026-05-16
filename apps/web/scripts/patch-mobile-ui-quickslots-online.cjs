@@ -118,21 +118,20 @@ applyClient(
 
 applyClient(
   `const selectedStation = selectedStationBuilding ? getCraftingStationByBuildingType(String(selectedStationBuilding.type)) : null;`,
-  `const selectedStation = selectedStationBuilding ? getCraftingStationByBuildingType(String(selectedStationBuilding.type)) : null;
-  const hasTorchItem = useMemo(() => (inventory?.items ?? []).some((item) => item.itemId === "torch" && item.amount > 0), [inventory]);`,
-  "torch light flag",
+  `const selectedStation = selectedStationBuilding ? getCraftingStationByBuildingType(String(selectedStationBuilding.type)) : null;`,
+  "drop inventory torch light flag",
 );
 
 applyClientRegex(
   /<main className=\{`game-shell \$\{selectedBuildingItemId \? "game-shell--placing" : ""\}`\}>/,
-  '<main className={`game-shell ${selectedBuildingItemId ? "game-shell--placing" : ""} ${isNightMode ? "game-shell--night" : ""} ${hasTorchItem ? "game-shell--torch-equipped" : ""}`}>',
+  '<main className={`game-shell ${selectedBuildingItemId ? "game-shell--placing" : ""} ${isNightMode ? "game-shell--night" : ""}`}>',
   "night shell classes",
 );
 
 applyClient(
   `      <section className="game-hud" aria-label="Game HUD">`,
   `      <section className="game-hud" aria-label="Game HUD">
-        {isNightMode ? <div className="night-field-overlay" aria-hidden="true"><div className={hasTorchItem ? "night-player-light night-player-light--torch" : "night-player-light"} /></div> : null}`,
+        {isNightMode ? <div className="night-field-overlay" aria-hidden="true"><div className="night-player-light" /></div> : null}`,
   "night overlay inside hud",
 );
 
@@ -155,10 +154,10 @@ appendCss("/* temporary day night field lighting */", `/* temporary day night fi
 .hud-day-night-toggle--night { border-color: rgb(250 204 21 / 0.48); background: rgb(83 56 19 / 0.58); color: #fff7df; }
 .hud-day-night-toggle:active { transform: translateY(1px) scale(0.98); }
 .night-field-overlay { pointer-events: none; position: fixed; inset: 0; z-index: 1; background: radial-gradient(circle at 50% 52%, rgb(5 8 20 / 0.02) 0 72px, rgb(5 8 20 / 0.36) 136px, rgb(5 8 20 / 0.76) 100%), linear-gradient(rgb(4 8 22 / 0.54), rgb(2 4 13 / 0.64)); }
-.game-shell--torch-equipped .night-field-overlay { background: radial-gradient(circle at 50% 52%, rgb(5 8 20 / 0) 0 138px, rgb(5 8 20 / 0.28) 220px, rgb(5 8 20 / 0.72) 100%), linear-gradient(rgb(4 8 22 / 0.48), rgb(2 4 13 / 0.58)); }
+.palpalworld-torch-equipped .night-field-overlay { background: radial-gradient(circle at 50% 52%, rgb(5 8 20 / 0) 0 138px, rgb(5 8 20 / 0.28) 220px, rgb(5 8 20 / 0.72) 100%), linear-gradient(rgb(4 8 22 / 0.48), rgb(2 4 13 / 0.58)); }
 .night-player-light { position: fixed; left: 50%; top: 52%; width: 190px; height: 190px; border-radius: 999px; transform: translate(-50%, -50%); background: radial-gradient(circle, rgb(255 217 128 / 0.28) 0%, rgb(255 170 64 / 0.12) 42%, rgb(255 170 64 / 0) 70%); filter: blur(8px); opacity: 0.82; }
-.night-player-light--torch { width: 340px; height: 340px; background: radial-gradient(circle, rgb(255 224 145 / 0.38) 0%, rgb(255 174 68 / 0.18) 42%, rgb(255 174 68 / 0) 72%); opacity: 0.96; }
-@media (max-width: 720px) { .hud-day-night-toggle { left: calc(88px + var(--safe-left)); top: calc(8px + var(--safe-top)); min-height: 34px; padding: 5px 9px; border-width: 1px; font-size: 10px; } .night-field-overlay { background: radial-gradient(circle at 50% 52%, rgb(5 8 20 / 0.02) 0 58px, rgb(5 8 20 / 0.36) 112px, rgb(5 8 20 / 0.78) 100%), linear-gradient(rgb(4 8 22 / 0.54), rgb(2 4 13 / 0.64)); } .game-shell--torch-equipped .night-field-overlay { background: radial-gradient(circle at 50% 52%, rgb(5 8 20 / 0) 0 112px, rgb(5 8 20 / 0.28) 180px, rgb(5 8 20 / 0.72) 100%), linear-gradient(rgb(4 8 22 / 0.48), rgb(2 4 13 / 0.58)); } .night-player-light { width: 156px; height: 156px; } .night-player-light--torch { width: 280px; height: 280px; } }
+.palpalworld-torch-equipped .night-player-light { width: 340px; height: 340px; background: radial-gradient(circle, rgb(255 224 145 / 0.38) 0%, rgb(255 174 68 / 0.18) 42%, rgb(255 174 68 / 0) 72%); opacity: 0.96; }
+@media (max-width: 720px) { .hud-day-night-toggle { left: calc(88px + var(--safe-left)); top: calc(8px + var(--safe-top)); min-height: 34px; padding: 5px 9px; border-width: 1px; font-size: 10px; } .night-field-overlay { background: radial-gradient(circle at 50% 52%, rgb(5 8 20 / 0.02) 0 58px, rgb(5 8 20 / 0.36) 112px, rgb(5 8 20 / 0.78) 100%), linear-gradient(rgb(4 8 22 / 0.54), rgb(2 4 13 / 0.64)); } .palpalworld-torch-equipped .night-field-overlay { background: radial-gradient(circle at 50% 52%, rgb(5 8 20 / 0) 0 112px, rgb(5 8 20 / 0.28) 180px, rgb(5 8 20 / 0.72) 100%), linear-gradient(rgb(4 8 22 / 0.48), rgb(2 4 13 / 0.58)); } .night-player-light { width: 156px; height: 156px; } .palpalworld-torch-equipped .night-player-light { width: 280px; height: 280px; } }
 `, "night lighting css");
 
 if (clientChanged) fs.writeFileSync(clientPath, client);
