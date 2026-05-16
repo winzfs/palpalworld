@@ -23,6 +23,17 @@ export class CreatureService {
     return Math.max(1, Math.floor(baseMaxHp * hpMultiplier * combatEffectTestHpMultiplier));
   }
 
+  normalizeAliveCreatureHp(creature: CreaturePublicState) {
+    if (creature.hp <= 0) return;
+    const nextMaxHp = this.calculateMaxHp(creature);
+    if (nextMaxHp <= creature.maxHp) return;
+
+    // Existing live creatures may still have the old max/current HP after a balance change.
+    // For this Pixi hit-effect test period, restore them to full updated HP so the bar starts filled.
+    creature.maxHp = nextMaxHp;
+    creature.hp = nextMaxHp;
+  }
+
   calculateDefense(creature: CreaturePublicState) {
     const species = this.getSpecies(creature);
     if (!species) return 1;
@@ -39,6 +50,7 @@ export class CreatureService {
 
   tickRespawns(now: number) {
     for (const creature of this.world.creatures.values()) {
+      this.normalizeAliveCreatureHp(creature);
       if (creature.hp > 0 || !creature.respawnAt) continue;
       if (creature.respawnAt > now) continue;
 
