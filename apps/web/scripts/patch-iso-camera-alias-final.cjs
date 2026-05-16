@@ -5,27 +5,46 @@ const target = path.join(__dirname, "..", "src", "features", "game", "GameScene.
 let source = fs.readFileSync(target, "utf8");
 let changed = false;
 
-function replaceOnce(search, replacement, label) {
-  if (source.includes(replacement)) {
-    console.log(`[patch-iso-camera-alias-final] already-patched ${label}`);
-    return;
-  }
-  if (!source.includes(search)) {
-    console.log(`[patch-iso-camera-alias-final] skipped ${label}`);
-    return;
-  }
-  source = source.replace(search, replacement);
-  changed = true;
-  console.log(`[patch-iso-camera-alias-final] patched ${label}`);
-}
+const drawStart = source.indexOf("  private draw() {");
+const drawEnd = drawStart >= 0 ? source.indexOf("\n  private ", drawStart + 18) : -1;
 
-// Several late build-mode patches historically used either __isoCam or
-// isoCamera. Keep both names available in draw() so generated code cannot crash
-// at runtime when one patch uses the other spelling.
-replaceOnce(
-  "    const __isoCam = worldCameraToIsoBuildCamera(camera.x, camera.y, width, height);\n    this.drawBuildParts(ctx, camera.x, camera.y, viewport, __isoCam.x, __isoCam.y);",
-  "    const __isoCam = worldCameraToIsoBuildCamera(camera.x, camera.y, width, height);\n    const isoCamera = __isoCam;\n    this.drawBuildParts(ctx, camera.x, camera.y, viewport, __isoCam.x, __isoCam.y);",
-  "draw isoCamera alias",
-);
+if (drawStart >= 0 && drawEnd > drawStart) {
+  const drawBody = source.slice(drawStart, drawEnd);
+  const needsIso = drawBody.includes("__isoCam.") || drawBody.includes("isoCamera.");
+  const hasBoth = drawBody.includes("const __isoCam =") && drawBody.includes("const isoCamera = __isoCam;");
+
+  if (needsIso && !hasBoth) {
+    let nextDrawBody = drawBody;
+
+    if (nextDrawBody.includes("const __isoCam =") && !nextDrawBody.includes("const isoCamera = __isoCam;")) {
+      nextDrawBody = nextDrawBody.replace(
+        "    const __isoCam = worldCameraToIsoBuildCamera(camera.x, camera.y, width, height);",
+        "    const __isoCam = worldCameraToIsoBuildCamera(camera.x, camera.y, width, height);\n    const isoCamera = __isoCam;",
+      );
+      nextDrawBody = nextDrawBody.replace(
+        "    const __isoCam = worldCameraToIsoBuildCamera(camera.x, camera.y, rect.width, rect.height);",
+        "    const __isoCam = worldCameraToIsoBuildCamera(camera.x, camera.y, rect.width, rect.height);\n    const isoCamera = __isoCam;",
+      );
+    }
+
+    if (!nextDrawBody.includes("const __isoCam =")) {
+      const hasCachedSize = nextDrawBody.includes("const width =") && nextDrawBody.includes("const height =");
+      const sizeArgs = hasCachedSize ? "width, height" : "rect.width, rect.height";
+      const line = `    const __isoCam = worldCameraToIsoBuildCamera(camera.x, camera.y, ${sizeArgs});\n    const isoCamera = __isoCam;\n`;
+      if (nextDrawBody.includes("    const viewport = this.getViewportBounds(camera.x, camera.y);\n")) {
+        nextDrawBody = nextDrawBody.replace(
+          "    const viewport = this.getViewportBounds(camera.x, camera.y);\n",
+          "    const viewport = this.getViewportBounds(camera.x, camera.y);\n" + line,
+        );
+      }
+    }
+
+    if (nextDrawBody !== drawBody) {
+      source = source.slice(0, drawStart) + nextDrawBody + source.slice(drawEnd);
+      changed = true;
+      console.log("[patch-iso-camera-alias-final] patched draw iso camera declarations");
+    }
+  }
+}
 
 if (changed) fs.writeFileSync(target, source);
