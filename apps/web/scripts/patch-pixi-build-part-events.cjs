@@ -26,12 +26,12 @@ function ensurePixiFlagHelper() {
 
 function patchDispatchMethod() {
   if (source.includes('private dispatchPixiBuildParts()')) return;
-  const search = '  private dispatchPixiFeedback() {';
   const insertion = `  private dispatchPixiBuildParts() {
     if (!isPixiStageEnabled()) return;
+    const parts = typeof this.getSceneBuildParts === "function" ? this.getSceneBuildParts() : [];
     window.dispatchEvent(new CustomEvent("palpalworld:pixi-build-parts", {
       detail: {
-        parts: this.getSceneBuildParts(),
+        parts,
         selectedPartId: this.selectedPlacedBuildPartId,
         selectedHouseId: this.selectedHouseId,
         preview: this.selectedBuildPartId && this.pointerWorldPosition
@@ -47,44 +47,76 @@ function patchDispatchMethod() {
     }));
   }
 `;
-  if (source.includes(search)) {
-    source = source.replace(search, insertion + search);
+
+  const beforeFeedback = '  private dispatchPixiFeedback() {';
+  if (source.includes(beforeFeedback)) {
+    source = source.replace(beforeFeedback, insertion + beforeFeedback);
     changed = true;
     console.log('[patch-pixi-build-part-events] patched dispatch method before feedback');
     return;
   }
-  const fallback = '  private loop = () => { this.draw(); this.animationFrame = requestAnimationFrame(this.loop); };';
-  if (!source.includes(fallback)) {
-    console.log('[patch-pixi-build-part-events] skipped dispatch method');
+
+  const beforeLoop = '  private loop = () => { this.draw(); this.animationFrame = requestAnimationFrame(this.loop); };';
+  if (source.includes(beforeLoop)) {
+    source = source.replace(beforeLoop, insertion + beforeLoop);
+    changed = true;
+    console.log('[patch-pixi-build-part-events] patched dispatch method fallback');
     return;
   }
-  source = source.replace(fallback, insertion + fallback);
-  changed = true;
-  console.log('[patch-pixi-build-part-events] patched dispatch method fallback');
+
+  const classEndRegex = /(\n\s*destroy\(\) \{)/;
+  if (classEndRegex.test(source)) {
+    source = source.replace(classEndRegex, '\n' + insertion + '$1');
+    changed = true;
+    console.log('[patch-pixi-build-part-events] patched dispatch method before destroy');
+    return;
+  }
+
+  console.log('[patch-pixi-build-part-events] skipped dispatch method');
+}
+
+function hasDispatchCallOutsideMethod() {
+  const methodIndex = source.indexOf('private dispatchPixiBuildParts()');
+  const callIndex = source.indexOf('this.dispatchPixiBuildParts();');
+  if (callIndex < 0) return false;
+  if (methodIndex < 0) return true;
+  const nextMethodIndex = source.indexOf('\n  private ', methodIndex + 'private dispatchPixiBuildParts()'.length);
+  return nextMethodIndex > 0 && callIndex > nextMethodIndex;
 }
 
 function patchDrawCall() {
-  if (source.includes('this.dispatchPixiBuildParts();')) return;
-  const search = '    this.drawBuildParts(ctx, camera.x, camera.y, viewport);';
-  if (source.includes(search)) {
-    source = source.replace(search, search + '\n    this.dispatchPixiBuildParts();');
+  if (hasDispatchCallOutsideMethod()) return;
+
+  const drawPlayersRegex = /(\n\s*this\.drawPlayers\(ctx, camera\.x, camera\.y, now, viewport\);)/;
+  if (drawPlayersRegex.test(source)) {
+    source = source.replace(drawPlayersRegex, '$1\n    this.dispatchPixiBuildParts();');
     changed = true;
-    console.log('[patch-pixi-build-part-events] patched dispatch after drawBuildParts');
+    console.log('[patch-pixi-build-part-events] patched dispatch after drawPlayers regex');
     return;
   }
-  const fallback = '    this.dispatchPixiFeedback();';
-  if (source.includes(fallback)) {
-    source = source.replace(fallback, '    this.dispatchPixiBuildParts();\n' + fallback);
+
+  const drawResourcesRegex = /(\n\s*this\.drawResources\(ctx, camera\.x, camera\.y, viewport\);)/;
+  if (drawResourcesRegex.test(source)) {
+    source = source.replace(drawResourcesRegex, '$1\n    this.dispatchPixiBuildParts();');
     changed = true;
-    console.log('[patch-pixi-build-part-events] patched dispatch before feedback');
+    console.log('[patch-pixi-build-part-events] patched dispatch after drawResources regex');
     return;
   }
+
+  const drawMethodRegex = /(private draw\(\) \{[\s\S]*?const viewport = this\.getViewportBounds\(camera\);)/;
+  if (drawMethodRegex.test(source)) {
+    source = source.replace(drawMethodRegex, '$1\n    this.dispatchPixiBuildParts();');
+    changed = true;
+    console.log('[patch-pixi-build-part-events] patched dispatch in draw method fallback');
+    return;
+  }
+
   console.log('[patch-pixi-build-part-events] skipped dispatch call');
 }
 
 function patchCanvasBuildPartHiding() {
-  if (source.includes('private drawBuildParts(ctx: CanvasRenderingContext2D, cameraX: number, cameraY: number, viewport: ViewportBounds) {\n    if (isPixiStageEnabled()) return;')) return;
-  const regex = /(private drawBuildParts\(ctx: CanvasRenderingContext2D, cameraX: number, cameraY: number, viewport: ViewportBounds\) \{)(\s*)/;
+  if (source.includes('drawBuildParts(ctx: CanvasRenderingContext2D') && source.includes('if (isPixiStageEnabled()) return;')) return;
+  const regex = /(private drawBuildParts\([^)]*\) \{)(\s*)/;
   if (!regex.test(source)) {
     console.log('[patch-pixi-build-part-events] skipped drawBuildParts hiding');
     return;
