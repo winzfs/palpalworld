@@ -61,27 +61,38 @@ const handler = `
     if (payload.hostId === getCurrentMultiplayerPlayerId()) return;
     const tile = demoTileRef.current;
     if (payload.tile.regionId !== tile.regionId || payload.tile.tileX !== tile.tileX || payload.tile.tileY !== tile.tileY) return;
-    const now = performance.now();
-    const liveIds = new Set(demoCreaturesRef.current.map((creature) => creature.id));
-    for (const packet of payload.creatures) {
-      if (!liveIds.has(packet.id)) continue;
-      creatureBroadcastTargetsRef.current.set(packet.id, { x: packet.x, y: packet.y, hp: packet.hp, maxHp: packet.maxHp, receivedAt: now });
-    }
-  }, []);
+    isCreatureHostRef.current = false;
+    creatureBroadcastTargetsRef.current.clear();
+    demoCreaturesRef.current = payload.creatures.map((packet) => ({
+      id: packet.id,
+      speciesId: packet.speciesId,
+      level: packet.level,
+      position: { x: packet.x, y: packet.y },
+      currentTile: { ...payload.tile },
+      hp: packet.hp,
+      maxHp: packet.maxHp,
+      traitIds: packet.traitIds ?? [],
+    }) as CreaturePublicState);
+    demoTileIndexRef.current = createDemoTileIndex(demoResourcesRef.current, demoCreaturesRef.current, demoBuildingsRef.current);
+    applyDemoSnapshot(true);
+  }, [applyDemoSnapshot]);
 `;
 addAfter('  }, [getCurrentBuildings, getCurrentCreatures, getCurrentResources, nickname]);\n', handler, 'ensure broadcast handler');
 
 const lifecycle = `  useEffect(() => {
     const client = supabaseClientRef.current;
     if (!client || !isSupabaseMultiplayerEnabled()) return;
+    let cancelled = false;
     void claimWorldHost(client, getCurrentMultiplayerPlayerId(), demoTileRef.current).then((result) => {
+      if (cancelled) return;
       isCreatureHostRef.current = result.isHost;
       if (result.isHost) creatureBroadcastTargetsRef.current.clear();
+      else { demoCreaturesRef.current = []; demoTileIndexRef.current = createDemoTileIndex(demoResourcesRef.current, demoCreaturesRef.current, demoBuildingsRef.current); applyDemoSnapshot(true); }
     });
     const channel = createCreatureBroadcastChannel(client, demoTileRef.current, applyCreatureBroadcastPayload);
     creatureBroadcastChannelRef.current = channel;
-    return () => { client.removeChannel(channel); if (creatureBroadcastChannelRef.current === channel) creatureBroadcastChannelRef.current = null; };
-  }, [applyCreatureBroadcastPayload]);
+    return () => { cancelled = true; client.removeChannel(channel); if (creatureBroadcastChannelRef.current === channel) creatureBroadcastChannelRef.current = null; };
+  }, [applyCreatureBroadcastPayload, applyDemoSnapshot]);
 `;
 addAfter('  useEffect(() => { setNickname(createClientNickname()); commitInventory(readStoredInventory(createDemoInventory())); }, [commitInventory]);\n', lifecycle, 'ensure broadcast lifecycle');
 
@@ -89,11 +100,14 @@ const guardedLoop = `      const client = supabaseClientRef.current;
       if (client && isSupabaseMultiplayerEnabled() && now - lastCreatureHostClaimAtRef.current >= creatureHostClaimMs) {
         lastCreatureHostClaimAtRef.current = now;
         void claimWorldHost(client, getCurrentMultiplayerPlayerId(), demoTileRef.current).then((result) => {
+          const wasHost = isCreatureHostRef.current;
           isCreatureHostRef.current = result.isHost;
           if (result.isHost) creatureBroadcastTargetsRef.current.clear();
+          else if (wasHost) { demoCreaturesRef.current = []; creatureBroadcastTargetsRef.current.clear(); }
         });
       }
       if (!client || !isSupabaseMultiplayerEnabled() || isCreatureHostRef.current) {
+        if (getCurrentCreatures().length <= 0) demoCreaturesRef.current = createTileBasedDemoCreatures();
         moveDemoCreatures(getCurrentCreatures(), deltaSeconds, now, demoPositionRef.current);
         const channel = creatureBroadcastChannelRef.current;
         if (client && channel && isSupabaseMultiplayerEnabled() && now - lastCreatureBroadcastAtRef.current >= creatureBroadcastMs) {
@@ -105,7 +119,7 @@ const guardedLoop = `      const client = supabaseClientRef.current;
           void updateWorldCreaturePositions(client, getCurrentCreatures());
         }
       } else {
-        smoothRemoteCreatures(getCurrentCreatures(), creatureBroadcastTargetsRef.current, deltaSeconds, now);
+        if (getCurrentCreatures().length > 0) smoothRemoteCreatures(getCurrentCreatures(), creatureBroadcastTargetsRef.current, deltaSeconds, now);
       }
       applyDemoSnapshot(false);`;
 
