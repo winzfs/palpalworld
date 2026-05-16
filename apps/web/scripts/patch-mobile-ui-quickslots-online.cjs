@@ -1,13 +1,17 @@
 const fs = require("fs");
 const path = require("path");
 
-const clientPath = path.join(__dirname, "..", "src", "features", "game", "GameClientTileDemoStation.tsx");
-const cssPath = path.join(__dirname, "..", "src", "app", "hud-menu.css");
+const webRoot = path.join(__dirname, "..");
+const clientPath = path.join(webRoot, "src", "features", "game", "GameClientTileDemoStation.tsx");
+const cssPath = path.join(webRoot, "src", "app", "hud-menu.css");
+const assetCatalogPath = path.join(webRoot, "src", "features", "assets", "assetCatalog.ts");
 
 let client = fs.readFileSync(clientPath, "utf8");
 let css = fs.readFileSync(cssPath, "utf8");
+let assetCatalog = fs.readFileSync(assetCatalogPath, "utf8");
 let clientChanged = false;
 let cssChanged = false;
+let assetCatalogChanged = false;
 
 function patchString(source, search, replacement, label) {
   if (source.includes(replacement)) return { text: source, changed: false };
@@ -55,6 +59,12 @@ function applyCssRegex(regex, replacement, label) {
   const result = patchRegex(css, regex, replacement, label);
   css = result.text;
   cssChanged ||= result.changed;
+}
+
+function applyAsset(search, replacement, label) {
+  const result = patchString(assetCatalog, search, replacement, label);
+  assetCatalog = result.text;
+  assetCatalogChanged ||= result.changed;
 }
 
 applyClient("const quickSlotCount = 5;", "const quickSlotCount = 8;", "quick slot count 8");
@@ -115,7 +125,7 @@ applyClient(
 
 applyClientRegex(
   /<main className=\{`game-shell \$\{selectedBuildingItemId \? "game-shell--placing" : ""\}`\}>/,
-  `<main className={\`game-shell ${selectedBuildingItemId ? "game-shell--placing" : ""} ${isNightMode ? "game-shell--night" : ""} ${hasTorchItem ? "game-shell--torch-equipped" : ""}\`}>`,
+  '<main className={`game-shell ${selectedBuildingItemId ? "game-shell--placing" : ""} ${isNightMode ? "game-shell--night" : ""} ${hasTorchItem ? "game-shell--torch-equipped" : ""}`}>',
   "night shell classes",
 );
 
@@ -133,6 +143,12 @@ applyClient(
   "night toggle button",
 );
 
+applyAsset(
+  `healing_salve: ["#10b981", "HEAL"], ingot:`,
+  `healing_salve: ["#10b981", "HEAL"], torch: ["#f97316", "FIRE"], ingot:`,
+  "torch icon palette",
+);
+
 appendCss("/* temporary day night field lighting */", `/* temporary day night field lighting */
 .game-hud { z-index: 20; }
 .hud-day-night-toggle { pointer-events: auto; position: absolute; left: calc(104px + var(--safe-left)); top: calc(12px + var(--safe-top)); z-index: 17; min-height: 42px; padding: 8px 12px; border: 2px solid rgb(125 211 252 / 0.45); border-radius: 999px; background: rgb(8 47 73 / 0.58); color: #e0f2fe; font-size: 12px; font-weight: 950; box-shadow: 0 8px 22px rgb(0 0 0 / 0.28), inset 0 0 0 1px rgb(255 255 255 / 0.08); backdrop-filter: blur(8px); cursor: pointer; }
@@ -147,3 +163,4 @@ appendCss("/* temporary day night field lighting */", `/* temporary day night fi
 
 if (clientChanged) fs.writeFileSync(clientPath, client);
 if (cssChanged) fs.writeFileSync(cssPath, css);
+if (assetCatalogChanged) fs.writeFileSync(assetCatalogPath, assetCatalog);
