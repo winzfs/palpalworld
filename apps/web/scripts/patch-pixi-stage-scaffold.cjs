@@ -20,15 +20,17 @@ function patchString(source, search, replacement, label) {
 }
 
 function patchRegex(source, regex, replacement, label) {
-  if (source.includes(replacement)) return { text: source, changed: false };
+  if (typeof replacement === "string" && source.includes(replacement)) return { text: source, changed: false };
   regex.lastIndex = 0;
   if (!regex.test(source)) {
     console.log(`[patch-pixi-stage-scaffold] skipped ${label}`);
     return { text: source, changed: false };
   }
   regex.lastIndex = 0;
+  const next = source.replace(regex, replacement);
+  if (next === source) return { text: source, changed: false };
   console.log(`[patch-pixi-stage-scaffold] patched ${label}`);
-  return { text: source.replace(regex, replacement), changed: true };
+  return { text: next, changed: true };
 }
 
 function appendCss(marker, block) {
@@ -85,6 +87,14 @@ applyClient(
   "Pixi stage toggle handler",
 );
 
+if (!client.includes("game-shell--pixi-stage")) {
+  applyClientRegex(
+    /<main className=\{`game-shell([^`]*)`\}>/,
+    '<main className={`game-shell$1 ${pixiStageEnabled ? "game-shell--pixi-stage" : ""}`}>',
+    "Pixi stage shell class",
+  );
+}
+
 if (!client.includes("<PixiGameCanvas enabled={pixiStageEnabled}")) {
   applyClient(
     `      <GameScene onReady={handleSceneReady} onInputChange={handleInputChange} onInteract={handleDemoInteract} onWorldClick={handleWorldClick} placementBuildingType={placementBuildingType} />`,
@@ -128,6 +138,16 @@ appendCss("pixi stage scaffold", `/* pixi stage scaffold */
   display: block;
   width: 100%;
   height: 100%;
+}
+
+.game-shell--pixi-stage .multiplayer-player {
+  display: none !important;
+}
+
+.game-shell--pixi-stage .multiplayer-status::after {
+  content: " · Pixi 플레이어 렌더";
+  color: #bae6fd;
+  font-weight: 800;
 }
 
 .hud-pixi-toggle {
