@@ -216,6 +216,7 @@ export type PlayerPublicState = {
   hp: number;
   maxHp: number;
   mountedCreatureId?: EntityId;
+  equippedWeaponItemId?: ItemId | null;
 };
 
 export type OwnedCreatureState = {
@@ -298,39 +299,23 @@ export type ClientToServerEvents = {
 };
 
 export type ServerToClientEvents = {
-  "server:world_snapshot": (payload: WorldSnapshot) => void;
-  "server:inventory_updated": (payload: InventoryState) => void;
-  "server:equipment_updated": (payload: EquipmentState) => void;
-  "server:player_profile_updated": (payload: PlayerProfileState) => void;
-  "server:owned_creatures_updated": (payload: { ownerPlayerId: PlayerId; creatures: OwnedCreatureState[] }) => void;
-  "server:entity_spawned": (payload: CreaturePublicState | ResourceNodeState | BuildingState) => void;
-  "server:entity_updated": (payload: Partial<CreaturePublicState | ResourceNodeState | BuildingState | PlayerPublicState> & { id: EntityId }) => void;
-  "server:entity_removed": (payload: { id: EntityId }) => void;
-  "server:chat_message": (payload: { playerId: PlayerId; nickname: string; message: string; sentAt: number }) => void;
+  "server:world_snapshot": (snapshot: WorldSnapshot) => void;
+  "server:inventory_updated": (inventory: InventoryState) => void;
+  "server:equipment_updated": (equipment: EquipmentState) => void;
+  "server:player_profile_updated": (profile: PlayerProfileState) => void;
+  "server:entity_updated": (entity: CreaturePublicState | ResourceNodeState | BuildingState) => void;
+  "server:entity_spawned": (entity: CreaturePublicState | ResourceNodeState | BuildingState) => void;
   "server:toast": (payload: { type: "info" | "success" | "warning" | "error"; message: string }) => void;
-};
-
-export const PLAYER_BASE_STATS: PlayerStats = {
-  maxHp: 100,
-  attack: 14,
-  defense: 5,
-  moveSpeed: 180,
-  stamina: 100,
-  capturePower: 1,
-  workCommandPower: 1,
+  "server:chat_message": (payload: { playerId: PlayerId; nickname: string; message: string; sentAt: number }) => void;
 };
 
 export const WORLD = {
   tileSize: 32,
-  defaultWorldId: "starter-island",
+  mapWidth: 3200,
+  mapHeight: 3200,
+  interactRange: 120,
+  buildRange: 220,
   snapshotRateMs: 100,
-  playerMoveSpeed: 180,
-  interactRange: 72,
-  buildRange: 160,
-  attackRange: 88,
-  playerAttackPower: 14,
-  playerAttackCooldownMs: 450,
-  defaultResourceRespawnMs: 30_000,
 } as const;
 
 export * from "./catalog";
