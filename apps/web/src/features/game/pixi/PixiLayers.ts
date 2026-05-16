@@ -1,6 +1,12 @@
-type PixiContainer = {
+export type PixiContainer = {
   sortableChildren?: boolean;
+  zIndex?: number;
+  visible?: boolean;
+  position?: { set: (x: number, y: number) => void };
+  scale?: { set: (value: number) => void };
   addChild: (...children: PixiContainer[]) => void;
+  removeChild?: (...children: PixiContainer[]) => void;
+  destroy?: (options?: { children?: boolean }) => void;
 };
 
 type PixiApplication = {
