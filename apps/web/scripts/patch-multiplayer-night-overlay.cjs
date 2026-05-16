@@ -9,14 +9,26 @@ let css = fs.readFileSync(cssPath, "utf8");
 let overlayChanged = false;
 let cssChanged = false;
 
-function patchString(source, search, replacement, label) {
-  if (source.includes(replacement)) return { text: source, changed: false };
-  if (!source.includes(search)) {
+function appendAfter(anchor, insertion, label) {
+  if (overlay.includes(insertion)) return;
+  if (!overlay.includes(anchor)) {
     console.log(`[patch-multiplayer-night-overlay] skipped ${label}`);
-    return { text: source, changed: false };
+    return;
   }
+  overlay = overlay.replace(anchor, `${anchor}\n${insertion}`);
+  overlayChanged = true;
   console.log(`[patch-multiplayer-night-overlay] patched ${label}`);
-  return { text: source.replace(search, replacement), changed: true };
+}
+
+function replaceOnce(search, replacement, label) {
+  if (overlay.includes(replacement)) return;
+  if (!overlay.includes(search)) {
+    console.log(`[patch-multiplayer-night-overlay] skipped ${label}`);
+    return;
+  }
+  overlay = overlay.replace(search, replacement);
+  overlayChanged = true;
+  console.log(`[patch-multiplayer-night-overlay] patched ${label}`);
 }
 
 function appendCss(marker, block) {
@@ -26,127 +38,58 @@ function appendCss(marker, block) {
   console.log(`[patch-multiplayer-night-overlay] appended css ${marker}`);
 }
 
-function applyOverlay(search, replacement, label) {
-  const result = patchString(overlay, search, replacement, label);
-  overlay = result.text;
-  overlayChanged ||= result.changed;
-}
-
-applyOverlay(
-  `const mountedPetStorageKey = "palpalworld.demo.mountedPetItemId";`,
-  `const mountedPetStorageKey = "palpalworld.demo.mountedPetItemId";
-const equippedWeaponStorageKey = "palpalworld.demo.equippedWeaponItemId";`,
+appendAfter(
+  'const mountedPetStorageKey = "palpalworld.demo.mountedPetItemId";',
+  'const equippedWeaponStorageKey = "palpalworld.demo.equippedWeaponItemId";',
   "equipped weapon storage key",
 );
 
-applyOverlay(
-  `function readMountedPetItemId() {
-  if (typeof window === "undefined") return null;
-  return window.localStorage.getItem(mountedPetStorageKey);
-}`,
-  `function readMountedPetItemId() {
-  if (typeof window === "undefined") return null;
-  return window.localStorage.getItem(mountedPetStorageKey);
-}
-
-function readEquippedWeaponItemId() {
-  if (typeof window === "undefined") return null;
-  return window.localStorage.getItem(equippedWeaponStorageKey);
-}
-
-function isRemoteTorchEquipped(player: PlayerPublicState) {
-  return (player as PlayerPublicState & { equippedWeaponItemId?: string | null }).equippedWeaponItemId === "torch";
-}
-
-function readNightModeActive() {
-  if (typeof document === "undefined") return false;
-  return Boolean(document.querySelector(".game-shell--night"));
-}`,
-  "night/equipped helpers",
+appendAfter(
+  'function readMountedPetItemId() { if (typeof window === "undefined") return null; return window.localStorage.getItem(mountedPetStorageKey); }',
+  'function readEquippedWeaponItemId() { if (typeof window === "undefined") return null; return window.localStorage.getItem(equippedWeaponStorageKey); }\nfunction isRemoteTorchEquipped(player: PlayerPublicState) { return (player as PlayerPublicState & { equippedWeaponItemId?: string | null }).equippedWeaponItemId === "torch"; }\nfunction readNightModeActive() { if (typeof document === "undefined") return false; return Boolean(document.querySelector(".game-shell--night")); }',
+  "compact night/equipped helpers",
 );
 
-applyOverlay(
-  `  const [status, setStatus] = useState(enabled ? "온라인 연결 중" : "오프라인 모드");`,
-  `  const [status, setStatus] = useState(enabled ? "온라인 연결 중" : "오프라인 모드");
-  const [nightModeActive, setNightModeActive] = useState(false);`,
+replaceOnce(
+  '  const [pixiStageEnabled, setPixiStageEnabled] = useState(readPixiStageEnabled);',
+  '  const [pixiStageEnabled, setPixiStageEnabled] = useState(readPixiStageEnabled);\n  const [nightModeActive, setNightModeActive] = useState(false);',
   "night mode state",
 );
 
-applyOverlay(
-  `  useEffect(() => {
-    if (!client || !enabled) return;
-    const publish = async () => {
-      const localPlayer = latestLocalPlayerRef.current;
-      if (!localPlayer) return;
-      await upsertLocalPresence(client, { playerId, nickname: localPlayer.nickname, position: localPlayer.position, direction: localPlayer.direction, currentTile: localPlayer.currentTile as MapTileRef, mountedPetItemId: readMountedPetItemId() });
-    };
-    const interval = window.setInterval(publish, 450);
-    return () => window.clearInterval(interval);
-  }, [client, enabled, playerId]);`,
-  `  useEffect(() => {
-    if (!client || !enabled) return;
-    const publish = async () => {
-      const localPlayer = latestLocalPlayerRef.current;
-      if (!localPlayer) return;
-      await upsertLocalPresence(client, {
-        playerId,
-        nickname: localPlayer.nickname,
-        position: localPlayer.position,
-        direction: localPlayer.direction,
-        currentTile: localPlayer.currentTile as MapTileRef,
-        mountedPetItemId: readMountedPetItemId(),
-        equippedWeaponItemId: readEquippedWeaponItemId(),
-      });
-    };
-    const interval = window.setInterval(publish, 450);
-    return () => window.clearInterval(interval);
-  }, [client, enabled, playerId]);`,
-  "publish equipped weapon presence",
+replaceOnce(
+  'await upsertLocalPresence(client, { playerId, nickname: localPlayer.nickname, position: localPlayer.position, direction: localPlayer.direction, currentTile: localPlayer.currentTile as MapTileRef, mountedPetItemId: readMountedPetItemId() });',
+  'await upsertLocalPresence(client, { playerId, nickname: localPlayer.nickname, position: localPlayer.position, direction: localPlayer.direction, currentTile: localPlayer.currentTile as MapTileRef, mountedPetItemId: readMountedPetItemId(), equippedWeaponItemId: readEquippedWeaponItemId() });',
+  "publish equipped weapon presence compact",
 );
 
-applyOverlay(
-  `  useEffect(() => {
-    const handleSnapshot = (event: Event) => {`,
-  `  useEffect(() => {
-    const syncNightMode = () => setNightModeActive(readNightModeActive());
-    syncNightMode();
-    const interval = window.setInterval(syncNightMode, 250);
-    return () => window.clearInterval(interval);
-  }, []);
-
-  useEffect(() => {
-    const handleSnapshot = (event: Event) => {`,
-  "night mode polling",
+replaceOnce(
+  '  useEffect(() => { const sync = () => setPixiStageEnabled(readPixiStageEnabled()); sync(); const interval = window.setInterval(sync, 700); return () => window.clearInterval(interval); }, []);',
+  '  useEffect(() => { const sync = () => setPixiStageEnabled(readPixiStageEnabled()); sync(); const interval = window.setInterval(sync, 700); return () => window.clearInterval(interval); }, []);\n  useEffect(() => { const syncNightMode = () => setNightModeActive(readNightModeActive()); syncNightMode(); const interval = window.setInterval(syncNightMode, 250); return () => window.clearInterval(interval); }, []);',
+  "night mode polling compact",
 );
 
-applyOverlay(
-  `    <div className="multiplayer-overlay" aria-label="멀티플레이어 오버레이">`,
-  `    <div className={nightModeActive ? "multiplayer-overlay multiplayer-overlay--night" : "multiplayer-overlay"} aria-label="멀티플레이어 오버레이">`,
-  "night overlay class",
+replaceOnce(
+  '<div className={pixiStageEnabled ? "multiplayer-overlay multiplayer-overlay--pixi-players" : "multiplayer-overlay"} aria-label="멀티플레이어 오버레이">',
+  '<div className={`${pixiStageEnabled ? "multiplayer-overlay multiplayer-overlay--pixi-players" : "multiplayer-overlay"} ${nightModeActive ? "multiplayer-overlay--night" : ""}`} aria-label="멀티플레이어 오버레이">',
+  "night overlay class compact",
 );
 
-applyOverlay(
-  `      {visiblePlayers.map((player) => {
-        const mountedPet = getMountedPetInfo(player);
-        const left = player.position.x - camera.cameraX;`,
-  `      {visiblePlayers.map((player) => {
-        const mountedPet = getMountedPetInfo(player);
-        const hasTorch = isRemoteTorchEquipped(player);
-        const left = player.position.x - camera.cameraX;`,
-  "remote torch flag",
+replaceOnce(
+  'const mountedPet = getMountedPetInfo(player);\n        const left = player.position.x - camera.cameraX;',
+  'const mountedPet = getMountedPetInfo(player);\n        const hasTorch = isRemoteTorchEquipped(player);\n        const left = player.position.x - camera.cameraX;',
+  "remote torch flag compact",
 );
 
-applyOverlay(
-  '          <div key={player.id} className={`multiplayer-player ${mountedPet ? "multiplayer-player--mounted" : ""} ${mountedPet?.flying ? "multiplayer-player--flying-mounted" : ""}`} style={{ left, top }}>',
-  '          <div key={player.id} className={`multiplayer-player ${mountedPet ? "multiplayer-player--mounted" : ""} ${mountedPet?.flying ? "multiplayer-player--flying-mounted" : ""} ${hasTorch ? "multiplayer-player--torch" : ""}`} style={{ left, top }}>',
-  "remote torch class",
+replaceOnce(
+  'className={`multiplayer-player ${mountedPet ? "multiplayer-player--mounted" : ""} ${mountedPet?.flying ? "multiplayer-player--flying-mounted" : ""}`}',
+  'className={`multiplayer-player ${mountedPet ? "multiplayer-player--mounted" : ""} ${mountedPet?.flying ? "multiplayer-player--flying-mounted" : ""} ${hasTorch ? "multiplayer-player--torch" : ""}`}',
+  "remote torch class compact",
 );
 
-applyOverlay(
-  `            {mountedPet ? (`,
-  `            {hasTorch ? <span className="multiplayer-player__torch-light" aria-hidden="true" /> : null}
-            {mountedPet ? (`,
-  "remote torch light element",
+replaceOnce(
+  '{mountedPet ? (',
+  '{hasTorch ? <span className="multiplayer-player__torch-light" aria-hidden="true" /> : null}\n            {mountedPet ? (',
+  "remote torch light element compact",
 );
 
 appendCss("multiplayer night visibility fix", `/* multiplayer night visibility fix */
@@ -200,3 +143,4 @@ appendCss("multiplayer night visibility fix", `/* multiplayer night visibility f
 
 if (overlayChanged) fs.writeFileSync(overlayPath, overlay);
 if (cssChanged) fs.writeFileSync(cssPath, css);
+if (!overlayChanged && !cssChanged) console.log("[patch-multiplayer-night-overlay] no changes");
