@@ -23,6 +23,7 @@ const explicitSlotByItemId: Record<string, EquipmentSlot> = {
   basic_axe: "weapon",
   basic_pickaxe: "weapon",
   basic_sickle: "weapon",
+  torch: "weapon",
   explorer_jacket: "body",
   thermal_jacket: "body",
   leather_boots: "feet",
