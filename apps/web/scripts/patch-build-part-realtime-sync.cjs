@@ -6,6 +6,7 @@ let source = fs.readFileSync(target, "utf8");
 let changed = false;
 
 function replaceOnce(search, replacement, label) {
+  if (source.includes(replacement)) return;
   if (!source.includes(search)) {
     console.log(`[patch-build-part-realtime-sync] skipped ${label}`);
     return;
@@ -21,15 +22,16 @@ function ensureAfter(anchor, insertion, label) {
 }
 
 ensureAfter(
-  'import { BuildModePanel } from "../buildings/BuildModePanel";\nimport type { BuildFloorLevel, BuildPartId, BuildPartRotation } from "../buildings/buildPartCatalog";',
+  'import { addBuildingToTileIndex, createDemoTileIndex, getAliveTileCreatures, getAliveTileResources, getTileBuildings } from "./demoTileIndex";\n',
   'import { startBuildPartRealtimeSync, stopBuildPartRealtimeSync } from "../buildings/buildPartStore";',
-  "build part sync import",
+  "build part sync import current",
 );
 
 replaceOnce(
   '  useEffect(() => { setNickname(createClientNickname()); commitInventory(readStoredInventory(createDemoInventory())); }, [commitInventory]);',
   '  useEffect(() => { setNickname(createClientNickname()); commitInventory(readStoredInventory(createDemoInventory())); void startBuildPartRealtimeSync(); return () => stopBuildPartRealtimeSync(); }, [commitInventory]);',
-  "sync lifecycle",
+  "sync lifecycle current",
 );
 
 if (changed) fs.writeFileSync(target, source);
+else console.log("[patch-build-part-realtime-sync] no changes");
