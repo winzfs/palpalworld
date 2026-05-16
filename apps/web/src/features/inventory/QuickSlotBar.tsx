@@ -20,6 +20,11 @@ function readStoredEquipment(ownerPlayerId: string): EquipmentState {
   }
 }
 
+function readEquippedWeaponItemId() {
+  if (typeof window === "undefined") return null;
+  return window.localStorage.getItem(equippedWeaponStorageKey);
+}
+
 function persistEquipment(equipment: EquipmentState, weaponItemId: string | null) {
   if (typeof window === "undefined") return;
   window.localStorage.setItem(equipmentStorageKey, JSON.stringify(equipment));
@@ -56,11 +61,20 @@ function equipQuickSlotItem(inventory: InventoryState | null, entryKey: string |
   const targetSlot = getEquipmentSlotForItemId(entry.itemId);
   if (!targetSlot) return false;
 
+  const currentlyEquippedWeaponItemId = targetSlot === "weapon" ? readEquippedWeaponItemId() : null;
+  const isSameWeapon = targetSlot === "weapon" && currentlyEquippedWeaponItemId === entry.itemId;
+  if (isSameWeapon) {
+    const nextSlots = { ...current.slots };
+    delete nextSlots.weapon;
+    persistEquipment({ ...current, slots: nextSlots }, null);
+    return true;
+  }
+
   if (entry.instanceId) {
     const item = findItemInstance(inventory, entry.instanceId);
     if (!item) return false;
     const next = equipItemInstance(current, item);
-    persistEquipment(next, targetSlot === "weapon" ? item.itemId : null);
+    persistEquipment(next, targetSlot === "weapon" ? item.itemId : currentlyEquippedWeaponItemId);
     return true;
   }
 
@@ -72,7 +86,7 @@ function equipQuickSlotItem(inventory: InventoryState | null, entryKey: string |
       [targetSlot]: pseudoInstanceId,
     },
   };
-  persistEquipment(next, targetSlot === "weapon" ? entry.itemId : null);
+  persistEquipment(next, targetSlot === "weapon" ? entry.itemId : currentlyEquippedWeaponItemId);
   return true;
 }
 
