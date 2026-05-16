@@ -11,7 +11,6 @@ const mapMin = 150;
 const mapMax = 2850;
 const mapUsableSize = mapMax - mapMin;
 const goldenRatio = 0.6180339887498949;
-const combatEffectTestHpMultiplier = 3;
 
 const resourceTypesByRegion: Record<string, string[]> = {
   starter_meadow: ["wood", "wood", "wood", "fiber", "fiber", "stone", "berry", "berry", "herb", "wood", "fiber", "stone"],
@@ -69,8 +68,7 @@ function cloneResourceNode(node: ResourceNodeState): ResourceNodeState {
 
 function cloneCreatureSpawn(spawn: (typeof STARTER_CREATURE_SPAWNS)[number]): CreaturePublicState {
   const currentTile = getEntityTileById(spawn.id);
-  const baseMaxHp = 60 + spawn.level * 10;
-  const maxHp = Math.round(baseMaxHp * combatEffectTestHpMultiplier);
+  const maxHp = 60 + spawn.level * 10;
   return { id: spawn.id, speciesId: spawn.speciesId, regionId: spawn.regionId, position: { ...spawn.position }, currentTile, level: spawn.level, hp: maxHp, maxHp, traitIds: [...(spawn.traitIds ?? [])] } as CreaturePublicState;
 }
 
@@ -88,8 +86,7 @@ function makeCreature(regionId: string, tileX: number, tileY: number, index: num
   const currentTile: MapTileRef = { regionId, tileX, tileY } as MapTileRef;
   const levelBase = regionId === "stone_hills" ? 9 : 2;
   const level = levelBase + tileX + tileY + Math.floor(index / 4);
-  const baseMaxHp = speciesId === "breezewing" ? 52 + level * 7 : regionId === "stone_hills" ? 105 + level * 9 : 58 + level * 8;
-  const maxHp = Math.round(baseMaxHp * combatEffectTestHpMultiplier);
+  const maxHp = speciesId === "breezewing" ? 52 + level * 7 : regionId === "stone_hills" ? 105 + level * 9 : 58 + level * 8;
   return {
     id: `mob-${regionId}-${tileX}-${tileY}-${speciesId}-ultra-${index}`,
     speciesId,
