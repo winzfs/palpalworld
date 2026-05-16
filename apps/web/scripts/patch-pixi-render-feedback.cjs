@@ -6,30 +6,26 @@ let source = fs.readFileSync(filePath, 'utf8');
 let changed = false;
 
 function replaceOnce(search, replacement, label) {
-  if (source.includes(replacement)) return;
+  if (source.includes(replacement)) return true;
   if (!source.includes(search)) {
     console.log(`[patch-pixi-render-feedback] skipped ${label}`);
-    return;
+    return false;
   }
   source = source.replace(search, replacement);
   changed = true;
   console.log(`[patch-pixi-render-feedback] patched ${label}`);
+  return true;
 }
 
-replaceOnce(
-  'type RemoteBuildingsEvent = CustomEvent<{ buildings?: SharedPixiBuildingState[] }>; ',
-  'type RemoteBuildingsEvent = CustomEvent<{ buildings?: SharedPixiBuildingState[] }>;\ntype PixiFeedbackState = { interactablePosition?: { x: number; y: number } | null; highlightedCreatureId?: string | null; placementPreview?: { position: { x: number; y: number }; ok: boolean } | null };\ntype PixiFeedbackEvent = CustomEvent<PixiFeedbackState>; ',
-  'feedback state type after buildings',
-);
-replaceOnce(
-  'type PixiCreatureNode = { container: PixiContainer; graphics: PixiGraphics; lastSeenFrame: number };',
-  'type PixiCreatureNode = { container: PixiContainer; graphics: PixiGraphics; lastSeenFrame: number };\ntype PixiFeedbackState = { interactablePosition?: { x: number; y: number } | null; highlightedCreatureId?: string | null; placementPreview?: { position: { x: number; y: number }; ok: boolean } | null };\ntype PixiFeedbackEvent = CustomEvent<PixiFeedbackState>;',
-  'feedback state type fallback',
-);
+if (!source.includes('type PixiFeedbackState =')) {
+  replaceOnce(
+    'type RemoteBuildingsEvent = CustomEvent<{ buildings?: SharedPixiBuildingState[] }>; ',
+    'type RemoteBuildingsEvent = CustomEvent<{ buildings?: SharedPixiBuildingState[] }>;\ntype PixiFeedbackState = { interactablePosition?: { x: number; y: number } | null; highlightedCreatureId?: string | null; placementPreview?: { position: { x: number; y: number }; ok: boolean } | null };\ntype PixiFeedbackEvent = CustomEvent<PixiFeedbackState>; ',
+    'feedback state type',
+  );
+}
 
-replaceOnce(
-  'function drawPixiNightLighting(graphics: PixiGraphics, width: number, height: number, cameraX: number, cameraY: number, drawablePlayers: DrawablePlayer[]) {',
-  `function drawPixiFeedback(graphics: PixiGraphics, feedback: PixiFeedbackState, creatures: CreaturePublicState[]) {
+const feedbackDrawBlock = `function drawPixiFeedback(graphics: PixiGraphics, feedback: PixiFeedbackState, creatures: CreaturePublicState[]) {
   graphics.clear();
   const interactable = feedback.interactablePosition;
   if (interactable) {
@@ -63,66 +59,54 @@ replaceOnce(
   }
 }
 
-function drawPixiNightLighting(graphics: PixiGraphics, width: number, height: number, cameraX: number, cameraY: number, drawablePlayers: DrawablePlayer[]) {`,
-  'feedback draw helper',
-);
+`;
+if (!source.includes('function drawPixiFeedback(')) {
+  replaceOnce(
+    'function drawPixiNightLighting(graphics: PixiGraphics, width: number, height: number, cameraX: number, cameraY: number, drawablePlayers: DrawablePlayer[]) {',
+    feedbackDrawBlock + 'function drawPixiNightLighting(graphics: PixiGraphics, width: number, height: number, cameraX: number, cameraY: number, drawablePlayers: DrawablePlayer[]) {',
+    'feedback draw helper',
+  );
+}
 
-replaceOnce(
-  '  const frameIdRef = useRef(0);',
-  '  const frameIdRef = useRef(0);\n  const feedbackRef = useRef<PixiFeedbackState>({});',
-  'feedback ref',
-);
+if (!source.includes('const feedbackRef = useRef<PixiFeedbackState>({});')) {
+  replaceOnce(
+    '  const frameIdRef = useRef(0);',
+    '  const frameIdRef = useRef(0);\n  const feedbackRef = useRef<PixiFeedbackState>({});',
+    'feedback ref',
+  );
+}
 
-replaceOnce(
-  `  useEffect(() => {
-    const handleRemoteBuildings = (event: Event) => {`,
-  `  useEffect(() => {
-    const handleFeedback = (event: Event) => {
-      const customEvent = event as PixiFeedbackEvent;
-      feedbackRef.current = customEvent.detail ?? {};
-    };
-    window.addEventListener("palpalworld:pixi-feedback", handleFeedback);
-    return () => window.removeEventListener("palpalworld:pixi-feedback", handleFeedback);
-  }, []);
+if (!source.includes('palpalworld:pixi-feedback')) {
+  replaceOnce(
+    `  useEffect(() => {\n    const handleRemoteBuildings = (event: Event) => {`,
+    `  useEffect(() => {\n    const handleFeedback = (event: Event) => {\n      const customEvent = event as PixiFeedbackEvent;\n      feedbackRef.current = customEvent.detail ?? {};\n    };\n    window.addEventListener("palpalworld:pixi-feedback", handleFeedback);\n    return () => window.removeEventListener("palpalworld:pixi-feedback", handleFeedback);\n  }, []);\n\n  useEffect(() => {\n    const handleRemoteBuildings = (event: Event) => {`,
+    'feedback listener',
+  );
+}
 
-  useEffect(() => {
-    const handleRemoteBuildings = (event: Event) => {`,
-  'feedback listener before remote buildings',
-);
-replaceOnce(
-  `  useEffect(() => {
-    const handleRemotePlayers = (event: Event) => {`,
-  `  useEffect(() => {
-    const handleFeedback = (event: Event) => {
-      const customEvent = event as PixiFeedbackEvent;
-      feedbackRef.current = customEvent.detail ?? {};
-    };
-    window.addEventListener("palpalworld:pixi-feedback", handleFeedback);
-    return () => window.removeEventListener("palpalworld:pixi-feedback", handleFeedback);
-  }, []);
+if (!source.includes('const feedbackGraphics = new PIXI.Graphics();')) {
+  replaceOnce(
+    '      const lightingGraphics = new PIXI.Graphics();\n      layers.lighting.addChild(lightingGraphics as unknown as PixiContainer);',
+    '      const lightingGraphics = new PIXI.Graphics();\n      const feedbackGraphics = new PIXI.Graphics();\n      layers.effects.addChild(feedbackGraphics as unknown as PixiContainer);\n      layers.lighting.addChild(lightingGraphics as unknown as PixiContainer);',
+    'feedback graphics',
+  );
+}
 
-  useEffect(() => {
-    const handleRemotePlayers = (event: Event) => {`,
-  'feedback listener fallback',
-);
+if (!source.includes('const feedbackLayer = feedbackGraphics as unknown as PixiTransformNode;')) {
+  replaceOnce(
+    '        const lighting = lightingGraphics as unknown as PixiTransformNode;\n        lighting.position.set(0, 0);\n        lighting.scale.set(1);',
+    '        const lighting = lightingGraphics as unknown as PixiTransformNode;\n        lighting.position.set(0, 0);\n        lighting.scale.set(1);\n        const feedbackLayer = feedbackGraphics as unknown as PixiTransformNode;\n        feedbackLayer.position.set(0, 0);\n        feedbackLayer.scale.set(1);',
+    'feedback transform',
+  );
+}
 
-replaceOnce(
-  '      const lightingGraphics = new PIXI.Graphics();\n      layers.lighting.addChild(lightingGraphics as unknown as PixiContainer);',
-  '      const lightingGraphics = new PIXI.Graphics();\n      const feedbackGraphics = new PIXI.Graphics();\n      layers.effects.addChild(feedbackGraphics as unknown as PixiContainer);\n      layers.lighting.addChild(lightingGraphics as unknown as PixiContainer);',
-  'feedback graphics',
-);
-
-replaceOnce(
-  '        const lighting = lightingGraphics as unknown as PixiTransformNode;\n        lighting.position.set(0, 0);\n        lighting.scale.set(1);',
-  '        const lighting = lightingGraphics as unknown as PixiTransformNode;\n        lighting.position.set(0, 0);\n        lighting.scale.set(1);\n        const feedbackLayer = feedbackGraphics as unknown as PixiTransformNode;\n        feedbackLayer.position.set(0, 0);\n        feedbackLayer.scale.set(1);',
-  'feedback transform',
-);
-
-replaceOnce(
-  '        drawPixiNightLighting(lightingGraphics, host.clientWidth, host.clientHeight, camera.x, camera.y, drawablePlayers);',
-  '        drawPixiFeedback(feedbackGraphics, feedbackRef.current, drawableCreatures);\n        drawPixiNightLighting(lightingGraphics, host.clientWidth, host.clientHeight, camera.x, camera.y, drawablePlayers);',
-  'feedback draw call',
-);
+if (!source.includes('drawPixiFeedback(feedbackGraphics')) {
+  replaceOnce(
+    '        drawPixiNightLighting(lightingGraphics, host.clientWidth, host.clientHeight, camera.x, camera.y, drawablePlayers);',
+    '        drawPixiFeedback(feedbackGraphics, feedbackRef.current, drawableCreatures);\n        drawPixiNightLighting(lightingGraphics, host.clientWidth, host.clientHeight, camera.x, camera.y, drawablePlayers);',
+    'feedback draw call',
+  );
+}
 
 if (changed) fs.writeFileSync(filePath, source);
 else console.log('[patch-pixi-render-feedback] no changes');
