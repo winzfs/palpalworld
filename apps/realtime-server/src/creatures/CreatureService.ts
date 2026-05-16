@@ -3,8 +3,6 @@ import { TraitService } from "../traits/TraitService";
 import type { WorldState } from "../world/WorldState";
 
 export class CreatureService {
-  private readonly normalizedCreatureIds = new Set<string>();
-
   constructor(
     private readonly world: WorldState,
     private readonly traits = new TraitService(),
@@ -23,16 +21,6 @@ export class CreatureService {
     return Math.max(1, Math.floor(baseMaxHp * hpMultiplier));
   }
 
-  normalizeAliveCreatureHp(creature: CreaturePublicState) {
-    if (creature.hp <= 0) return;
-    if (this.normalizedCreatureIds.has(creature.id)) return;
-
-    const nextMaxHp = this.calculateMaxHp(creature);
-    creature.maxHp = nextMaxHp;
-    creature.hp = nextMaxHp;
-    this.normalizedCreatureIds.add(creature.id);
-  }
-
   calculateDefense(creature: CreaturePublicState) {
     const species = this.getSpecies(creature);
     if (!species) return 1;
@@ -45,19 +33,16 @@ export class CreatureService {
     const spawn = STARTER_CREATURE_SPAWNS.find((entry) => entry.id === creature.id);
     creature.hp = 0;
     creature.respawnAt = Date.now() + (spawn?.respawnMs ?? 30_000);
-    this.normalizedCreatureIds.delete(creature.id);
   }
 
   tickRespawns(now: number) {
     for (const creature of this.world.creatures.values()) {
-      this.normalizeAliveCreatureHp(creature);
       if (creature.hp > 0 || !creature.respawnAt) continue;
       if (creature.respawnAt > now) continue;
 
       creature.maxHp = this.calculateMaxHp(creature);
       creature.hp = creature.maxHp;
       delete creature.respawnAt;
-      this.normalizedCreatureIds.add(creature.id);
     }
   }
 }
