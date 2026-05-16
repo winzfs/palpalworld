@@ -46,33 +46,22 @@ export type PixiGameCanvasProps = {
   localPlayerId: string;
 };
 
-const pixiCdnUrl = "https://cdn.jsdelivr.net/npm/pixi.js@8.14.3/dist/pixi.min.js";
 const remoteLerpFactor = 0.22;
 const remoteSnapDistance = 420;
 const remoteStaleMs = 3500;
 let pixiLoaderPromise: Promise<NonNullable<Window["PIXI"]>> | null = null;
 
-function loadPixiRuntime() {
-  if (typeof window === "undefined") return Promise.reject(new Error("PixiJS can only load in the browser."));
-  if (window.PIXI) return Promise.resolve(window.PIXI);
+async function loadPixiRuntime() {
+  if (typeof window === "undefined") throw new Error("PixiJS can only load in the browser.");
+  if (window.PIXI) return window.PIXI;
   if (pixiLoaderPromise) return pixiLoaderPromise;
 
-  pixiLoaderPromise = new Promise((resolve, reject) => {
-    const existingScript = document.querySelector<HTMLScriptElement>(`script[data-palpalworld-pixi="true"]`);
-    if (existingScript) {
-      existingScript.addEventListener("load", () => window.PIXI ? resolve(window.PIXI) : reject(new Error("PixiJS loaded without global PIXI.")), { once: true });
-      existingScript.addEventListener("error", () => reject(new Error("Failed to load PixiJS CDN script.")), { once: true });
-      return;
-    }
-
-    const script = document.createElement("script");
-    script.src = pixiCdnUrl;
-    script.async = true;
-    script.dataset.palpalworldPixi = "true";
-    script.onload = () => window.PIXI ? resolve(window.PIXI) : reject(new Error("PixiJS loaded without global PIXI."));
-    script.onerror = () => reject(new Error("Failed to load PixiJS CDN script."));
-    document.head.appendChild(script);
-  });
+  pixiLoaderPromise = (async () => {
+    const mod = await import("pixi.js");
+    const runtime = mod as unknown as NonNullable<Window["PIXI"]>;
+    window.PIXI = runtime;
+    return runtime;
+  })();
 
   return pixiLoaderPromise;
 }
