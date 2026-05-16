@@ -4,10 +4,13 @@ import type { MapTileRef } from "../../../../../packages/shared/src/worldTiles";
 
 export type CreaturePositionPacket = {
   id: string;
+  speciesId: string;
+  level: number;
   x: number;
   y: number;
   hp: number;
   maxHp: number;
+  traitIds: string[];
 };
 
 export type CreaturePositionsBroadcastPayload = {
@@ -72,10 +75,13 @@ export async function broadcastCreaturePositions({
     })
     .map((creature) => ({
       id: creature.id,
+      speciesId: creature.speciesId,
+      level: creature.level,
       x: creature.position.x,
       y: creature.position.y,
       hp: creature.hp,
       maxHp: creature.maxHp,
+      traitIds: creature.traitIds ?? [],
     }));
 
   if (packets.length <= 0) return;
