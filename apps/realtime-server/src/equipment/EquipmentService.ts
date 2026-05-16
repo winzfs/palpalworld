@@ -33,6 +33,12 @@ export class EquipmentService {
     return this.createStarterEquipment(playerId);
   }
 
+  getEquippedMainHandItemId(playerId: PlayerId) {
+    const itemInstanceId = this.getEquipment(playerId).slots.weapon;
+    if (!itemInstanceId) return null;
+    return this.inventories.getItemInstance(playerId, itemInstanceId)?.itemId ?? null;
+  }
+
   equip(playerId: PlayerId, itemInstanceId: ItemInstanceId): EquipResult {
     const instance = this.inventories.getItemInstance(playerId, itemInstanceId);
     if (!instance) return { ok: false, reason: "missing_item" };
