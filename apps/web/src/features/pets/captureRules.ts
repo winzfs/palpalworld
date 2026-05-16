@@ -40,10 +40,10 @@ export function createCaptureMinigameConfig(creature: CreaturePublicState, orbIt
   const successEnd = Math.max(successStart + 0.08, Math.min(0.92, successStart + zoneWidth));
 
   return {
-    cursorSpeed: 1.35 + (1 - difficultyScore) * 0.9,
+    cursorSpeed: 0.72 + (1 - difficultyScore) * 0.48,
     successStart,
     successEnd,
-    durationMs: 5000,
+    durationMs: 7000,
   };
 }
 
