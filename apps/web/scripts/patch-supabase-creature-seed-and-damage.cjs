@@ -21,7 +21,7 @@ function replaceOnce(search, replacement, label) {
 
 replaceOnce(
   'import { rowToCreature, type WorldCreatureRow } from "../multiplayer/supabaseWorldCreatures";\n',
-  'import { applyWorldCreatureDamage, rowToCreature, seedMissingWorldCreatures, upsertWorldCreature, type WorldCreatureRow } from "../multiplayer/supabaseWorldCreatures";\nimport { getSupabaseClient, isSupabaseMultiplayerEnabled } from "../multiplayer/supabaseMultiplayer";\n',
+  'import { applyWorldCreatureDamage, fetchWorldCreatures, rowToCreature, seedMissingWorldCreatures, upsertWorldCreature, type WorldCreatureRow } from "../multiplayer/supabaseWorldCreatures";\nimport { getSupabaseClient, isSupabaseMultiplayerEnabled } from "../multiplayer/supabaseMultiplayer";\n',
   'supabase creature authority imports',
 );
 
@@ -33,8 +33,8 @@ replaceOnce(
 
 replaceOnce(
   '  useEffect(() => { setNickname(createClientNickname()); commitInventory(readStoredInventory(createDemoInventory())); }, [commitInventory]);\n',
-  '  useEffect(() => { setNickname(createClientNickname()); commitInventory(readStoredInventory(createDemoInventory())); }, [commitInventory]);\n  useEffect(() => {\n    const client = supabaseClientRef.current;\n    if (!client || !isSupabaseMultiplayerEnabled()) return;\n    void seedMissingWorldCreatures(client, demoCreaturesRef.current);\n  }, []);\n',
-  'seed creatures on start',
+  '  useEffect(() => { setNickname(createClientNickname()); commitInventory(readStoredInventory(createDemoInventory())); }, [commitInventory]);\n  useEffect(() => {\n    const client = supabaseClientRef.current;\n    if (!client || !isSupabaseMultiplayerEnabled()) return;\n    let cancelled = false;\n    const syncInitialCreatures = async () => {\n      const rowsBeforeSeed = await fetchWorldCreatures(client, null);\n      if (cancelled) return;\n      if (rowsBeforeSeed.length <= 0) await seedMissingWorldCreatures(client, demoCreaturesRef.current);\n      const rows = await fetchWorldCreatures(client, null);\n      if (!cancelled) window.dispatchEvent(new CustomEvent("palpalworld:remote-creatures", { detail: { rows } }));\n    };\n    void syncInitialCreatures();\n    return () => { cancelled = true; };\n  }, []);\n',
+  'seed and fetch creatures on start',
 );
 
 replaceOnce(
