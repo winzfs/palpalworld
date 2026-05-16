@@ -6,36 +6,34 @@ let source = fs.readFileSync(filePath, 'utf8');
 let changed = false;
 
 function replaceOnce(search, replacement, label) {
-  if (source.includes(replacement)) return;
+  if (source.includes(replacement)) return true;
   if (!source.includes(search)) {
     console.log(`[patch-pixi-render-terrain] skipped ${label}`);
-    return;
+    return false;
   }
   source = source.replace(search, replacement);
   changed = true;
   console.log(`[patch-pixi-render-terrain] patched ${label}`);
+  return true;
 }
 
-replaceOnce(
-  'type PixiBuildingNode = { container: PixiContainer; graphics: PixiGraphics; lastSeenFrame: number };',
-  'type PixiBuildingNode = { container: PixiContainer; graphics: PixiGraphics; lastSeenFrame: number };\ntype PixiTerrainNode = { container: PixiContainer; graphics: PixiGraphics; lastSeenFrame: number };',
-  'terrain node type after buildings',
-);
-replaceOnce(
-  'type PixiCreatureNode = { container: PixiContainer; graphics: PixiGraphics; lastSeenFrame: number };',
-  'type PixiCreatureNode = { container: PixiContainer; graphics: PixiGraphics; lastSeenFrame: number };\ntype PixiTerrainNode = { container: PixiContainer; graphics: PixiGraphics; lastSeenFrame: number };',
-  'terrain node type fallback',
-);
+if (!source.includes('type PixiTerrainNode =')) {
+  replaceOnce(
+    'type PixiBuildingNode = { container: PixiContainer; graphics: PixiGraphics; lastSeenFrame: number };',
+    'type PixiBuildingNode = { container: PixiContainer; graphics: PixiGraphics; lastSeenFrame: number };\ntype PixiTerrainNode = { container: PixiContainer; graphics: PixiGraphics; lastSeenFrame: number };',
+    'terrain node type',
+  );
+}
 
-replaceOnce(
-  'const remoteStaleMs = 3500;',
-  'const remoteStaleMs = 3500;\nconst terrainTileSize = 32;\nconst terrainPaddingTiles = 3;',
-  'terrain constants',
-);
+if (!source.includes('const terrainTileSize = 32;')) {
+  replaceOnce(
+    'const remoteStaleMs = 3500;',
+    'const remoteStaleMs = 3500;\nconst terrainTileSize = 32;\nconst terrainPaddingTiles = 3;',
+    'terrain constants',
+  );
+}
 
-replaceOnce(
-  'function loadPixiRuntime() {',
-  `function hashTerrainTile(x: number, y: number) {
+const terrainSampleHelpers = `function hashTerrainTile(x: number, y: number) {
   let value = x * 374761393 + y * 668265263;
   value = (value ^ (value >> 13)) * 1274126177;
   return (value ^ (value >> 16)) >>> 0;
@@ -64,9 +62,10 @@ function getPixiTerrainColor(tileId: string) {
   return 0x15803d;
 }
 
-function loadPixiRuntime() {`,
-  'terrain sample helpers',
-);
+`;
+if (!source.includes('function hashTerrainTile(')) {
+  replaceOnce('function loadPixiRuntime() {', terrainSampleHelpers + 'function loadPixiRuntime() {', 'terrain sample helpers');
+}
 
 const terrainUpsertBlock = `function drawPixiTerrainTileAtOrigin(graphics: PixiGraphics, tileX: number, tileY: number) {
   const tileId = samplePixiTerrainTile(tileX, tileY);
@@ -128,55 +127,44 @@ function upsertPixiTerrainNodes(PIXI: NonNullable<Window["PIXI"]>, terrainLayer:
 }
 
 `;
+if (!source.includes('function drawPixiTerrainTileAtOrigin(')) {
+  replaceOnce(
+    'function upsertPixiBuildingNodes(PIXI: NonNullable<Window["PIXI"]>, buildingLayer: PixiContainer, nodes: Map<string, PixiBuildingNode>, buildings: BuildingState[], frameId: number) {',
+    terrainUpsertBlock + 'function upsertPixiBuildingNodes(PIXI: NonNullable<Window["PIXI"]>, buildingLayer: PixiContainer, nodes: Map<string, PixiBuildingNode>, buildings: BuildingState[], frameId: number) {',
+    'terrain node upsert',
+  );
+}
 
-replaceOnce(
-  'function upsertPixiBuildingNodes(PIXI: NonNullable<Window["PIXI"]>, buildingLayer: PixiContainer, nodes: Map<string, PixiBuildingNode>, buildings: BuildingState[], frameId: number) {',
-  terrainUpsertBlock + 'function upsertPixiBuildingNodes(PIXI: NonNullable<Window["PIXI"]>, buildingLayer: PixiContainer, nodes: Map<string, PixiBuildingNode>, buildings: BuildingState[], frameId: number) {',
-  'terrain node upsert before buildings',
-);
-replaceOnce(
-  'function upsertPixiCreatureNodes(PIXI: NonNullable<Window["PIXI"]>, creatureLayer: PixiContainer, nodes: Map<string, PixiCreatureNode>, creatures: CreaturePublicState[], frameId: number) {',
-  terrainUpsertBlock + 'function upsertPixiCreatureNodes(PIXI: NonNullable<Window["PIXI"]>, creatureLayer: PixiContainer, nodes: Map<string, PixiCreatureNode>, creatures: CreaturePublicState[], frameId: number) {',
-  'terrain node upsert fallback',
-);
+if (!source.includes('const terrainNodesRef = useRef(new Map<string, PixiTerrainNode>());')) {
+  replaceOnce(
+    '  const buildingNodesRef = useRef(new Map<string, PixiBuildingNode>());',
+    '  const buildingNodesRef = useRef(new Map<string, PixiBuildingNode>());\n  const terrainNodesRef = useRef(new Map<string, PixiTerrainNode>());',
+    'terrain nodes ref',
+  );
+}
 
-replaceOnce(
-  '  const buildingNodesRef = useRef(new Map<string, PixiBuildingNode>());',
-  '  const buildingNodesRef = useRef(new Map<string, PixiBuildingNode>());\n  const terrainNodesRef = useRef(new Map<string, PixiTerrainNode>());',
-  'terrain nodes ref after buildings',
-);
-replaceOnce(
-  '  const creatureNodesRef = useRef(new Map<string, PixiCreatureNode>());',
-  '  const creatureNodesRef = useRef(new Map<string, PixiCreatureNode>());\n  const terrainNodesRef = useRef(new Map<string, PixiTerrainNode>());',
-  'terrain nodes ref fallback',
-);
+if (!source.includes('upsertPixiTerrainNodes(PIXI, layers.terrain')) {
+  replaceOnce(
+    '        const smoothRemotePlayers = updateSmoothedRemotePlayers(remotePlayersRef.current, smoothedRemotePlayersRef.current, now);',
+    '        upsertPixiTerrainNodes(PIXI, layers.terrain, terrainNodesRef.current, camera.x, camera.y, host.clientWidth, host.clientHeight, frameId);\n        const smoothRemotePlayers = updateSmoothedRemotePlayers(remotePlayersRef.current, smoothedRemotePlayersRef.current, now);',
+    'terrain upsert call',
+  );
+}
 
-replaceOnce(
-  '        const smoothRemotePlayers = updateSmoothedRemotePlayers(remotePlayersRef.current, smoothedRemotePlayersRef.current, now);',
-  '        upsertPixiTerrainNodes(PIXI, layers.terrain, terrainNodesRef.current, camera.x, camera.y, host.clientWidth, host.clientHeight, frameId);\n        const smoothRemotePlayers = updateSmoothedRemotePlayers(remotePlayersRef.current, smoothedRemotePlayersRef.current, now);',
-  'terrain upsert call',
-);
-
-replaceOnce(
-  '        for (const node of buildingNodesRef.current.values()) node.container.destroy?.({ children: true });',
-  '        for (const node of buildingNodesRef.current.values()) node.container.destroy?.({ children: true });\n        for (const node of terrainNodesRef.current.values()) node.container.destroy?.({ children: true });',
-  'terrain cleanup destroy after buildings',
-);
-replaceOnce(
-  '        for (const node of playerNodesRef.current.values()) node.container.destroy?.({ children: true });',
-  '        for (const node of playerNodesRef.current.values()) node.container.destroy?.({ children: true });\n        for (const node of terrainNodesRef.current.values()) node.container.destroy?.({ children: true });',
-  'terrain cleanup destroy fallback',
-);
-replaceOnce(
-  '        buildingNodesRef.current.clear();',
-  '        buildingNodesRef.current.clear();\n        terrainNodesRef.current.clear();',
-  'terrain cleanup clear after buildings',
-);
-replaceOnce(
-  '        playerNodesRef.current.clear();',
-  '        playerNodesRef.current.clear();\n        terrainNodesRef.current.clear();',
-  'terrain cleanup clear fallback',
-);
+if (!source.includes('for (const node of terrainNodesRef.current.values())')) {
+  replaceOnce(
+    '        for (const node of buildingNodesRef.current.values()) node.container.destroy?.({ children: true });',
+    '        for (const node of buildingNodesRef.current.values()) node.container.destroy?.({ children: true });\n        for (const node of terrainNodesRef.current.values()) node.container.destroy?.({ children: true });',
+    'terrain cleanup destroy',
+  );
+}
+if (!source.includes('terrainNodesRef.current.clear();')) {
+  replaceOnce(
+    '        buildingNodesRef.current.clear();',
+    '        buildingNodesRef.current.clear();\n        terrainNodesRef.current.clear();',
+    'terrain cleanup clear',
+  );
+}
 
 if (changed) fs.writeFileSync(filePath, source);
 else console.log('[patch-pixi-render-terrain] no changes');
