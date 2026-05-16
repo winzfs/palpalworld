@@ -80,6 +80,7 @@ const chatBubbleVisibleMs = 12_000;
 const chatPanelStorageKey = "palpalworld.ui.chatPanelPosition";
 const chatPanelCollapsedStorageKey = "palpalworld.ui.chatPanelCollapsed";
 const mountedPetStorageKey = "palpalworld.demo.mountedPetItemId";
+const pixiStageFlagStorageKey = "palpalworld.dev.pixiStage";
 const chatPanelWidth = 330;
 const chatPanelCollapsedWidth = 210;
 const chatPanelExpandedHeight = 226;
@@ -88,6 +89,11 @@ const chatPanelCollapsedHeight = 48;
 function readMountedPetItemId() {
   if (typeof window === "undefined") return null;
   return window.localStorage.getItem(mountedPetStorageKey);
+}
+
+function readPixiStageEnabled() {
+  if (typeof window === "undefined") return false;
+  return window.localStorage.getItem(pixiStageFlagStorageKey) === "true";
 }
 
 function getMountedPetInfo(player: PlayerPublicState): MultiplayerMountedPetInfo | null {
@@ -244,6 +250,7 @@ export function MultiplayerOverlay() {
   const [chatCollapsed, setChatCollapsed] = useState(readStoredChatCollapsed);
   const [chatPanelPosition, setChatPanelPosition] = useState(() => readStoredChatPanelPosition(readStoredChatCollapsed()));
   const [status, setStatus] = useState(enabled ? "온라인 연결 중" : "오프라인 모드");
+  const [pixiStageEnabled, setPixiStageEnabled] = useState(readPixiStageEnabled);
   const latestLocalPlayerRef = useRef<PlayerPublicState | null>(null);
   const latestTileRef = useRef<MapTileRef | null>(null);
   const latestCreaturesRef = useRef<CreaturePublicState[]>([]);
@@ -366,6 +373,13 @@ export function MultiplayerOverlay() {
       });
       return nextCollapsed;
     });
+  }, []);
+
+  useEffect(() => {
+    const syncPixiStageEnabled = () => setPixiStageEnabled(readPixiStageEnabled());
+    syncPixiStageEnabled();
+    const interval = window.setInterval(syncPixiStageEnabled, 700);
+    return () => window.clearInterval(interval);
   }, []);
 
   useEffect(() => {
@@ -563,7 +577,7 @@ export function MultiplayerOverlay() {
   if (!enabled || !camera) return null;
 
   return (
-    <div className="multiplayer-overlay" aria-label="멀티플레이어 오버레이">
+    <div className={pixiStageEnabled ? "multiplayer-overlay multiplayer-overlay--pixi-players" : "multiplayer-overlay"} aria-label="멀티플레이어 오버레이">
       <div className="multiplayer-status">{status}</div>
       {bubbleMessages.map((message) => {
         const left = message.x - camera.cameraX;
@@ -571,7 +585,7 @@ export function MultiplayerOverlay() {
         if (left < -120 || left > camera.width + 120 || top < -140 || top > camera.height + 100) return null;
         return <div key={message.message_id} className={`world-chat-bubble world-chat-bubble--${message.message_type}`} style={{ left, top }}>{message.message}</div>;
       })}
-      {visiblePlayers.map((player) => {
+      {!pixiStageEnabled ? visiblePlayers.map((player) => {
         const mountedPet = getMountedPetInfo(player);
         const left = player.position.x - camera.cameraX;
         const top = player.position.y - camera.cameraY;
@@ -608,7 +622,7 @@ export function MultiplayerOverlay() {
             <div className="multiplayer-player__name">{player.nickname}</div>
           </div>
         );
-      })}
+      }) : null}
       <section
         className={`world-chat-panel ${chatCollapsed ? "world-chat-panel--collapsed" : ""}`}
         style={{ left: chatPanelPosition.x, top: chatPanelPosition.y }}
