@@ -19,7 +19,6 @@ function replaceRegex(regex, replacement, label) {
   console.log(`[patch-remove-pixi-toggle-and-debug-hud] patched ${label}`);
 }
 
-// Pixi is now the only rendering path. Remove the user-facing OFF toggle and dev localStorage flag use.
 replaceRegex(/const pixiStageFlagStorageKey = "palpalworld\.dev\.pixiStage";\n/g, '', 'pixi localStorage flag constant');
 replaceRegex(/\n  const \[pixiStageEnabled, setPixiStageEnabled\] = useState\([^\n]+\);/g, '', 'pixi toggle state');
 replaceRegex(/\n  const \[creatureSyncStatus, setCreatureSyncStatus\] = useState\([^\n]+\);/g, '', 'creature sync status state');
@@ -62,6 +61,7 @@ for (const script of [
   './patch-existing-client-broadcast-receive.cjs',
   './patch-existing-client-broadcast-loop.cjs',
   './patch-existing-client-attack-rpc.cjs',
+  './patch-db-pos-once.cjs',
 ]) {
   require(script);
 }
