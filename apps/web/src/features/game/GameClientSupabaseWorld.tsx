@@ -20,6 +20,7 @@ import {
 } from "../multiplayer/supabaseMultiplayer";
 import { fetchWorldBuildings, subscribeWorldBuildings } from "../multiplayer/supabaseWorldBuildings";
 import {
+  attackWorldCreature,
   fetchWorldCreatures,
   rowToCreature,
   seedMissingWorldCreatures,
@@ -47,6 +48,8 @@ const creatureMapMax = 2880;
 const creatureMapSize = creatureMapMax - creatureMapMin;
 const creatureBroadcastSnapDistance = 520;
 const creatureBroadcastLerpPerSecond = 9;
+const creatureAttackDamage = 18;
+const creatureAttackCooldownMs = 450;
 
 type CreatureWanderTarget = { x: number; y: number; nextRetargetAt: number };
 type CreatureBroadcastTarget = { x: number; y: number; hp: number; maxHp: number; receivedAt: number };
@@ -267,6 +270,7 @@ export function GameClientSupabaseWorld() {
   const lastHostClaimAtRef = useRef(0);
   const lastBroadcastAtRef = useRef(0);
   const lastSnapshotSaveAtRef = useRef(0);
+  const lastAttackAtRef = useRef(0);
 
   const snapshot = useMemo(() => createWorldSnapshot({
     playerId,
@@ -289,6 +293,17 @@ export function GameClientSupabaseWorld() {
     creaturesRef.current = creatures;
     applySnapshot(snapshot);
   }, [applySnapshot, creatures, snapshot]);
+
+  const applyCreatureHpResult = useCallback((creatureId: string, hp: number, maxHp: number) => {
+    const nextCreatures = creaturesRef.current.map((creature) => {
+      if (creature.id !== creatureId) return creature;
+      return { ...creature, hp, maxHp } as CreaturePublicState;
+    });
+    creaturesRef.current = nextCreatures;
+    setCreatures(nextCreatures);
+    const target = creatureBroadcastTargetsRef.current.get(creatureId);
+    if (target) creatureBroadcastTargetsRef.current.set(creatureId, { ...target, hp, maxHp, receivedAt: performance.now() });
+  }, []);
 
   const refreshWorld = useCallback(async () => {
     if (!client) return;
@@ -455,8 +470,19 @@ export function GameClientSupabaseWorld() {
   }, []);
 
   const handleWorldClick = useCallback((target: WorldClickTarget) => {
-    if (target.kind === "creature") setStatus("공격은 Supabase RPC 연결 단계에서 진행 예정");
-  }, []);
+    if (target.kind !== "creature" || !client || !enabled) return;
+    const now = performance.now();
+    if (now - lastAttackAtRef.current < creatureAttackCooldownMs) return;
+    lastAttackAtRef.current = now;
+    const creature = creaturesRef.current.find((candidate) => candidate.id === target.id);
+    if (!creature || creature.hp <= 0) return;
+    setStatus(`공격 중 · ${creature.speciesId}`);
+    void attackWorldCreature(client, creature.id, playerId, creatureAttackDamage).then((result) => {
+      if (!result) { setStatus("공격 실패"); return; }
+      applyCreatureHpResult(result.creatureId, result.hp, result.maxHp);
+      setStatus(result.defeated ? `처치 완료 · ${result.creatureId}` : `피해 ${result.damageApplied} · HP ${result.hp}/${result.maxHp}`);
+    });
+  }, [applyCreatureHpResult, client, enabled, playerId]);
 
   return (
     <main className="game-shell game-shell--pixi-stage game-shell--supabase-world">
