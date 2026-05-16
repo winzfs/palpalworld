@@ -30,18 +30,23 @@ const hitEffectHelpers = `function syncPixiHitEffects(creatures: CreaturePublicS
   for (const creature of creatures) {
     liveIds.add(creature.id);
     const previous = previousHp.get(creature.id);
-    if (typeof previous === "number" && creature.hp < previous) {
-      const damage = Math.max(1, previous - creature.hp);
+    const currentHp = Math.max(0, creature.hp);
+    const maxHp = Math.max(1, creature.maxHp);
+    const delta = typeof previous === "number" ? previous - currentHp : 0;
+
+    // Ignore first sync, healing/normalization, defeated/respawn jumps, and suspicious huge deltas.
+    // This prevents endless hit effects when server-side HP normalization refills creatures.
+    if (typeof previous === "number" && delta > 0 && currentHp > 0 && delta <= maxHp * 0.55) {
       effects.push({
         id: creature.id + ":" + now + ":" + Math.round(Math.random() * 10000),
         x: creature.position.x,
         y: creature.position.y - 12,
-        damage,
+        damage: Math.max(1, delta),
         createdAt: now,
         durationMs: 520,
       });
     }
-    previousHp.set(creature.id, creature.hp);
+    previousHp.set(creature.id, currentHp);
   }
   for (const id of Array.from(previousHp.keys())) {
     if (!liveIds.has(id)) previousHp.delete(id);
