@@ -15,6 +15,7 @@ import { GameScene, type GameSceneInput, type GameWorldScene, type WorldClickTar
 type ConnectionState = "connecting" | "online" | "offline";
 
 const inputSendIntervalMs = 50;
+const equippedWeaponStorageKey = "palpalworld.demo.equippedWeaponItemId";
 
 function getRealtimeServerUrl() {
   return process.env.NEXT_PUBLIC_REALTIME_SERVER_URL ?? "http://localhost:4000";
@@ -30,13 +31,19 @@ function createClientNickname() {
   return nextNickname;
 }
 
+function readEquippedWeaponItemId() {
+  if (typeof window === "undefined") return null;
+  return window.localStorage.getItem(equippedWeaponStorageKey);
+}
+
 function toPlayerInputPayload(input: GameSceneInput, sequence: number): PlayerInputPayload {
   return {
     movement: { x: input.x, y: input.y },
     primaryAction: input.primary,
     secondaryAction: input.secondary,
     sequence,
-  };
+    equippedWeaponItemId: readEquippedWeaponItemId(),
+  } as PlayerInputPayload;
 }
 
 export function GameClientOnlineStation() {
