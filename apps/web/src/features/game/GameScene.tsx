@@ -46,6 +46,7 @@ type RemoteBuildingsEvent = CustomEvent<{ buildings?: SharedBuildingState[] }>;
 const fallbackPlayerTiles = new Map<string, MapTileRef>();
 const cullPadding = 96;
 const equippedWeaponStorageKey = "palpalworld.demo.equippedWeaponItemId";
+const pixiStageFlagStorageKey = "palpalworld.dev.pixiStage";
 const buildingTypeLabels: Partial<Record<BuildingType | string, string>> = {
   base_core: "거점 코어",
   workbench: "작업대",
@@ -71,6 +72,10 @@ function getBuildingOverlapRadius(building: Pick<BuildingState, "type">) {
 }
 function getBuildingHoverEllipse(building: Pick<BuildingState, "type">) {
   return String(building.type) === "farm_plot" ? { rx: 58, ry: 22, offsetY: 34 } : { rx: 32, ry: 12, offsetY: 24 };
+}
+function isPixiStageEnabled() {
+  if (typeof window === "undefined") return false;
+  return window.localStorage.getItem(pixiStageFlagStorageKey) === "true";
 }
 function readStoredWeaponItemId() {
   if (typeof window === "undefined") return null;
@@ -326,6 +331,50 @@ export class GameWorldScene {
   private handleKeyDown = (event: KeyboardEvent) => { const key = event.key.toLowerCase(); if (key === "e" && !this.keys.has(key)) this.onInteract(); this.keys.add(key); this.emitKeyboardInput(); };
   private handleKeyUp = (event: KeyboardEvent) => { this.keys.delete(event.key.toLowerCase()); this.emitKeyboardInput(); };
   private emitKeyboardInput() { const left = this.keys.has("a") || this.keys.has("arrowleft"); const right = this.keys.has("d") || this.keys.has("arrowright"); const up = this.keys.has("w") || this.keys.has("arrowup"); const down = this.keys.has("s") || this.keys.has("arrowdown"); this.onInputChange({ x: Number(right) - Number(left), y: Number(down) - Number(up), primary: this.keys.has(" "), secondary: this.keys.has("e") }); }
+  private dispatchPixiBuildParts() {
+    if (!isPixiStageEnabled()) return;
+    const parts = typeof this.getSceneBuildParts === "function" ? this.getSceneBuildParts() : [];
+    const previewPosition = this.buildPartDragPosition ?? this.pointerWorldPosition;
+    const previewGrid = this.selectedBuildPartId && previewPosition && typeof this.getBuildPartTouchPlacementGrid === "function"
+      ? this.getBuildPartTouchPlacementGrid(previewPosition, this.buildPartDragPointerId !== null)
+      : null;
+    const previewPlacementPosition = this.selectedBuildPartId && previewPosition && typeof this.getBuildPartTouchPlacementPosition === "function"
+      ? this.getBuildPartTouchPlacementPosition(previewPosition, this.buildPartDragPointerId !== null)
+      : previewPosition;
+    window.dispatchEvent(new CustomEvent("palpalworld:pixi-build-parts", {
+      detail: {
+        parts,
+        selectedPartId: this.selectedPlacedBuildPartId,
+        selectedHouseId: this.selectedHouseId,
+        preview: this.selectedBuildPartId && previewPosition && previewPlacementPosition
+          ? {
+              partId: this.selectedBuildPartId,
+              position: previewPlacementPosition,
+              gridX: previewGrid?.gridX,
+              gridY: previewGrid?.gridY,
+              rotation: this.selectedBuildPartRotation,
+              floorLevel: this.selectedBuildFloorLevel,
+              valid: this.getBuildPartPlacementValidity(previewPlacementPosition).ok,
+            }
+          : null,
+      },
+    }));
+  }
+  private dispatchPixiFeedback() {
+    if (!isPixiStageEnabled()) return;
+    const nearestId = this.getNearestInteractableId();
+    const interactable = nearestId ? this.getSceneResources().find((resource) => resource.id === nearestId)?.position ?? null : null;
+    const placementPreview = this.placementPreviewBuildingType && this.pointerWorldPosition
+      ? { position: this.pointerWorldPosition, ok: this.getPlacementValidity(this.pointerWorldPosition).ok }
+      : null;
+    window.dispatchEvent(new CustomEvent("palpalworld:pixi-feedback", {
+      detail: {
+        interactablePosition: interactable,
+        highlightedCreatureId: this.highlightedCreatureId,
+        placementPreview,
+      },
+    }));
+  }
   private loop = () => { this.draw(); this.animationFrame = requestAnimationFrame(this.loop); };
   private draw() {
     const rect = this.root.getBoundingClientRect();
@@ -334,12 +383,22 @@ export class GameWorldScene {
     const camera = this.getCameraOffset();
     const viewport = this.getViewportBounds(camera.x, camera.y);
     const now = performance.now();
-    this.tileMapRenderer.draw(ctx, rect.width, rect.height, camera.x, camera.y);
-    this.drawMapBoundaryAndPortals(ctx, camera.x, camera.y);
+    const pixiHooks = this as unknown as { dispatchPixiBuildParts?: () => void; dispatchPixiFeedback?: () => void };
+    if (isPixiStageEnabled()) {
+      pixiHooks.dispatchPixiBuildParts?.();
+      pixiHooks.dispatchPixiFeedback?.();
+      return;
+    }
+    if (!isPixiStageEnabled()) {
+      this.tileMapRenderer.draw(ctx, rect.width, rect.height, camera.x, camera.y);
+      this.drawMapBoundaryAndPortals(ctx, camera.x, camera.y);
+    }
     this.drawBuildings(ctx, camera.x, camera.y, viewport);
     this.drawResources(ctx, camera.x, camera.y, viewport);
     this.drawCreatures(ctx, camera.x, camera.y, viewport);
     this.drawPlayers(ctx, camera.x, camera.y, now, viewport);
+    this.dispatchPixiFeedback();
+    this.dispatchPixiBuildParts();
     this.drawInteractionHint(ctx, camera.x, camera.y);
     this.drawPlacementPreview(ctx, camera.x, camera.y);
   }
@@ -378,6 +437,7 @@ export class GameWorldScene {
     ctx.restore();
   }
   private drawBuildings(ctx: CanvasRenderingContext2D, cameraX: number, cameraY: number, viewport: ViewportBounds) {
+    if (isPixiStageEnabled()) return;
     for (const building of this.getSceneBuildings()) {
       if (!isPositionInViewport(building.position, viewport)) continue;
       const x = building.position.x - cameraX;
@@ -387,8 +447,9 @@ export class GameWorldScene {
       if (building.id === this.hoverBuildingId) { const hover = getBuildingHoverEllipse(building); ctx.save(); ctx.strokeStyle = "rgba(250, 204, 21, 0.9)"; ctx.lineWidth = 2; ctx.beginPath(); ctx.ellipse(x, y + hover.offsetY, hover.rx, hover.ry, 0, 0, Math.PI * 2); ctx.stroke(); ctx.restore(); }
     }
   }
-  private drawResources(ctx: CanvasRenderingContext2D, cameraX: number, cameraY: number, viewport: ViewportBounds) { for (const resource of this.getSceneResources()) if (isPositionInViewport(resource.position, viewport)) this.renderer.drawResource(ctx, resource, resource.position.x - cameraX, resource.position.y - cameraY); }
+  private drawResources(ctx: CanvasRenderingContext2D, cameraX: number, cameraY: number, viewport: ViewportBounds) { if (isPixiStageEnabled()) return; for (const resource of this.getSceneResources()) if (isPositionInViewport(resource.position, viewport)) this.renderer.drawResource(ctx, resource, resource.position.x - cameraX, resource.position.y - cameraY); }
   private drawCreatures(ctx: CanvasRenderingContext2D, cameraX: number, cameraY: number, viewport: ViewportBounds) {
+    if (isPixiStageEnabled()) return;
     for (const creature of this.getSceneCreatures()) {
       if (!isPositionInViewport(creature.position, viewport)) continue;
       const x = creature.position.x - cameraX;
@@ -407,7 +468,7 @@ export class GameWorldScene {
     }
   }
   private drawPlayers(ctx: CanvasRenderingContext2D, cameraX: number, cameraY: number, now: number, viewport: ViewportBounds) {
-    if (!this.snapshot) return;
+    if (!this.snapshot || isPixiStageEnabled()) return;
     const currentTile = this.getCurrentTile();
     for (const player of this.snapshot.players) {
       if (!isSameTile(getTileRef(player), currentTile) || !isPositionInViewport(player.position, viewport)) continue;
@@ -418,6 +479,7 @@ export class GameWorldScene {
     }
   }
   private drawPlacementPreview(ctx: CanvasRenderingContext2D, cameraX: number, cameraY: number) {
+    if (isPixiStageEnabled()) return;
     if (!this.placementPreviewBuildingType || !this.pointerWorldPosition) return;
     const validity = this.getPlacementValidity(this.pointerWorldPosition);
     const previewBuilding: BuildingState = { id: "placement-preview", type: this.placementPreviewBuildingType, ownerPlayerId: this.localPlayerId ?? "preview", position: this.pointerWorldPosition, hp: 1, maxHp: 1 };
@@ -430,6 +492,7 @@ export class GameWorldScene {
     ctx.save(); ctx.fillStyle = "rgba(15, 23, 42, 0.86)"; ctx.strokeStyle = `rgba(${accent}, 0.82)`; ctx.lineWidth = 1; ctx.beginPath(); ctx.roundRect(x - 98, y - 70, 196, 32, 8); ctx.fill(); ctx.stroke(); ctx.fillStyle = validity.ok ? "#bbf7d0" : "#fecaca"; ctx.font = "12px system-ui"; ctx.textAlign = "center"; ctx.fillText(validity.reason, x, y - 50); ctx.restore();
   }
   private drawInteractionHint(ctx: CanvasRenderingContext2D, cameraX: number, cameraY: number) {
+    if (isPixiStageEnabled()) return;
     if (this.placementPreviewBuildingType) return;
     const nearestId = this.getNearestInteractableId();
     const target = this.getSceneResources().find((resource) => resource.id === nearestId);

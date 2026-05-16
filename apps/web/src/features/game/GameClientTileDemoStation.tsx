@@ -23,6 +23,7 @@ import { MiniMapPanel } from "../world/MiniMapPanel";
 import { DEFAULT_PLAYER_TILE, clampPositionToTile, type MapTileRef } from "../../../../../packages/shared/src/worldTiles";
 import { createTileBasedDemoBuildings, createTileBasedDemoCreatures, createTileBasedDemoResources } from "./demoWorldSpawns";
 import { GameScene, type GameSceneInput, type GameWorldScene, type WorldClickTarget } from "./GameScene";
+import { PixiGameCanvas } from "./pixi/PixiGameCanvas";
 import { addBuildingToTileIndex, createDemoTileIndex, getAliveTileCreatures, getAliveTileResources, getTileBuildings } from "./demoTileIndex";
 
 type MenuTab = "status" | "objective" | "equipment" | "crafting" | "logs";
@@ -36,6 +37,7 @@ const joystickRadius = 56;
 const uiSnapshotIntervalMs = 500;
 const quickSlotCount = 5;
 const mountedPetStorageKey = "palpalworld.demo.mountedPetItemId";
+const pixiStageFlagStorageKey = "palpalworld.dev.pixiStage";
 const creatureWanderTargets = new Map<string, CreatureWanderTarget>();
 const creatureMapMin = 120;
 const creatureMapMax = 2880;
@@ -250,6 +252,7 @@ export function GameClientTileDemoStation() {
   const [inventoryOpen, setInventoryOpen] = useState(false);
   const [activeMenuTab, setActiveMenuTab] = useState<MenuTab>("crafting");
   const [minimapSize, setMinimapSize] = useState<MiniMapSize>("medium");
+  const [pixiStageEnabled, setPixiStageEnabled] = useState(() => typeof window !== "undefined" && window.localStorage.getItem(pixiStageFlagStorageKey) === "true");
   const [quickSlots, setQuickSlots] = useState<(string | null)[]>(() => Array.from({ length: quickSlotCount }, () => null));
   const sceneRef = useRef<GameWorldScene | null>(null);
   const inputRef = useRef<GameSceneInput>({ x: 0, y: 0, primary: false, secondary: false });
@@ -419,6 +422,14 @@ export function GameClientTileDemoStation() {
     setChatLines((prev) => [...prev.slice(-5), `[quick] ${entry.label} 사용`]);
   }, [captureOrbReady, handleSelectBuildingItem, inventory, quickSlots]);
 
+  const handleTogglePixiStage = useCallback(() => {
+    if (typeof window === "undefined") return;
+    const nextEnabled = !pixiStageEnabled;
+    if (nextEnabled) window.localStorage.setItem(pixiStageFlagStorageKey, "true");
+    else window.localStorage.removeItem(pixiStageFlagStorageKey);
+    setPixiStageEnabled(nextEnabled);
+    window.setTimeout(() => window.location.reload(), 80);
+  }, [pixiStageEnabled]);
   const handleSceneReady = useCallback((scene: GameWorldScene) => { sceneRef.current = scene; }, []);
   const handleInputChange = useCallback((input: GameSceneInput) => { inputRef.current = input; }, []);
   const objectiveText = useMemo(() => selectedBuildingItemId ? "배치 모드입니다. 설치할 필드 위치를 클릭하세요." : "타일마다 다른 자원과 몬스터가 배치됩니다.", [selectedBuildingItemId]);
@@ -437,10 +448,12 @@ export function GameClientTileDemoStation() {
   }, [activeMenuTab, chatLines, handleCraft, handleCraftBuildingItem, inventory, nickname, objectiveText, snapshot]);
 
   return (
-    <main className={`game-shell ${selectedBuildingItemId ? "game-shell--placing" : ""}`}>
+    <main className={`game-shell ${selectedBuildingItemId ? "game-shell--placing" : ""} ${pixiStageEnabled ? "game-shell--pixi-stage" : ""}`}>
       <GameScene onReady={handleSceneReady} onInputChange={handleInputChange} onInteract={handleDemoInteract} onWorldClick={handleWorldClick} placementBuildingType={placementBuildingType} />
+      <PixiGameCanvas enabled={pixiStageEnabled} snapshot={snapshot} localPlayerId={demoPlayerId} />
       <section className="game-hud" aria-label="Game HUD">
         <button className="hud-menu-button" onClick={() => { setMenuOpen((value) => !value); setInventoryOpen(false); setSelectedStationBuilding(null); setSelectedBuilding(null); }} aria-expanded={menuOpen}>☰ 메뉴</button>
+        <button className={pixiStageEnabled ? "hud-pixi-toggle hud-pixi-toggle--on" : "hud-pixi-toggle"} onClick={handleTogglePixiStage} aria-pressed={pixiStageEnabled}>{pixiStageEnabled ? "Pixi ON" : "Pixi OFF"}</button>
         <FloatingQuickButton id="inventory" onOpen={openInventoryPanel} />
         <FloatingQuickButton id="crafting" onOpen={openCraftingMenu} />
         <section className={`hud-minimap hud-minimap--${minimapSize}`} aria-label="미니맵"><button className="hud-minimap__size-button" onClick={cycleMinimapSize} aria-label="미니맵 크기 변경">{minimapSizeLabels[minimapSize]}</button><MiniMapPanel snapshot={snapshot} localPlayerId={demoPlayerId} /></section>
