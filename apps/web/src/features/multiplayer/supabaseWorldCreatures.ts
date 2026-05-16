@@ -71,6 +71,24 @@ export async function upsertWorldCreatures(client: SupabaseClient, creatures: Cr
   await client.from("world_creatures").upsert(rows);
 }
 
+export async function updateWorldCreaturePositions(client: SupabaseClient, creatures: CreaturePublicState[]) {
+  if (creatures.length === 0) return;
+  const updatedAt = new Date().toISOString();
+  const rows = creatures.map((creature) => {
+    const currentTile = (creature as { currentTile?: MapTileRef }).currentTile ?? { regionId: "starter_meadow", tileX: 1, tileY: 1 } as MapTileRef;
+    return {
+      creature_id: creature.id,
+      x: creature.position.x,
+      y: creature.position.y,
+      region_id: currentTile.regionId,
+      tile_x: currentTile.tileX,
+      tile_y: currentTile.tileY,
+      updated_at: updatedAt,
+    };
+  });
+  await client.from("world_creatures").upsert(rows, { onConflict: "creature_id" });
+}
+
 export async function fetchWorldCreatures(client: SupabaseClient, tile: MapTileRef | null) {
   let query = client
     .from("world_creatures")
