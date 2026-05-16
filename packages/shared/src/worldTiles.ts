@@ -28,7 +28,7 @@ export const MAP_TILE_SIZE = {
   width: 3000,
   height: 3000,
   portalMargin: 72,
-  portalRadius: 72,
+  portalRadius: 8,
 } as const;
 
 export const REGION_THEMES = {
