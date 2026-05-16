@@ -3,6 +3,10 @@
 import type { BuildingState, CreaturePublicState, PlayerPublicState, ResourceNodeState, WorldSnapshot } from "@palpalworld/shared";
 import { useEffect, useRef } from "react";
 import { createPixiCamera, resizePixiCamera, centerPixiCameraOn } from "./PixiCamera";
+import { BUILD_GRID_SIZE } from "../../buildings/buildGrid";
+import { BUILD_PARTS, type BuildFloorLevel, type BuildPartId, type BuildPartRotation, type PlacedBuildPart } from "../../buildings/buildPartCatalog";
+import { buildGridToIsoCenter, getIsoTilePolygon2p5d, getIsoWallPlane2p5d } from "../../buildings/buildProjection2p5d";
+import { BUILD_2P5D_FLOOR_HEIGHT, getMaterialPalette } from "../../buildings/buildPartVisual2p5d";
 
 export type PixiGameCanvasProps = {
   enabled?: boolean;
@@ -17,6 +21,9 @@ type NodeRecord = { container: AnyContainer; graphics: AnyGraphics; lastSeenFram
 type RemotePlayersEvent = CustomEvent<{ players?: PlayerPublicState[] }>;
 type RemoteBuildingsEvent = CustomEvent<{ buildings?: BuildingState[] }>;
 type PixiSnapshotEvent = CustomEvent<WorldSnapshot>;
+type BuildPartPreviewState = { partId: BuildPartId; position: { x: number; y: number }; gridX?: number; gridY?: number; rotation: BuildPartRotation; floorLevel: BuildFloorLevel; valid: boolean };
+type BuildPartsState = { parts: PlacedBuildPart[]; selectedPartId?: string | null; selectedHouseId?: string | null; preview?: BuildPartPreviewState | null };
+type BuildPartsEvent = CustomEvent<BuildPartsState>;
 
 type Layers = {
   world: AnyContainer;
@@ -24,6 +31,7 @@ type Layers = {
   buildings: AnyContainer;
   resources: AnyContainer;
   creatures: AnyContainer;
+  buildParts: AnyContainer;
   players: AnyContainer;
   lighting: AnyContainer;
   debug: AnyContainer;
@@ -36,6 +44,11 @@ let pixiLoaderPromise: Promise<PixiModule> | null = null;
 function loadPixiRuntime() {
   if (!pixiLoaderPromise) pixiLoaderPromise = import("pixi.js");
   return pixiLoaderPromise;
+}
+
+function pixiDebugEnabled() {
+  if (typeof window === "undefined") return false;
+  return window.localStorage.getItem("palpalworld.dev.pixiDebug") === "true";
 }
 
 function hashTile(x: number, y: number) {
@@ -73,6 +86,7 @@ function makeLayers(PIXI: PixiModule, app: any): Layers {
   const buildings = new PIXI.Container();
   const resources = new PIXI.Container();
   const creatures = new PIXI.Container();
+  const buildParts = new PIXI.Container();
   const players = new PIXI.Container();
   const lighting = new PIXI.Container();
   const debug = new PIXI.Container();
@@ -81,11 +95,12 @@ function makeLayers(PIXI: PixiModule, app: any): Layers {
   buildings.sortableChildren = true;
   resources.sortableChildren = true;
   creatures.sortableChildren = true;
+  buildParts.sortableChildren = true;
   players.sortableChildren = true;
 
-  world.addChild(terrain, buildings, resources, creatures, players);
+  world.addChild(terrain, buildings, resources, creatures, buildParts, players);
   app.stage.addChild(world, lighting, debug);
-  return { world, terrain, buildings, resources, creatures, players, lighting, debug };
+  return { world, terrain, buildings, resources, creatures, buildParts, players, lighting, debug };
 }
 
 function upsertNode(PIXI: PixiModule, layer: AnyContainer, nodes: Map<string, NodeRecord>, id: string, frameId: number) {
@@ -156,11 +171,7 @@ function drawPlayer(g: AnyGraphics, player: PlayerPublicState, isLocal: boolean)
   g.circle(0, -19, 11).fill({ color: 0xffd3a7 });
   g.roundRect(-9, -30, 18, 9, 6).fill({ color: 0x1e293b });
   g.circle(-4 + dir.x * 2.2, -18 + Math.max(0, dir.y), 1.4).circle(4 + dir.x * 2.2, -18 + Math.max(0, dir.y), 1.4).fill({ color: 0x0f172a });
-  g.moveTo(0, -34).lineTo(dir.x * 8, -34 + dir.y * 8).stroke({ width: 3, color: isLocal ? 0xffff00 : 0xc4b5fd, alpha: 0.95 });
-  if (isLocal) {
-    g.moveTo(-22, 0).lineTo(22, 0).moveTo(0, -22).lineTo(0, 22).stroke({ width: 3, color: 0xffff00, alpha: 0.95 });
-    g.circle(0, 0, 6).fill({ color: 0xff00ff, alpha: 0.9 });
-  }
+  g.moveTo(0, -34).lineTo(dir.x * 8, -34 + dir.y * 8).stroke({ width: 3, color: isLocal ? 0x60a5fa : 0xc4b5fd, alpha: 0.95 });
 }
 
 function creatureColor(creature: CreaturePublicState) {
@@ -200,6 +211,55 @@ function drawBuilding(g: AnyGraphics, building: BuildingState) {
   g.roundRect(-8, 9, 16, 24, 3).fill({ color: roof, alpha: 0.72 });
 }
 
+function colorFromHex(hex: string, fallback: number) {
+  const value = Number.parseInt(hex.replace("#", ""), 16);
+  return Number.isFinite(value) ? value : fallback;
+}
+
+function drawBuildPartPolygon(g: AnyGraphics, points: Array<{ x: number; y: number }>, fill: number, alpha: number, stroke: number, strokeAlpha = 0.7) {
+  if (points.length === 0) return;
+  g.moveTo(points[0].x, points[0].y);
+  for (const point of points.slice(1)) g.lineTo(point.x, point.y);
+  g.lineTo(points[0].x, points[0].y).fill({ color: fill, alpha });
+  g.moveTo(points[0].x, points[0].y);
+  for (const point of points.slice(1)) g.lineTo(point.x, point.y);
+  g.lineTo(points[0].x, points[0].y).stroke({ width: 1.5, color: stroke, alpha: strokeAlpha });
+}
+
+function drawBuildPart(g: AnyGraphics, part: PlacedBuildPart, preview = false, valid = true) {
+  const definition = BUILD_PARTS[part.partId];
+  if (!definition) return;
+  const palette = getMaterialPalette(definition.material);
+  const base = preview ? (valid ? 0x22c55e : 0xef4444) : colorFromHex(palette.base, 0x8b5a2b);
+  const side = colorFromHex(palette.side, 0x6b3f1d);
+  const dark = colorFromHex(palette.dark, 0x3f2412);
+  const light = colorFromHex(palette.light, 0xd6a15d);
+  const width = definition.width * BUILD_GRID_SIZE;
+  const height = definition.height * BUILD_GRID_SIZE;
+  const visualY = -part.floorLevel * BUILD_2P5D_FLOOR_HEIGHT;
+
+  if (definition.category === "wall" || definition.category === "door" || definition.category === "window") {
+    const wallHeight = definition.id.includes("half") || definition.id.includes("railing") || definition.id.includes("fence") ? 34 : 72;
+    const plane = getIsoWallPlane2p5d({ x: 0, y: visualY, width, height, rotation: part.rotation, wallHeight });
+    drawBuildPartPolygon(g, [plane.baseStart, plane.baseEnd, plane.topEnd, plane.topStart], preview ? base : side, preview ? 0.25 : 0.92, preview ? base : dark, preview ? 0.95 : 0.72);
+    if (definition.category === "door") {
+      const mx = (plane.baseStart.x + plane.baseEnd.x) / 2;
+      const my = (plane.baseStart.y + plane.baseEnd.y) / 2;
+      g.roundRect(mx - 8, my - wallHeight * 0.68, 16, wallHeight * 0.62, 3).fill({ color: dark, alpha: preview ? 0.26 : 0.62 });
+    }
+    if (definition.category === "window") {
+      const mx = (plane.baseStart.x + plane.baseEnd.x) / 2;
+      const my = (plane.baseStart.y + plane.baseEnd.y) / 2;
+      g.roundRect(mx - 10, my - wallHeight * 0.62, 20, 14, 3).fill({ color: 0xbae6fd, alpha: preview ? 0.25 : 0.62 });
+    }
+    return;
+  }
+
+  const roofOffset = definition.category === "roof" ? -48 : 0;
+  const points = getIsoTilePolygon2p5d({ x: 0, y: visualY + roofOffset, width, height: height * 0.62 });
+  drawBuildPartPolygon(g, points, definition.category === "roof" && !preview ? dark : base, preview ? 0.25 : 0.94, definition.category === "roof" ? light : dark, preview ? 0.9 : 0.58);
+}
+
 function sameTile(a: PlayerPublicState, b: PlayerPublicState) {
   const ta = (a as PlayerPublicState & { currentTile?: { regionId?: string; tileX?: number; tileY?: number } }).currentTile;
   const tb = (b as PlayerPublicState & { currentTile?: { regionId?: string; tileX?: number; tileY?: number } }).currentTile;
@@ -227,6 +287,7 @@ export function PixiGameCanvas({ enabled = false, snapshot, localPlayerId }: Pix
   const localPlayerIdRef = useRef(localPlayerId);
   const remotePlayersRef = useRef<PlayerPublicState[]>([]);
   const remoteBuildingsRef = useRef<BuildingState[]>([]);
+  const buildPartsStateRef = useRef<BuildPartsState>({ parts: [] });
   const frameIdRef = useRef(0);
 
   useEffect(() => { snapshotRef.current = snapshot; }, [snapshot]);
@@ -236,13 +297,16 @@ export function PixiGameCanvas({ enabled = false, snapshot, localPlayerId }: Pix
     const onSnapshot = (event: Event) => { const detail = (event as PixiSnapshotEvent).detail; if (detail) snapshotRef.current = detail; };
     const onRemotePlayers = (event: Event) => { remotePlayersRef.current = (event as RemotePlayersEvent).detail?.players ?? []; };
     const onRemoteBuildings = (event: Event) => { remoteBuildingsRef.current = (event as RemoteBuildingsEvent).detail?.buildings ?? []; };
+    const onBuildParts = (event: Event) => { buildPartsStateRef.current = (event as BuildPartsEvent).detail ?? { parts: [] }; };
     window.addEventListener("palpalworld:pixi-snapshot", onSnapshot);
     window.addEventListener("palpalworld:remote-players", onRemotePlayers);
     window.addEventListener("palpalworld:remote-buildings", onRemoteBuildings);
+    window.addEventListener("palpalworld:pixi-build-parts", onBuildParts);
     return () => {
       window.removeEventListener("palpalworld:pixi-snapshot", onSnapshot);
       window.removeEventListener("palpalworld:remote-players", onRemotePlayers);
       window.removeEventListener("palpalworld:remote-buildings", onRemoteBuildings);
+      window.removeEventListener("palpalworld:pixi-build-parts", onBuildParts);
     };
   }, []);
 
@@ -272,8 +336,9 @@ export function PixiGameCanvas({ enabled = false, snapshot, localPlayerId }: Pix
       const creatureNodes = new Map<string, NodeRecord>();
       const resourceNodes = new Map<string, NodeRecord>();
       const buildingNodes = new Map<string, NodeRecord>();
+      const buildPartNodes = new Map<string, NodeRecord>();
       const lightingGraphics = new PIXI.Graphics();
-      const debugText = new PIXI.Text({ text: "pixi boot", style: { fill: 0xffffff, fontSize: 12, fontFamily: "monospace", stroke: { color: 0x000000, width: 3 } } });
+      const debugText = new PIXI.Text({ text: "", style: { fill: 0xffffff, fontSize: 12, fontFamily: "monospace", stroke: { color: 0x000000, width: 3 } } });
       layers.lighting.addChild(lightingGraphics);
       layers.debug.addChild(debugText);
 
@@ -344,6 +409,29 @@ export function PixiGameCanvas({ enabled = false, snapshot, localPlayerId }: Pix
         }
         pruneNodes(layers.creatures, creatureNodes, frameId);
 
+        const buildParts = buildPartsStateRef.current.parts ?? [];
+        for (const part of buildParts) {
+          const definition = BUILD_PARTS[part.partId];
+          if (!definition) continue;
+          const node = upsertNode(PIXI, layers.buildParts, buildPartNodes, part.id, frameId);
+          const iso = buildGridToIsoCenter(part.gridX, part.gridY);
+          node.container.position.set(iso.x, iso.y);
+          node.container.zIndex = iso.y + part.floorLevel * 96 + (definition.category === "roof" ? 48 : definition.category === "wall" ? 24 : 0);
+          drawBuildPart(node.graphics, part);
+        }
+        const preview = buildPartsStateRef.current.preview;
+        if (preview) {
+          const gridX = typeof preview.gridX === "number" ? preview.gridX : Math.round(preview.position.x / BUILD_GRID_SIZE);
+          const gridY = typeof preview.gridY === "number" ? preview.gridY : Math.round(preview.position.y / BUILD_GRID_SIZE);
+          const previewPart: PlacedBuildPart = { id: "__preview_build_part__", partId: preview.partId, ownerPlayerId: "preview", regionId: "preview", tileX: 0, tileY: 0, gridX, gridY, floorLevel: preview.floorLevel, rotation: preview.rotation, hp: 1, maxHp: 1, createdAt: 0, updatedAt: 0 };
+          const node = upsertNode(PIXI, layers.buildParts, buildPartNodes, previewPart.id, frameId);
+          const iso = buildGridToIsoCenter(gridX, gridY);
+          node.container.position.set(iso.x, iso.y);
+          node.container.zIndex = iso.y + 999;
+          drawBuildPart(node.graphics, previewPart, true, preview.valid);
+        }
+        pruneNodes(layers.buildParts, buildPartNodes, frameId);
+
         for (const entry of players) {
           const node = upsertNode(PIXI, layers.players, playerNodes, entry.player.id, frameId);
           node.container.position.set(entry.player.position.x, entry.player.position.y);
@@ -353,8 +441,14 @@ export function PixiGameCanvas({ enabled = false, snapshot, localPlayerId }: Pix
         pruneNodes(layers.players, playerNodes, frameId);
 
         drawNight(lightingGraphics, host.clientWidth || 1, host.clientHeight || 1, camera.x, camera.y, players);
-        debugText.text = `pixi p:${players.length} c:${creatures.length} r:${resources.length} b:${buildings.length} snap:${currentSnapshot ? 1 : 0}`;
-        debugText.position.set(10, Math.max(72, (host.clientHeight || 120) - 34));
+        if (pixiDebugEnabled()) {
+          debugText.visible = true;
+          debugText.text = `pixi p:${players.length} c:${creatures.length} r:${resources.length} b:${buildings.length} parts:${buildParts.length} snap:${currentSnapshot ? 1 : 0}`;
+          debugText.position.set(10, Math.max(72, (host.clientHeight || 120) - 34));
+        } else {
+          debugText.visible = false;
+          debugText.text = "";
+        }
       });
 
       cleanup = () => {
