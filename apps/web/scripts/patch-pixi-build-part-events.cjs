@@ -29,18 +29,27 @@ function patchDispatchMethod() {
   const insertion = `  private dispatchPixiBuildParts() {
     if (!isPixiStageEnabled()) return;
     const parts = typeof this.getSceneBuildParts === "function" ? this.getSceneBuildParts() : [];
+    const previewPosition = this.buildPartDragPosition ?? this.pointerWorldPosition;
+    const previewGrid = this.selectedBuildPartId && previewPosition && typeof this.getBuildPartTouchPlacementGrid === "function"
+      ? this.getBuildPartTouchPlacementGrid(previewPosition, this.buildPartDragPointerId !== null)
+      : null;
+    const previewPlacementPosition = this.selectedBuildPartId && previewPosition && typeof this.getBuildPartTouchPlacementPosition === "function"
+      ? this.getBuildPartTouchPlacementPosition(previewPosition, this.buildPartDragPointerId !== null)
+      : previewPosition;
     window.dispatchEvent(new CustomEvent("palpalworld:pixi-build-parts", {
       detail: {
         parts,
         selectedPartId: this.selectedPlacedBuildPartId,
         selectedHouseId: this.selectedHouseId,
-        preview: this.selectedBuildPartId && this.pointerWorldPosition
+        preview: this.selectedBuildPartId && previewPosition && previewPlacementPosition
           ? {
               partId: this.selectedBuildPartId,
-              position: this.pointerWorldPosition,
+              position: previewPlacementPosition,
+              gridX: previewGrid?.gridX,
+              gridY: previewGrid?.gridY,
               rotation: this.selectedBuildPartRotation,
               floorLevel: this.selectedBuildFloorLevel,
-              valid: this.getBuildPartPlacementValidity(this.pointerWorldPosition).ok,
+              valid: this.getBuildPartPlacementValidity(previewPlacementPosition).ok,
             }
           : null,
       },
