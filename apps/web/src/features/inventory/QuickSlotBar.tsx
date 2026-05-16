@@ -7,6 +7,12 @@ import { findInventoryEntryByKey } from "./inventoryUiModel";
 const equipmentStorageKey = "palpalworld.demo.equipment";
 const equippedWeaponStorageKey = "palpalworld.demo.equippedWeaponItemId";
 const mountedPetStorageKey = "palpalworld.demo.mountedPetItemId";
+const torchEquippedClassName = "palpalworld-torch-equipped";
+
+function syncTorchEquippedClass(weaponItemId: string | null) {
+  if (typeof document === "undefined") return;
+  document.documentElement.classList.toggle(torchEquippedClassName, weaponItemId === "torch");
+}
 
 function readStoredEquipment(ownerPlayerId: string): EquipmentState {
   if (typeof window === "undefined") return createEmptyEquipment(ownerPlayerId);
@@ -30,6 +36,7 @@ function persistEquipment(equipment: EquipmentState, weaponItemId: string | null
   window.localStorage.setItem(equipmentStorageKey, JSON.stringify(equipment));
   if (weaponItemId) window.localStorage.setItem(equippedWeaponStorageKey, weaponItemId);
   else window.localStorage.removeItem(equippedWeaponStorageKey);
+  syncTorchEquippedClass(weaponItemId);
   window.dispatchEvent(new CustomEvent("palpalworld:equipment-changed", { detail: { equipment, weaponItemId } }));
 }
 
@@ -118,6 +125,16 @@ export function QuickSlotBar({
 }) {
   const mountedPetItemId = useMountedPet();
   const lastPointerUseAtRef = useRef(0);
+
+  useEffect(() => {
+    syncTorchEquippedClass(readEquippedWeaponItemId());
+    const handleEquipmentChanged = (event: Event) => {
+      const customEvent = event as CustomEvent<{ weaponItemId?: string | null }>;
+      syncTorchEquippedClass(customEvent.detail?.weaponItemId ?? readEquippedWeaponItemId());
+    };
+    window.addEventListener("palpalworld:equipment-changed", handleEquipmentChanged);
+    return () => window.removeEventListener("palpalworld:equipment-changed", handleEquipmentChanged);
+  }, []);
 
   const useSlot = useCallback((slotIndex: number, entryKey: string | null) => {
     const entry = findInventoryEntryByKey(inventory, entryKey);
