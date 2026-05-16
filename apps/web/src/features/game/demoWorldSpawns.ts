@@ -1,5 +1,5 @@
 import type { BuildingState, BuildingType, CreaturePublicState, ResourceNodeState } from "@palpalworld/shared";
-import { STARTER_CREATURE_SPAWNS, STARTER_RESOURCE_NODES } from "@palpalworld/shared";
+import { CREATURE_CATALOG, STARTER_CREATURE_SPAWNS, STARTER_RESOURCE_NODES, TRAIT_CATALOG } from "@palpalworld/shared";
 import { DEFAULT_PLAYER_TILE, getEntityTileById, type MapTileRef } from "../../../../../packages/shared/src/worldTiles";
 
 const demoPlayerId = "demo-player";
@@ -41,6 +41,27 @@ function clampMapPosition(value: number) {
   return Math.max(mapMin, Math.min(mapMax, value));
 }
 
+function getTraitMaxHpMultiplier(traitIds: readonly string[]) {
+  return traitIds.reduce((multiplier, traitId) => {
+    const trait = TRAIT_CATALOG[traitId as keyof typeof TRAIT_CATALOG];
+    const effect = trait?.effects.find((entry) => entry.type === "max_hp_multiplier");
+    return multiplier * (effect?.value ?? 1);
+  }, 1);
+}
+
+function calculateDemoCreatureMaxHp(speciesId: string, level: number, traitIds: readonly string[]) {
+  const species = CREATURE_CATALOG[speciesId as keyof typeof CREATURE_CATALOG];
+  if (!species) return Math.max(1, 60 + level * 10);
+  const baseMaxHp = species.baseHp + level * 8;
+  return Math.max(1, Math.floor(baseMaxHp * getTraitMaxHpMultiplier(traitIds)));
+}
+
+function withFullHp(creature: CreaturePublicState): CreaturePublicState {
+  const traitIds = [...(creature.traitIds ?? [])];
+  const maxHp = calculateDemoCreatureMaxHp(creature.speciesId, creature.level, traitIds);
+  return { ...creature, hp: maxHp, maxHp, traitIds } as CreaturePublicState;
+}
+
 function distributedPosition(regionId: string, tileX: number, tileY: number, index: number, total: number, kind: "resource" | "creature") {
   const gridColumns = kind === "resource" ? 9 : 6;
   const gridRows = Math.ceil(total / gridColumns);
@@ -68,8 +89,8 @@ function cloneResourceNode(node: ResourceNodeState): ResourceNodeState {
 
 function cloneCreatureSpawn(spawn: (typeof STARTER_CREATURE_SPAWNS)[number]): CreaturePublicState {
   const currentTile = getEntityTileById(spawn.id);
-  const maxHp = 60 + spawn.level * 10;
-  return { id: spawn.id, speciesId: spawn.speciesId, regionId: spawn.regionId, position: { ...spawn.position }, currentTile, level: spawn.level, hp: maxHp, maxHp, traitIds: [...(spawn.traitIds ?? [])] } as CreaturePublicState;
+  const traitIds = [...(spawn.traitIds ?? [])];
+  return withFullHp({ id: spawn.id, speciesId: spawn.speciesId, regionId: spawn.regionId, position: { ...spawn.position }, currentTile, level: spawn.level, hp: 1, maxHp: 1, traitIds } as CreaturePublicState);
 }
 
 function makeResource(regionId: string, tileX: number, tileY: number, index: number): ResourceNodeState {
@@ -86,18 +107,18 @@ function makeCreature(regionId: string, tileX: number, tileY: number, index: num
   const currentTile: MapTileRef = { regionId, tileX, tileY } as MapTileRef;
   const levelBase = regionId === "stone_hills" ? 9 : 2;
   const level = levelBase + tileX + tileY + Math.floor(index / 4);
-  const maxHp = speciesId === "breezewing" ? 52 + level * 7 : regionId === "stone_hills" ? 105 + level * 9 : 58 + level * 8;
-  return {
+  const traitIds = speciesId === "breezewing" ? ["flying", "swift"] : index % 4 === 0 ? ["sturdy"] : index % 4 === 1 ? ["nimble"] : index % 4 === 2 ? ["brave"] : ["hard_worker"];
+  return withFullHp({
     id: `mob-${regionId}-${tileX}-${tileY}-${speciesId}-ultra-${index}`,
     speciesId,
     regionId,
     position: distributedPosition(regionId, tileX, tileY, index, creaturesPerTile, "creature"),
     currentTile,
     level,
-    hp: maxHp,
-    maxHp,
-    traitIds: speciesId === "breezewing" ? ["flying", "swift"] : index % 4 === 0 ? ["sturdy"] : index % 4 === 1 ? ["nimble"] : index % 4 === 2 ? ["brave"] : ["hard_worker"],
-  } as CreaturePublicState;
+    hp: 1,
+    maxHp: 1,
+    traitIds,
+  } as CreaturePublicState);
 }
 
 export function createTileBasedDemoResources(): ResourceNodeState[] {
