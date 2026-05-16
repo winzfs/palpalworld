@@ -18,10 +18,22 @@ export type WorldCreatureRow = {
   updated_at: string;
 };
 
+export type CreatureSyncResult = {
+  ok: boolean;
+  count: number;
+  error?: string;
+};
+
 function sanitizeCreatureHp(hp: number, maxHp: number) {
   const safeMaxHp = Number.isFinite(maxHp) && maxHp > 0 ? maxHp : 1;
   const safeHp = Number.isFinite(hp) ? hp : safeMaxHp;
   return { hp: Math.max(0, Math.min(safeHp, safeMaxHp)), maxHp: safeMaxHp };
+}
+
+function emitCreatureSyncStatus(detail: CreatureSyncResult) {
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent("palpalworld:creature-sync-status", { detail }));
+  }
 }
 
 export function creatureToRow(creature: CreaturePublicState): Omit<WorldCreatureRow, "updated_at"> {
@@ -59,34 +71,44 @@ export function rowToCreature(row: WorldCreatureRow): CreaturePublicState {
 
 export async function upsertWorldCreature(client: SupabaseClient, creature: CreaturePublicState) {
   const row = creatureToRow(creature);
-  await client.from("world_creatures").upsert({
+  const { error } = await client.from("world_creatures").upsert({
     ...row,
     updated_at: new Date().toISOString(),
   });
+  if (error) emitCreatureSyncStatus({ ok: false, count: 1, error: error.message });
 }
 
 export async function upsertWorldCreatures(client: SupabaseClient, creatures: CreaturePublicState[]) {
   if (creatures.length === 0) return;
   const rows = creatures.map((creature) => ({ ...creatureToRow(creature), updated_at: new Date().toISOString() }));
-  await client.from("world_creatures").upsert(rows);
+  const { error } = await client.from("world_creatures").upsert(rows);
+  emitCreatureSyncStatus({ ok: !error, count: creatures.length, error: error?.message });
 }
 
 export async function updateWorldCreaturePositions(client: SupabaseClient, creatures: CreaturePublicState[]) {
   if (creatures.length === 0) return;
   const updatedAt = new Date().toISOString();
-  const rows = creatures.map((creature) => {
+  let count = 0;
+  for (const creature of creatures) {
     const currentTile = (creature as { currentTile?: MapTileRef }).currentTile ?? { regionId: "starter_meadow", tileX: 1, tileY: 1 } as MapTileRef;
-    return {
-      creature_id: creature.id,
-      x: creature.position.x,
-      y: creature.position.y,
-      region_id: currentTile.regionId,
-      tile_x: currentTile.tileX,
-      tile_y: currentTile.tileY,
-      updated_at: updatedAt,
-    };
-  });
-  await client.from("world_creatures").upsert(rows, { onConflict: "creature_id" });
+    const { error } = await client
+      .from("world_creatures")
+      .update({
+        x: creature.position.x,
+        y: creature.position.y,
+        region_id: currentTile.regionId,
+        tile_x: currentTile.tileX,
+        tile_y: currentTile.tileY,
+        updated_at: updatedAt,
+      })
+      .eq("creature_id", creature.id);
+    if (error) {
+      emitCreatureSyncStatus({ ok: false, count, error: error.message });
+      return;
+    }
+    count += 1;
+  }
+  emitCreatureSyncStatus({ ok: true, count });
 }
 
 export async function fetchWorldCreatures(client: SupabaseClient, tile: MapTileRef | null) {
@@ -99,17 +121,24 @@ export async function fetchWorldCreatures(client: SupabaseClient, tile: MapTileR
   }
 
   const { data, error } = await query;
-  if (error || !data) return [];
+  if (error || !data) {
+    if (error) emitCreatureSyncStatus({ ok: false, count: 0, error: error.message });
+    return [];
+  }
   return data as WorldCreatureRow[];
 }
 
 export async function seedMissingWorldCreatures(client: SupabaseClient, creatures: CreaturePublicState[]) {
   if (creatures.length === 0) return;
   const ids = creatures.map((creature) => creature.id);
-  const { data } = await client
+  const { data, error } = await client
     .from("world_creatures")
     .select("creature_id")
     .in("creature_id", ids);
+  if (error) {
+    emitCreatureSyncStatus({ ok: false, count: 0, error: error.message });
+    return;
+  }
   const existingIds = new Set((data ?? []).map((row: { creature_id: string }) => row.creature_id));
   const missing = creatures.filter((creature) => !existingIds.has(creature.id));
   await upsertWorldCreatures(client, missing);
