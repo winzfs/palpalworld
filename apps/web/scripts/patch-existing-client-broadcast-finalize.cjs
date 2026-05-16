@@ -7,17 +7,17 @@ let changed = false;
 
 function patch(label) { changed = true; console.log(`[patch-existing-client-broadcast-finalize] ${label}`); }
 function addAfter(anchor, text, label) { if (source.includes(text)) return; if (!source.includes(anchor)) { console.log(`[patch-existing-client-broadcast-finalize] skip ${label}`); return; } source = source.replace(anchor, anchor + text); patch(label); }
-function ensureRef(anchor, text, label) { if (source.includes(text)) return; addAfter(anchor, text, label); }
 function ensureConst(name, value) {
   const line = `const ${name} = ${value};\n`;
   const regex = new RegExp(`const ${name} = [^;]+;\\n`, 'g');
-  const matches = source.match(regex) ?? [];
-  if (matches.length === 0) {
-    addAfter('const creatureMapSize = creatureMapMax - creatureMapMin;\n', line, `ensure ${name}`);
-    return;
-  }
   source = source.replace(regex, '');
   addAfter('const creatureMapSize = creatureMapMax - creatureMapMin;\n', line, `dedupe ${name}`);
+}
+function ensureUseRef(name, expression, anchor, label) {
+  const line = `  const ${name} = useRef(${expression});\n`;
+  const regex = new RegExp(`\\s*const ${name} = useRef\\([^\\n]+\\);\\n`, 'g');
+  source = source.replace(regex, '');
+  addAfter(anchor, line, label);
 }
 
 addAfter('import { PixiGameCanvas } from "./pixi/PixiGameCanvas";\n', 'import { broadcastCreaturePositions, createCreatureBroadcastChannel, type CreaturePositionsBroadcastPayload } from "../multiplayer/supabaseCreatureBroadcast";\nimport { claimWorldHost, getCurrentMultiplayerPlayerId, getSupabaseClient, isSupabaseMultiplayerEnabled } from "../multiplayer/supabaseMultiplayer";\nimport { updateWorldCreaturePositions } from "../multiplayer/supabaseWorldCreatures";\n', 'ensure broadcast imports');
@@ -48,14 +48,13 @@ function smoothRemoteCreatures(creatures: CreaturePublicState[], targets: Map<st
 `;
 addAfter('function createDemoInventory(): InventoryState {\n', smoothHelper + '\n', 'ensure smooth remote helper');
 
-const baseRefAnchor = source.includes('  const supabaseClientRef = useRef(getSupabaseClient());\n') ? '  const supabaseClientRef = useRef(getSupabaseClient());\n' : '  const lastUiSnapshotAtRef = useRef(0);\n';
-if (!source.includes('  const supabaseClientRef = useRef(getSupabaseClient());\n')) ensureRef('  const lastUiSnapshotAtRef = useRef(0);\n', '  const supabaseClientRef = useRef(getSupabaseClient());\n', 'ensure supabase client ref');
-ensureRef(baseRefAnchor, '  const creatureBroadcastChannelRef = useRef<ReturnType<typeof createCreatureBroadcastChannel> | null>(null);\n', 'ensure broadcast channel ref');
-ensureRef('  const creatureBroadcastChannelRef = useRef<ReturnType<typeof createCreatureBroadcastChannel> | null>(null);\n', '  const creatureBroadcastTargetsRef = useRef(new Map<string, CreatureBroadcastTarget>());\n', 'ensure broadcast target ref');
-ensureRef('  const creatureBroadcastTargetsRef = useRef(new Map<string, CreatureBroadcastTarget>());\n', '  const isCreatureHostRef = useRef(false);\n', 'ensure host ref');
-ensureRef('  const isCreatureHostRef = useRef(false);\n', '  const lastCreatureHostClaimAtRef = useRef(-999999);\n', 'ensure host claim ref');
-ensureRef('  const lastCreatureHostClaimAtRef = useRef(-999999);\n', '  const lastCreatureBroadcastAtRef = useRef(0);\n', 'ensure broadcast tick ref');
-ensureRef('  const lastCreatureBroadcastAtRef = useRef(0);\n', '  const lastCreatureSnapshotSaveAtRef = useRef(0);\n', 'ensure snapshot save ref');
+ensureUseRef('supabaseClientRef', 'getSupabaseClient()', '  const lastUiSnapshotAtRef = useRef(0);\n', 'dedupe supabase client ref');
+ensureUseRef('creatureBroadcastChannelRef', '<ReturnType<typeof createCreatureBroadcastChannel> | null>(null)', '  const supabaseClientRef = useRef(getSupabaseClient());\n', 'dedupe broadcast channel ref');
+ensureUseRef('creatureBroadcastTargetsRef', 'new Map<string, CreatureBroadcastTarget>()', '  const creatureBroadcastChannelRef = useRef<ReturnType<typeof createCreatureBroadcastChannel> | null>(null);\n', 'dedupe broadcast target ref');
+ensureUseRef('isCreatureHostRef', 'false', '  const creatureBroadcastTargetsRef = useRef(new Map<string, CreatureBroadcastTarget>());\n', 'dedupe host ref');
+ensureUseRef('lastCreatureHostClaimAtRef', '-999999', '  const isCreatureHostRef = useRef(false);\n', 'dedupe host claim ref');
+ensureUseRef('lastCreatureBroadcastAtRef', '0', '  const lastCreatureHostClaimAtRef = useRef(-999999);\n', 'dedupe broadcast tick ref');
+ensureUseRef('lastCreatureSnapshotSaveAtRef', '0', '  const lastCreatureBroadcastAtRef = useRef(0);\n', 'dedupe snapshot save ref');
 
 const handler = `
   const applyCreatureBroadcastPayload = useCallback((payload: CreaturePositionsBroadcastPayload) => {
@@ -112,8 +111,6 @@ const guardedLoop = `      const client = supabaseClientRef.current;
 
 const localLoop = '      moveDemoCreatures(getCurrentCreatures(), deltaSeconds, now, demoPositionRef.current);\n      applyDemoSnapshot(false);';
 if (source.includes(localLoop)) { source = source.split(localLoop).join(guardedLoop); patch('replace standalone local creature loop'); }
-
-source = source.replaceAll('const lastCreatureHostClaimAtRef = useRef(0);', 'const lastCreatureHostClaimAtRef = useRef(-999999);');
 
 if (changed) fs.writeFileSync(target, source);
 else console.log('[patch-existing-client-broadcast-finalize] no changes');
