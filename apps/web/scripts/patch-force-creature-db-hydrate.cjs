@@ -7,15 +7,15 @@ function r(a,b,n){ if(s.includes(b)) return; if(!s.includes(a)){ console.log('[p
 function insertBefore(a,b,n){ if(s.includes(b)) return; if(!s.includes(a)){ console.log('[patch-force-creature-db-hydrate] skip '+n); return; } s=s.replace(a,b+a); c=true; console.log('[patch-force-creature-db-hydrate] patch '+n); }
 
 r('import { PixiGameCanvas } from "./pixi/PixiGameCanvas";\n', 'import { PixiGameCanvas } from "./pixi/PixiGameCanvas";\nimport { fetchWorldCreatures, rowToCreature } from "../multiplayer/supabaseWorldCreatures";\nimport { getSupabaseClient, isSupabaseMultiplayerEnabled } from "../multiplayer/supabaseMultiplayer";\n', 'imports');
-r('  const lastUiSnapshotAtRef = useRef(0);\n', '  const lastUiSnapshotAtRef = useRef(0);\n  const supabaseClientRef = useRef(getSupabaseClient());\n', 'shared client ref');
 
-const effect = '  useEffect(() => {\n    const client = supabaseClientRef.current;\n    if (!client || !isSupabaseMultiplayerEnabled()) return;\n    let stopped = false;\n    const load = async () => {\n      const rows = await fetchWorldCreatures(client, demoTileRef.current);\n      if (stopped || rows.length <= 0) return;\n      demoCreaturesRef.current = rows.map(rowToCreature);\n      demoTileIndexRef.current = createDemoTileIndex(demoResourcesRef.current, demoCreaturesRef.current, demoBuildingsRef.current);\n      applyDemoSnapshot(true);\n    };\n    void load();\n    return () => { stopped = true; };\n  }, [applyDemoSnapshot]);\n';
+const effect = '  useEffect(() => {\n    const client = getSupabaseClient();\n    if (!client || !isSupabaseMultiplayerEnabled()) return;\n    let stopped = false;\n    const load = async () => {\n      const rows = await fetchWorldCreatures(client, demoTileRef.current);\n      if (stopped || rows.length <= 0) return;\n      demoCreaturesRef.current = rows.map(rowToCreature);\n      demoTileIndexRef.current = createDemoTileIndex(demoResourcesRef.current, demoCreaturesRef.current, demoBuildingsRef.current);\n      applyDemoSnapshot(true);\n    };\n    void load();\n    return () => { stopped = true; };\n  }, [applyDemoSnapshot]);\n';
 
 r('  useEffect(() => { setNickname(createClientNickname()); commitInventory(readStoredInventory(createDemoInventory())); }, [commitInventory]);\n', '  useEffect(() => { setNickname(createClientNickname()); commitInventory(readStoredInventory(createDemoInventory())); }, [commitInventory]);\n' + effect, 'direct hydrate effect after inventory');
 insertBefore('  const handleDemoInteract = useCallback(() => {', effect, 'direct hydrate effect before demo interact');
 
 s = s.replace(/\s*const forceHydrateClientRef = useRef\(getSupabaseClient\(\)\);\n/g, '\n');
-s = s.replace(/forceHydrateClientRef\.current/g, 'supabaseClientRef.current');
+s = s.replace(/forceHydrateClientRef\.current/g, 'getSupabaseClient()');
+s = s.replace(/supabaseClientRef\.current/g, 'getSupabaseClient()');
 s = s.replace(/\s*const id = window\.setInterval\(load, 2500\);\n\s*return \(\) => \{ stopped = true; window\.clearInterval\(id\); \};/g, '\n    return () => { stopped = true; };');
 
 function mergeImports(modulePath) {
