@@ -63,6 +63,7 @@ for (const script of [
   './patch-existing-client-attack-rpc.cjs',
   './patch-db-pos-once.cjs',
   './patch-supabase-authoritative-creature-start.cjs',
+  './patch-force-creature-db-hydrate.cjs',
 ]) {
   require(script);
 }
