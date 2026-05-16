@@ -103,53 +103,141 @@ const finalHelpers = `
     if (!localPlayer) return { ok: false, reason: "플레이어 위치를 찾을 수 없습니다." };
     const placementPoint = clampPositionToTile(position);
     if (placementPoint.x < 0 || placementPoint.x > MAP_TILE_SIZE.width || placementPoint.y < 0 || placementPoint.y > MAP_TILE_SIZE.height) return { ok: false, reason: "타일 밖에는 설치할 수 없습니다." };
-    if (distance(localPlayer, placementPoint) > WORLD.buildRange) return { ok: false, reason: "너무 멀리 설치할 수 없습니다." };
+    if (distance(localPlayer, placementPoint) > WORLD.buildRange + 96) return { ok: false, reason: "너무 멀리 설치할 수 없습니다." };
     const targetGrid = grid ?? this.getIsoBuildGridFromWorldTouch(placementPoint, this.buildPartDragPointerId !== null);
     const partDef = BUILD_PARTS[this.selectedBuildPartId];
     if (!partDef) return { ok: false, reason: "알 수 없는 건축 부품입니다." };
     const sameLayer = this.getSceneBuildParts().some((part) => part.gridX === targetGrid.gridX && part.gridY === targetGrid.gridY && part.floorLevel === this.selectedBuildFloorLevel && BUILD_PARTS[part.partId]?.layer === partDef.layer);
     if (sameLayer) return { ok: false, reason: "같은 위치에 이미 부품이 있습니다." };
     return { ok: true, reason: "손을 떼면 설치됩니다." };
+  }
+  private commitBuildPartPlacementFinal(position: Vector2) {
+    if (!this.selectedBuildPartId) return;
+    const grid = this.getIsoBuildGridFromWorldTouch(position, true);
+    const placementPoint = this.getWorldPointFromIsoBuildGrid(grid);
+    const validity = this.getBuildPartPlacementValidityFinal(placementPoint, grid);
+    if (!validity.ok) {
+      window.dispatchEvent(new CustomEvent("palpalworld:placement-failed", { detail: { reason: validity.reason } }));
+      return;
+    }
+    const placedPart = createPlacedBuildPart({
+      partId: this.selectedBuildPartId,
+      ownerPlayerId: this.localPlayerId ?? "demo-player",
+      currentTile: this.getCurrentTile(),
+      gridX: grid.gridX,
+      gridY: grid.gridY,
+      floorLevel: this.selectedBuildFloorLevel,
+      rotation: this.selectedBuildPartRotation,
+      existingParts: this.placedBuildParts,
+      houseId: this.selectedHouseId,
+    });
+    this.selectedPlacedBuildPartId = placedPart.id;
+    this.selectedHouseId = placedPart.houseId ?? null;
+    this.placedBuildParts = writeStoredBuildParts([...this.placedBuildParts, placedPart]);
+    window.dispatchEvent(new CustomEvent("palpalworld:build-parts-changed", { detail: { parts: this.placedBuildParts } }));
+    this.dispatchPixiBuildParts();
   }`;
 
 if (!source.includes('getIsoBuildGridFromWorldTouch')) {
   replaceOnce(
     '  private commitPlacement(position: Vector2) { this.onWorldClick({ kind: "field", position, validity: this.getPlacementValidity(position) }); }',
     `  private commitPlacement(position: Vector2) { this.onWorldClick({ kind: "field", position, validity: this.getPlacementValidity(position) }); }\n${finalHelpers}`,
-    'final iso helpers',
+    'final iso helpers and commit',
   );
-}
-
-if (!source.includes('commitBuildPartPlacementFinal')) {
-  replaceOnce(
+} else if (!source.includes('commitBuildPartPlacementFinal')) {
+  replaceRegex(
+    /  private getBuildPartPlacementValidityFinal\([\s\S]*?\n  \}/,
     finalHelpers,
-    `${finalHelpers}\n  private commitBuildPartPlacementFinal(position: Vector2) {\n    if (!this.selectedBuildPartId) return;\n    const grid = this.getIsoBuildGridFromWorldTouch(position, true);\n    const placementPoint = this.getWorldPointFromIsoBuildGrid(grid);\n    const validity = this.getBuildPartPlacementValidityFinal(placementPoint, grid);\n    if (!validity.ok) return;\n    const placedPart = createPlacedBuildPart({\n      partId: this.selectedBuildPartId,\n      ownerPlayerId: this.localPlayerId ?? "demo-player",\n      currentTile: this.getCurrentTile(),\n      gridX: grid.gridX,\n      gridY: grid.gridY,\n      floorLevel: this.selectedBuildFloorLevel,\n      rotation: this.selectedBuildPartRotation,\n      existingParts: this.placedBuildParts,\n      houseId: this.selectedHouseId,\n    });\n    this.selectedPlacedBuildPartId = placedPart.id;\n    this.selectedHouseId = placedPart.houseId ?? null;\n    this.placedBuildParts = writeStoredBuildParts([...this.placedBuildParts, placedPart]);\n    window.dispatchEvent(new CustomEvent("palpalworld:build-parts-changed", { detail: { parts: this.placedBuildParts } }));\n  }`,
-    'final commit build part',
+    'replace final helpers with commit',
   );
 }
 
 replaceOnce(
   '    if (this.placementPreviewBuildingType) {\n      this.placementDragStart = position;\n      this.placementPointerId = event.pointerId;\n      this.canvas.setPointerCapture(event.pointerId);\n      return;\n    }',
   '    if (this.selectedBuildPartId && !this.placementPreviewBuildingType) {\n      this.buildPartDragPointerId = event.pointerId;\n      this.buildPartDragPosition = position;\n      this.canvas.setPointerCapture(event.pointerId);\n      return;\n    }\n    if (this.placementPreviewBuildingType) {\n      this.placementDragStart = position;\n      this.placementPointerId = event.pointerId;\n      this.canvas.setPointerCapture(event.pointerId);\n      return;\n    }',
-  'pointerdown build part branch',
+  'pointerdown build part branch exact',
 );
 
-replaceOnce(
-  '    this.hoverCreatureId = this.placementPreviewBuildingType ? null : this.getCreatureAt(position)?.id ?? null;\n    this.hoverBuildingId = this.placementPreviewBuildingType || this.hoverCreatureId ? null : this.getBuildingAt(position)?.id ?? null;\n    if (!this.placementPreviewBuildingType) this.canvas.style.cursor = this.hoverCreatureId || this.hoverBuildingId ? "pointer" : "default";',
-  '    if (this.buildPartDragPointerId === event.pointerId) this.buildPartDragPosition = position;\n    this.hoverCreatureId = this.placementPreviewBuildingType || this.selectedBuildPartId ? null : this.getCreatureAt(position)?.id ?? null;\n    this.hoverBuildingId = this.placementPreviewBuildingType || this.selectedBuildPartId || this.hoverCreatureId ? null : this.getBuildingAt(position)?.id ?? null;\n    if (!this.placementPreviewBuildingType && !this.selectedBuildPartId) this.canvas.style.cursor = this.hoverCreatureId || this.hoverBuildingId ? "pointer" : "default";',
-  'pointermove build part branch',
+replaceRegex(
+  /  private handlePointerDown = \(event: PointerEvent\) => \{[\s\S]*?\n  \};\n  private handlePointerMove =/,
+  `  private handlePointerDown = (event: PointerEvent) => {
+    if (event.button !== 0) return;
+    const position = this.screenToWorld(event.clientX, event.clientY);
+    this.pointerWorldPosition = position;
+    if (this.selectedBuildPartId && !this.placementPreviewBuildingType) {
+      this.buildPartDragPointerId = event.pointerId;
+      this.buildPartDragPosition = position;
+      this.canvas.setPointerCapture(event.pointerId);
+      return;
+    }
+    if (this.placementPreviewBuildingType) {
+      this.placementDragStart = position;
+      this.placementPointerId = event.pointerId;
+      this.canvas.setPointerCapture(event.pointerId);
+      return;
+    }
+    const creature = this.getCreatureAt(position);
+    if (creature) { this.onWorldClick({ kind: "creature", creature }); this.emitPrimaryTap(); return; }
+    const building = this.getBuildingAt(position);
+    if (building) { this.onWorldClick({ kind: "building", building }); return; }
+    this.onWorldClick({ kind: "field", position, validity: this.getPlacementValidity(position) });
+  };
+  private handlePointerMove =`,
+  'pointerdown build part branch regex',
 );
 
-replaceOnce(
-  '  private handlePointerUp = (event: PointerEvent) => {\n    if (!this.placementPreviewBuildingType || this.placementPointerId !== event.pointerId) return;',
-  '  private handlePointerUp = (event: PointerEvent) => {\n    if (this.selectedBuildPartId && this.buildPartDragPointerId === event.pointerId) {\n      const position = this.screenToWorld(event.clientX, event.clientY);\n      this.pointerWorldPosition = position;\n      this.buildPartDragPointerId = null;\n      this.buildPartDragPosition = null;\n      this.canvas.releasePointerCapture(event.pointerId);\n      this.commitBuildPartPlacementFinal(position);\n      return;\n    }\n    if (!this.placementPreviewBuildingType || this.placementPointerId !== event.pointerId) return;',
-  'pointerup build part commit',
+replaceRegex(
+  /  private handlePointerMove = \(event: PointerEvent\) => \{[\s\S]*?\n  \};\n  private handlePointerUp =/,
+  `  private handlePointerMove = (event: PointerEvent) => {
+    const position = this.screenToWorld(event.clientX, event.clientY);
+    this.pointerWorldPosition = position;
+    if (this.buildPartDragPointerId === event.pointerId) this.buildPartDragPosition = position;
+    this.hoverCreatureId = this.placementPreviewBuildingType || this.selectedBuildPartId ? null : this.getCreatureAt(position)?.id ?? null;
+    this.hoverBuildingId = this.placementPreviewBuildingType || this.selectedBuildPartId || this.hoverCreatureId ? null : this.getBuildingAt(position)?.id ?? null;
+    if (!this.placementPreviewBuildingType && !this.selectedBuildPartId) this.canvas.style.cursor = this.hoverCreatureId || this.hoverBuildingId ? "pointer" : "default";
+  };
+  private handlePointerUp =`,
+  'pointermove build part branch regex',
 );
 
-replaceOnce(
-  '    if (this.placementPointerId === event.pointerId) {\n      this.placementDragStart = null;\n      this.placementPointerId = null;\n    }',
-  '    if (this.buildPartDragPointerId === event.pointerId) {\n      this.buildPartDragPointerId = null;\n      this.buildPartDragPosition = null;\n    }\n    if (this.placementPointerId === event.pointerId) {\n      this.placementDragStart = null;\n      this.placementPointerId = null;\n    }',
-  'pointercancel build part cleanup',
+replaceRegex(
+  /  private handlePointerUp = \(event: PointerEvent\) => \{[\s\S]*?\n  \};\n  private handlePointerCancel =/,
+  `  private handlePointerUp = (event: PointerEvent) => {
+    if (this.selectedBuildPartId && this.buildPartDragPointerId === event.pointerId) {
+      const position = this.screenToWorld(event.clientX, event.clientY);
+      this.pointerWorldPosition = position;
+      this.buildPartDragPointerId = null;
+      this.buildPartDragPosition = null;
+      try { this.canvas.releasePointerCapture(event.pointerId); } catch {}
+      this.commitBuildPartPlacementFinal(position);
+      return;
+    }
+    if (!this.placementPreviewBuildingType || this.placementPointerId !== event.pointerId) return;
+    const position = this.screenToWorld(event.clientX, event.clientY);
+    this.pointerWorldPosition = position;
+    this.placementDragStart = null;
+    this.placementPointerId = null;
+    try { this.canvas.releasePointerCapture(event.pointerId); } catch {}
+    this.commitPlacement(position);
+  };
+  private handlePointerCancel =`,
+  'pointerup build part commit regex',
+);
+
+replaceRegex(
+  /  private handlePointerCancel = \(event: PointerEvent\) => \{[\s\S]*?\n  \};\n  private handlePointerLeave =/,
+  `  private handlePointerCancel = (event: PointerEvent) => {
+    if (this.buildPartDragPointerId === event.pointerId) {
+      this.buildPartDragPointerId = null;
+      this.buildPartDragPosition = null;
+    }
+    if (this.placementPointerId === event.pointerId) {
+      this.placementDragStart = null;
+      this.placementPointerId = null;
+    }
+  };
+  private handlePointerLeave =`,
+  'pointercancel build part cleanup regex',
 );
 
 replaceRegex(
