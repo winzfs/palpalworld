@@ -23,6 +23,7 @@ export const ITEM_LABELS: Record<string, string> = {
   cooked_berry: "구운 열매",
   warm_meal: "따뜻한 식사",
   healing_salve: "회복 연고",
+  torch: "횃불",
 
   basic_axe: "기본 도끼",
   basic_pickaxe: "기본 곡괭이",
