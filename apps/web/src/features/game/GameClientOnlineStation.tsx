@@ -11,11 +11,18 @@ import type {
   WorldSnapshot,
 } from "@palpalworld/shared";
 import { GameScene, type GameSceneInput, type GameWorldScene, type WorldClickTarget } from "./GameScene";
+import { PixiGameCanvas } from "./pixi/PixiGameCanvas";
 
 type ConnectionState = "connecting" | "online" | "offline";
 
 const inputSendIntervalMs = 50;
 const equippedWeaponStorageKey = "palpalworld.demo.equippedWeaponItemId";
+const pixiStageFlagStorageKey = "palpalworld.dev.pixiStage";
+
+function readPixiStageEnabled() {
+  if (typeof window === "undefined") return false;
+  return window.localStorage.getItem(pixiStageFlagStorageKey) === "true";
+}
 
 function getRealtimeServerUrl() {
   return process.env.NEXT_PUBLIC_REALTIME_SERVER_URL ?? "http://localhost:4000";
@@ -145,14 +152,17 @@ export function GameClientOnlineStation() {
     }
   }, []);
 
+  const [pixiStageEnabled] = useState(readPixiStageEnabled);
+
   return (
-    <main className="game-online-shell">
+    <main className={`game-online-shell${pixiStageEnabled ? " game-shell--pixi-stage" : ""}`}>
       <GameScene
         onReady={handleSceneReady}
         onInputChange={handleInputChange}
         onInteract={handleInteract}
         onWorldClick={handleWorldClick}
       />
+      <PixiGameCanvas enabled={pixiStageEnabled} snapshot={snapshot} localPlayerId={localPlayerId ?? ""} />
     </main>
   );
 }
