@@ -19,6 +19,18 @@ function patchString(source, search, replacement, label) {
   return { text: source.replace(search, replacement), changed: true };
 }
 
+function patchRegex(source, regex, replacement, label) {
+  if (source.includes(replacement)) return { text: source, changed: false };
+  regex.lastIndex = 0;
+  if (!regex.test(source)) {
+    console.log(`[patch-pixi-stage-scaffold] skipped ${label}`);
+    return { text: source, changed: false };
+  }
+  regex.lastIndex = 0;
+  console.log(`[patch-pixi-stage-scaffold] patched ${label}`);
+  return { text: source.replace(regex, replacement), changed: true };
+}
+
 function appendCss(marker, block) {
   if (css.includes(marker)) return;
   css = `${css.trimEnd()}\n\n${block}\n`;
@@ -28,6 +40,12 @@ function appendCss(marker, block) {
 
 function applyClient(search, replacement, label) {
   const result = patchString(client, search, replacement, label);
+  client = result.text;
+  clientChanged ||= result.changed;
+}
+
+function applyClientRegex(regex, replacement, label) {
+  const result = patchRegex(client, regex, replacement, label);
   client = result.text;
   clientChanged ||= result.changed;
 }
@@ -67,12 +85,23 @@ applyClient(
   "Pixi stage toggle handler",
 );
 
-applyClient(
-  `      <GameScene onReady={handleSceneReady} onInputChange={handleInputChange} onInteract={handleDemoInteract} onWorldClick={handleWorldClick} placementBuildingType={placementBuildingType} />`,
-  `      <GameScene onReady={handleSceneReady} onInputChange={handleInputChange} onInteract={handleDemoInteract} onWorldClick={handleWorldClick} placementBuildingType={placementBuildingType} />
+if (!client.includes("<PixiGameCanvas enabled={pixiStageEnabled}")) {
+  applyClient(
+    `      <GameScene onReady={handleSceneReady} onInputChange={handleInputChange} onInteract={handleDemoInteract} onWorldClick={handleWorldClick} placementBuildingType={placementBuildingType} />`,
+    `      <GameScene onReady={handleSceneReady} onInputChange={handleInputChange} onInteract={handleDemoInteract} onWorldClick={handleWorldClick} placementBuildingType={placementBuildingType} />
       <PixiGameCanvas enabled={pixiStageEnabled} snapshot={snapshot} localPlayerId={demoPlayerId} />`,
-  "Pixi canvas scaffold render",
-);
+    "Pixi canvas scaffold render literal",
+  );
+}
+
+if (!client.includes("<PixiGameCanvas enabled={pixiStageEnabled}")) {
+  applyClientRegex(
+    /(\s+<GameScene\b[\s\S]*?\/>)/,
+    `$1
+      <PixiGameCanvas enabled={pixiStageEnabled} snapshot={snapshot} localPlayerId={demoPlayerId} />`,
+    "Pixi canvas scaffold render regex",
+  );
+}
 
 applyClient(
   `        <button className="hud-menu-button" onClick={() => { setMenuOpen((value) => !value); setInventoryOpen(false); setSelectedStationBuilding(null); setSelectedBuilding(null); }} aria-expanded={menuOpen}>☰ 메뉴</button>`,
