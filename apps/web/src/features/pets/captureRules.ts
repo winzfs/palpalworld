@@ -33,17 +33,18 @@ export function createCaptureMinigameConfig(creature: CreaturePublicState, orbIt
   const species = getPetSpeciesDefinition(creature.speciesId);
   const hpRatio = getCreatureHpRatio(creature);
   const lowHpBonus = Math.max(0, captureHpThreshold - hpRatio) * 0.45;
-  const difficultyScore = Math.max(0.25, Math.min(0.95, species.baseCaptureDifficulty + orbBonus[orbItemId] + lowHpBonus));
-  const zoneWidth = 0.14 + difficultyScore * 0.18;
+  const captureEase = Math.max(0.2, Math.min(0.98, species.baseCaptureDifficulty + orbBonus[orbItemId] + lowHpBonus));
+  const monsterDifficulty = 1 - Math.max(0, Math.min(1, species.baseCaptureDifficulty));
+  const zoneWidth = Math.max(0.085, Math.min(0.3, 0.105 + captureEase * 0.16 - monsterDifficulty * 0.08));
   const center = 0.5 + Math.sin(creature.id.length * 12.9898) * 0.22;
   const successStart = Math.max(0.08, Math.min(0.82, center - zoneWidth / 2));
-  const successEnd = Math.max(successStart + 0.08, Math.min(0.92, successStart + zoneWidth));
+  const successEnd = Math.max(successStart + 0.065, Math.min(0.92, successStart + zoneWidth));
 
   return {
-    cursorSpeed: 0.72 + (1 - difficultyScore) * 0.48,
+    cursorSpeed: 0.52 + (1 - captureEase) * 0.34,
     successStart,
     successEnd,
-    durationMs: 7000,
+    durationMs: 7800,
   };
 }
 
