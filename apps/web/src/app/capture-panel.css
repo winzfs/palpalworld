@@ -83,6 +83,8 @@
   border-radius: 999px;
   background: #fff7df;
   box-shadow: 0 0 12px rgb(255 247 223 / 0.85), 0 0 0 1px rgb(0 0 0 / 0.45);
+  will-change: left;
+  transition: left 0.055s linear;
 }
 
 .capture-minigame-card__footer {
