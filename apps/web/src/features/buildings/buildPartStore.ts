@@ -16,22 +16,42 @@ const buildPartStorageKey = "palpalworld.demo.buildParts";
 let syncChannel: RealtimeChannel | null = null;
 let syncStarted = false;
 
-function getRegionId(tile: MapTileRef) {
-  return `${tile.x}:${tile.y}`;
+type TileLike = MapTileRef & { x?: number; y?: number; tileX?: number; tileY?: number; regionId?: string };
+
+function getTileX(tile: TileLike) {
+  return typeof tile.tileX === "number" ? tile.tileX : typeof tile.x === "number" ? tile.x : 0;
+}
+
+function getTileY(tile: TileLike) {
+  return typeof tile.tileY === "number" ? tile.tileY : typeof tile.y === "number" ? tile.y : 0;
+}
+
+function getRegionId(tile: TileLike) {
+  return tile.regionId ?? "starter_meadow";
 }
 
 function clonePart(part: PlacedBuildPart): PlacedBuildPart {
   return { ...part };
 }
 
+function normalizePartTile(part: PlacedBuildPart): PlacedBuildPart {
+  return {
+    ...part,
+    regionId: part.regionId && part.regionId !== "undefined:undefined" ? part.regionId : "starter_meadow",
+    tileX: Number.isFinite(part.tileX) ? part.tileX : 0,
+    tileY: Number.isFinite(part.tileY) ? part.tileY : 0,
+  };
+}
+
 function createHouseId(tile: MapTileRef, ownerPlayerId: string) {
-  return `house-${ownerPlayerId}-${tile.x}-${tile.y}-${Date.now()}-${Math.floor(Math.random() * 1_000_000)}`;
+  const tileLike = tile as TileLike;
+  return `house-${ownerPlayerId}-${getRegionId(tileLike)}-${getTileX(tileLike)}-${getTileY(tileLike)}-${Date.now()}-${Math.floor(Math.random() * 1_000_000)}`;
 }
 
 function mergeBuildParts(localParts: PlacedBuildPart[], remoteParts: PlacedBuildPart[]) {
   const byId = new Map<string, PlacedBuildPart>();
-  for (const part of localParts) byId.set(part.id, clonePart(part));
-  for (const part of remoteParts) {
+  for (const part of localParts.map(normalizePartTile)) byId.set(part.id, clonePart(part));
+  for (const part of remoteParts.map(normalizePartTile)) {
     const current = byId.get(part.id);
     if (!current || part.updatedAt >= current.updatedAt) byId.set(part.id, clonePart(part));
   }
@@ -39,7 +59,8 @@ function mergeBuildParts(localParts: PlacedBuildPart[], remoteParts: PlacedBuild
 }
 
 function upsertLocalPart(parts: PlacedBuildPart[], part: PlacedBuildPart) {
-  return [...parts.filter((existing) => existing.id !== part.id), clonePart(part)];
+  const normalized = normalizePartTile(part);
+  return [...parts.filter((existing) => existing.id !== normalized.id), clonePart(normalized)];
 }
 
 export function readStoredBuildParts(): PlacedBuildPart[] {
@@ -48,14 +69,14 @@ export function readStoredBuildParts(): PlacedBuildPart[] {
     const raw = window.localStorage.getItem(buildPartStorageKey);
     if (!raw) return [];
     const parsed = JSON.parse(raw) as PlacedBuildPart[];
-    return Array.isArray(parsed) ? parsed.map(clonePart) : [];
+    return Array.isArray(parsed) ? parsed.map((part) => normalizePartTile(clonePart(part))) : [];
   } catch {
     return [];
   }
 }
 
 export function writeStoredBuildParts(parts: PlacedBuildPart[]) {
-  const next = parts.map(clonePart);
+  const next = parts.map((part) => normalizePartTile(clonePart(part)));
   if (typeof window !== "undefined") {
     window.localStorage.setItem(buildPartStorageKey, JSON.stringify(next));
     window.dispatchEvent(new CustomEvent("palpalworld:build-parts-changed", { detail: { parts: next } }));
@@ -66,7 +87,7 @@ export function writeStoredBuildParts(parts: PlacedBuildPart[]) {
 function syncUpsert(part: PlacedBuildPart) {
   const client = getBuildPartSyncClient();
   if (!client || !isBuildPartSyncEnabled()) return;
-  void upsertWorldBuildPart(client, part);
+  void upsertWorldBuildPart(client, normalizePartTile(part));
 }
 
 function syncDelete(partId: string) {
@@ -139,7 +160,7 @@ export function findNearestHouseId({
 function assignMissingHouseId(parts: PlacedBuildPart[], target: PlacedBuildPart, currentTile: MapTileRef, ownerPlayerId: string) {
   const houseId = createHouseId(currentTile, ownerPlayerId);
   const now = Date.now();
-  const updatedTarget = { ...target, houseId, updatedAt: now };
+  const updatedTarget = normalizePartTile({ ...target, houseId, updatedAt: now });
   const next = parts.map((part) => part.id === target.id ? updatedTarget : part);
   writeStoredBuildParts(next);
   syncUpsert(updatedTarget);
@@ -169,15 +190,19 @@ export function createPlacedBuildPart({
 }): PlacedBuildPart {
   const definition = BUILD_PARTS[partId];
   const now = Date.now();
+  const tile = currentTile as TileLike;
+  const tileX = getTileX(tile);
+  const tileY = getTileY(tile);
+  const regionId = getRegionId(tile);
   const resolvedHouseId = houseId ?? findNearestHouseId({ parts: existingParts, currentTile, ownerPlayerId, gridX, gridY }) ?? createHouseId(currentTile, ownerPlayerId);
   return {
-    id: `build-part-${partId}-${currentTile.x}-${currentTile.y}-${gridX}-${gridY}-${floorLevel}-${now}-${Math.floor(Math.random() * 1_000_000)}`,
+    id: `build-part-${partId}-${regionId}-${tileX}-${tileY}-${gridX}-${gridY}-${floorLevel}-${now}-${Math.floor(Math.random() * 1_000_000)}`,
     houseId: resolvedHouseId,
     partId,
     ownerPlayerId,
-    regionId: getRegionId(currentTile),
-    tileX: currentTile.x,
-    tileY: currentTile.y,
+    regionId,
+    tileX,
+    tileY,
     gridX,
     gridY,
     floorLevel,
@@ -191,7 +216,11 @@ export function createPlacedBuildPart({
 }
 
 export function getBuildPartsForTile(parts: PlacedBuildPart[], tile: MapTileRef) {
-  return parts.filter((part) => part.tileX === tile.x && part.tileY === tile.y);
+  const tileLike = tile as TileLike;
+  const tileX = getTileX(tileLike);
+  const tileY = getTileY(tileLike);
+  const regionId = getRegionId(tileLike);
+  return parts.map(normalizePartTile).filter((part) => part.regionId === regionId && part.tileX === tileX && part.tileY === tileY);
 }
 
 export function getBuildPartsForHouse(parts: PlacedBuildPart[], houseId: string | null | undefined) {
@@ -201,7 +230,7 @@ export function getBuildPartsForHouse(parts: PlacedBuildPart[], houseId: string 
 
 export function upsertBuildPart(part: PlacedBuildPart) {
   const current = readStoredBuildParts();
-  const updated = { ...part, updatedAt: Date.now() };
+  const updated = normalizePartTile({ ...part, updatedAt: Date.now() });
   const next = upsertLocalPart(current, updated);
   syncUpsert(updated);
   return writeStoredBuildParts(next);
@@ -213,7 +242,7 @@ export function moveBuildPart(partId: string, gridX: number, gridY: number, floo
   let updatedPart: PlacedBuildPart | null = null;
   const next = current.map((part) => {
     if (part.id !== partId) return part;
-    updatedPart = { ...part, gridX, gridY, floorLevel: floorLevel ?? part.floorLevel, updatedAt: now };
+    updatedPart = normalizePartTile({ ...part, gridX, gridY, floorLevel: floorLevel ?? part.floorLevel, updatedAt: now });
     return updatedPart;
   });
   if (updatedPart) syncUpsert(updatedPart);
@@ -226,7 +255,7 @@ export function rotatePlacedBuildPart(partId: string, rotation: BuildPartRotatio
   let updatedPart: PlacedBuildPart | null = null;
   const next = current.map((part) => {
     if (part.id !== partId) return part;
-    updatedPart = { ...part, rotation, updatedAt: now };
+    updatedPart = normalizePartTile({ ...part, rotation, updatedAt: now });
     return updatedPart;
   });
   if (updatedPart) syncUpsert(updatedPart);
@@ -241,7 +270,7 @@ export function toggleBuildDoorOpen(partId: string) {
     if (part.id !== partId) return part;
     const definition = BUILD_PARTS[part.partId];
     if (definition?.category !== "door") return part;
-    updatedPart = { ...part, isOpen: !part.isOpen, updatedAt: now };
+    updatedPart = normalizePartTile({ ...part, isOpen: !part.isOpen, updatedAt: now });
     return updatedPart;
   });
   if (updatedPart) syncUpsert(updatedPart);
