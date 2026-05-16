@@ -49,8 +49,22 @@ const pixiStageFlagStorageKey = "palpalworld.dev.pixiStage";`,
 applyClient(
   `  const [minimapSize, setMinimapSize] = useState<MiniMapSize>("medium");`,
   `  const [minimapSize, setMinimapSize] = useState<MiniMapSize>("medium");
-  const [pixiStageEnabled] = useState(() => typeof window !== "undefined" && window.localStorage.getItem(pixiStageFlagStorageKey) === "true");`,
+  const [pixiStageEnabled, setPixiStageEnabled] = useState(() => typeof window !== "undefined" && window.localStorage.getItem(pixiStageFlagStorageKey) === "true");`,
   "Pixi stage flag state",
+);
+
+applyClient(
+  `  const handleSceneReady = useCallback((scene: GameWorldScene) => { sceneRef.current = scene; }, []);`,
+  `  const handleTogglePixiStage = useCallback(() => {
+    if (typeof window === "undefined") return;
+    const nextEnabled = !pixiStageEnabled;
+    if (nextEnabled) window.localStorage.setItem(pixiStageFlagStorageKey, "true");
+    else window.localStorage.removeItem(pixiStageFlagStorageKey);
+    setPixiStageEnabled(nextEnabled);
+    window.setTimeout(() => window.location.reload(), 80);
+  }, [pixiStageEnabled]);
+  const handleSceneReady = useCallback((scene: GameWorldScene) => { sceneRef.current = scene; }, []);`,
+  "Pixi stage toggle handler",
 );
 
 applyClient(
@@ -58,6 +72,13 @@ applyClient(
   `      <GameScene onReady={handleSceneReady} onInputChange={handleInputChange} onInteract={handleDemoInteract} onWorldClick={handleWorldClick} placementBuildingType={placementBuildingType} />
       <PixiGameCanvas enabled={pixiStageEnabled} snapshot={snapshot} localPlayerId={demoPlayerId} />`,
   "Pixi canvas scaffold render",
+);
+
+applyClient(
+  `        <button className="hud-menu-button" onClick={() => { setMenuOpen((value) => !value); setInventoryOpen(false); setSelectedStationBuilding(null); setSelectedBuilding(null); }} aria-expanded={menuOpen}>☰ 메뉴</button>`,
+  `        <button className="hud-menu-button" onClick={() => { setMenuOpen((value) => !value); setInventoryOpen(false); setSelectedStationBuilding(null); setSelectedBuilding(null); }} aria-expanded={menuOpen}>☰ 메뉴</button>
+        <button className={pixiStageEnabled ? "hud-pixi-toggle hud-pixi-toggle--on" : "hud-pixi-toggle"} onClick={handleTogglePixiStage} aria-pressed={pixiStageEnabled}>{pixiStageEnabled ? "Pixi ON" : "Pixi OFF"}</button>`,
+  "Pixi toggle button",
 );
 
 appendCss("pixi stage scaffold", `/* pixi stage scaffold */
@@ -78,6 +99,46 @@ appendCss("pixi stage scaffold", `/* pixi stage scaffold */
   display: block;
   width: 100%;
   height: 100%;
+}
+
+.hud-pixi-toggle {
+  pointer-events: auto;
+  position: absolute;
+  left: calc(188px + var(--safe-left));
+  top: calc(12px + var(--safe-top));
+  z-index: 18;
+  min-height: 42px;
+  padding: 8px 12px;
+  border: 2px solid rgb(167 139 250 / 0.42);
+  border-radius: 999px;
+  background: rgb(46 16 101 / 0.58);
+  color: #ede9fe;
+  font-size: 12px;
+  font-weight: 950;
+  box-shadow: 0 8px 22px rgb(0 0 0 / 0.28), inset 0 0 0 1px rgb(255 255 255 / 0.08);
+  backdrop-filter: blur(8px);
+  cursor: pointer;
+}
+
+.hud-pixi-toggle--on {
+  border-color: rgb(34 211 238 / 0.56);
+  background: rgb(8 47 73 / 0.68);
+  color: #cffafe;
+}
+
+.hud-pixi-toggle:active {
+  transform: translateY(1px) scale(0.98);
+}
+
+@media (max-width: 720px) {
+  .hud-pixi-toggle {
+    left: calc(176px + var(--safe-left));
+    top: calc(8px + var(--safe-top));
+    min-height: 34px;
+    padding: 5px 9px;
+    border-width: 1px;
+    font-size: 10px;
+  }
 }`);
 
 if (clientChanged) fs.writeFileSync(clientPath, client);
