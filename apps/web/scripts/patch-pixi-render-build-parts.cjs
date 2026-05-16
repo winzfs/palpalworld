@@ -28,7 +28,7 @@ if (!source.includes('PlacedBuildPart')) {
 if (!source.includes('type PixiBuildPartNode =')) {
   replaceOnce(
     'type PixiBuildingNode = { container: PixiContainer; graphics: PixiGraphics; lastSeenFrame: number };',
-    'type PixiBuildingNode = { container: PixiContainer; graphics: PixiGraphics; lastSeenFrame: number };\ntype PixiBuildPartNode = { container: PixiContainer; graphics: PixiGraphics; lastSeenFrame: number };\ntype PixiBuildPartPreview = { partId: BuildPartId; position: { x: number; y: number }; rotation: BuildPartRotation; floorLevel: BuildFloorLevel; valid: boolean };\ntype PixiBuildPartsState = { parts: PlacedBuildPart[]; selectedPartId?: string | null; selectedHouseId?: string | null; preview?: PixiBuildPartPreview | null };\ntype PixiBuildPartsEvent = CustomEvent<PixiBuildPartsState>;',
+    'type PixiBuildingNode = { container: PixiContainer; graphics: PixiGraphics; lastSeenFrame: number };\ntype PixiBuildPartNode = { container: PixiContainer; graphics: PixiGraphics; lastSeenFrame: number };\ntype PixiBuildPartPreview = { partId: BuildPartId; position: { x: number; y: number }; gridX?: number; gridY?: number; rotation: BuildPartRotation; floorLevel: BuildFloorLevel; valid: boolean };\ntype PixiBuildPartsState = { parts: PlacedBuildPart[]; selectedPartId?: string | null; selectedHouseId?: string | null; preview?: PixiBuildPartPreview | null };\ntype PixiBuildPartsEvent = CustomEvent<PixiBuildPartsState>;',
     'build part node types',
   );
 }
@@ -157,7 +157,7 @@ function upsertPixiBuildPartNodes(PIXI: NonNullable<Window['PIXI']>, layer: Pixi
     const iso = buildGridToIsoCenter(part.gridX, part.gridY);
     node.lastSeenFrame = frameId;
     node.container.visible = true;
-    node.container.zIndex = iso.y + part.floorLevel * 200 + (definition.layer === 'roof' ? 120 : definition.layer === 'wall' ? 80 : 0);
+    node.container.zIndex = iso.y + part.floorLevel * 96 + (definition.layer === 'roof' ? 48 : definition.layer === 'wall' ? 24 : 0);
     node.container.position?.set(iso.x, iso.y);
     node.graphics.clear();
     drawPixiBuildPartAtOrigin(node.graphics, part, { selected: state.selectedPartId === part.id, houseSelected: Boolean(state.selectedHouseId && part.houseId === state.selectedHouseId) });
@@ -166,8 +166,8 @@ function upsertPixiBuildPartNodes(PIXI: NonNullable<Window['PIXI']>, layer: Pixi
   if (state.preview) {
     const previewId = '__preview_build_part__';
     const preview = state.preview;
-    const gridX = Math.round(preview.position.x / BUILD_GRID_SIZE);
-    const gridY = Math.round(preview.position.y / BUILD_GRID_SIZE);
+    const gridX = typeof preview.gridX === 'number' ? preview.gridX : Math.round(preview.position.x / BUILD_GRID_SIZE);
+    const gridY = typeof preview.gridY === 'number' ? preview.gridY : Math.round(preview.position.y / BUILD_GRID_SIZE);
     const previewPart: PlacedBuildPart = { id: previewId, partId: preview.partId, ownerPlayerId: 'preview', regionId: 'preview', tileX: 0, tileY: 0, gridX, gridY, floorLevel: preview.floorLevel, rotation: preview.rotation, hp: 1, maxHp: 1, createdAt: 0, updatedAt: 0 };
     let node = nodes.get(previewId);
     if (!node) {
@@ -181,7 +181,7 @@ function upsertPixiBuildPartNodes(PIXI: NonNullable<Window['PIXI']>, layer: Pixi
     const iso = buildGridToIsoCenter(previewPart.gridX, previewPart.gridY);
     node.lastSeenFrame = frameId;
     node.container.visible = true;
-    node.container.zIndex = iso.y + 10000;
+    node.container.zIndex = iso.y + 96;
     node.container.position?.set(iso.x, iso.y);
     node.graphics.clear();
     drawPixiBuildPartAtOrigin(node.graphics, previewPart, { preview: true, valid: preview.valid });
@@ -222,10 +222,10 @@ if (!source.includes('palpalworld:pixi-build-parts')) {
   );
 }
 
-if (!source.includes('upsertPixiBuildPartNodes(PIXI, layers.buildingsFront')) {
+if (!source.includes('upsertPixiBuildPartNodes(PIXI, layers.buildingsBack')) {
   replaceOnce(
     '        upsertPixiBuildingNodes(PIXI, layers.buildingsBack, buildingNodesRef.current, drawableBuildings, frameId);',
-    '        upsertPixiBuildingNodes(PIXI, layers.buildingsBack, buildingNodesRef.current, drawableBuildings, frameId);\n        upsertPixiBuildPartNodes(PIXI, layers.buildingsFront, buildPartNodesRef.current, buildPartsStateRef.current, frameId);',
+    '        upsertPixiBuildingNodes(PIXI, layers.buildingsBack, buildingNodesRef.current, drawableBuildings, frameId);\n        upsertPixiBuildPartNodes(PIXI, layers.buildingsBack, buildPartNodesRef.current, buildPartsStateRef.current, frameId);',
     'build part upsert call',
   );
 }
