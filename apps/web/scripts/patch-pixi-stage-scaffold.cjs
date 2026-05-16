@@ -40,10 +40,24 @@ import { PixiGameCanvas } from "./pixi/PixiGameCanvas";`,
 );
 
 applyClient(
+  `const mountedPetStorageKey = "palpalworld.demo.mountedPetItemId";`,
+  `const mountedPetStorageKey = "palpalworld.demo.mountedPetItemId";
+const pixiStageFlagStorageKey = "palpalworld.dev.pixiStage";`,
+  "Pixi stage flag key",
+);
+
+applyClient(
+  `  const [minimapSize, setMinimapSize] = useState<MiniMapSize>("medium");`,
+  `  const [minimapSize, setMinimapSize] = useState<MiniMapSize>("medium");
+  const [pixiStageEnabled] = useState(() => typeof window !== "undefined" && window.localStorage.getItem(pixiStageFlagStorageKey) === "true");`,
+  "Pixi stage flag state",
+);
+
+applyClient(
   `      <GameScene onReady={handleSceneReady} onInputChange={handleInputChange} onInteract={handleDemoInteract} onWorldClick={handleWorldClick} placementBuildingType={placementBuildingType} />`,
   `      <GameScene onReady={handleSceneReady} onInputChange={handleInputChange} onInteract={handleDemoInteract} onWorldClick={handleWorldClick} placementBuildingType={placementBuildingType} />
-      <PixiGameCanvas enabled={false} snapshot={snapshot} localPlayerId={demoPlayerId} />`,
-  "disabled Pixi canvas scaffold render",
+      <PixiGameCanvas enabled={pixiStageEnabled} snapshot={snapshot} localPlayerId={demoPlayerId} />`,
+  "Pixi canvas scaffold render",
 );
 
 appendCss("pixi stage scaffold", `/* pixi stage scaffold */
@@ -51,7 +65,7 @@ appendCss("pixi stage scaffold", `/* pixi stage scaffold */
   pointer-events: none;
   position: absolute;
   inset: 0;
-  z-index: 2;
+  z-index: 7;
   display: none;
   overflow: hidden;
 }
