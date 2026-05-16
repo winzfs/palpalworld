@@ -63,14 +63,13 @@ export function PixiGameCanvas({ enabled = false, snapshot, localPlayerId }: Pix
 
         debugCross.clear();
         if (!localPlayer) return;
-        debugCross.lineStyle(2, 0x60a5fa, 0.7);
         debugCross.moveTo(localPlayer.position.x - 14, localPlayer.position.y);
         debugCross.lineTo(localPlayer.position.x + 14, localPlayer.position.y);
         debugCross.moveTo(localPlayer.position.x, localPlayer.position.y - 14);
         debugCross.lineTo(localPlayer.position.x, localPlayer.position.y + 14);
-        debugCross.beginFill(0x60a5fa, 0.12);
-        debugCross.drawCircle(localPlayer.position.x, localPlayer.position.y, 24);
-        debugCross.endFill();
+        debugCross.stroke({ width: 2, color: 0x60a5fa, alpha: 0.7 });
+        debugCross.circle(localPlayer.position.x, localPlayer.position.y, 24);
+        debugCross.fill({ color: 0x60a5fa, alpha: 0.12 });
       });
 
       cleanup = () => {
