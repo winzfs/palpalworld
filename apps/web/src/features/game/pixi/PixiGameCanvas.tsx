@@ -34,6 +34,7 @@ declare global {
 type RemotePlayersEvent = CustomEvent<{ players?: PlayerPublicState[] }>;
 type PixiGraphics = InstanceType<NonNullable<Window["PIXI"]>["Graphics"]>;
 type PixiTransformNode = { position: { set: (x: number, y: number) => void }; scale: { set: (value: number) => void } };
+type SmoothedRemotePlayer = { player: PlayerPublicState; x: number; y: number; lastSeenAt: number };
 
 export type PixiGameCanvasProps = {
   enabled?: boolean;
@@ -42,6 +43,9 @@ export type PixiGameCanvasProps = {
 };
 
 const pixiCdnUrl = "https://cdn.jsdelivr.net/npm/pixi.js@8.14.3/dist/pixi.min.js";
+const remoteLerpFactor = 0.22;
+const remoteSnapDistance = 420;
+const remoteStaleMs = 3500;
 let pixiLoaderPromise: Promise<NonNullable<Window["PIXI"]>> | null = null;
 
 function loadPixiRuntime() {
@@ -94,6 +98,40 @@ function getDirectionOffset(direction: Direction | undefined) {
     case "down":
     default: return { x: 0, y: 1 };
   }
+}
+
+function lerp(current: number, target: number, factor: number) {
+  return current + (target - current) * factor;
+}
+
+function clonePlayerWithPosition(player: PlayerPublicState, x: number, y: number): PlayerPublicState {
+  return { ...player, position: { x, y } };
+}
+
+function updateSmoothedRemotePlayers(remotePlayers: PlayerPublicState[], smoothMap: Map<string, SmoothedRemotePlayer>, now: number) {
+  const liveIds = new Set<string>();
+
+  for (const player of remotePlayers) {
+    liveIds.add(player.id);
+    const previous = smoothMap.get(player.id);
+    if (!previous || !isSamePlayerTile(previous.player, player)) {
+      smoothMap.set(player.id, { player, x: player.position.x, y: player.position.y, lastSeenAt: now });
+      continue;
+    }
+
+    const dx = player.position.x - previous.x;
+    const dy = player.position.y - previous.y;
+    const distance = Math.hypot(dx, dy);
+    const nextX = distance > remoteSnapDistance ? player.position.x : lerp(previous.x, player.position.x, remoteLerpFactor);
+    const nextY = distance > remoteSnapDistance ? player.position.y : lerp(previous.y, player.position.y, remoteLerpFactor);
+    smoothMap.set(player.id, { player, x: nextX, y: nextY, lastSeenAt: now });
+  }
+
+  for (const [playerId, cached] of smoothMap.entries()) {
+    if (!liveIds.has(playerId) && now - cached.lastSeenAt > remoteStaleMs) smoothMap.delete(playerId);
+  }
+
+  return Array.from(smoothMap.values()).map((cached) => clonePlayerWithPosition(cached.player, cached.x, cached.y));
 }
 
 function drawPixiCharacter(graphics: PixiGraphics, player: PlayerPublicState, isLocal: boolean) {
@@ -189,6 +227,7 @@ export function PixiGameCanvas({ enabled = false, snapshot, localPlayerId }: Pix
   const snapshotRef = useRef<WorldSnapshot | null>(snapshot);
   const localPlayerIdRef = useRef(localPlayerId);
   const remotePlayersRef = useRef<PlayerPublicState[]>([]);
+  const smoothedRemotePlayersRef = useRef(new Map<string, SmoothedRemotePlayer>());
 
   useEffect(() => {
     snapshotRef.current = snapshot;
@@ -242,6 +281,7 @@ export function PixiGameCanvas({ enabled = false, snapshot, localPlayerId }: Pix
       app.ticker.add(() => {
         const currentSnapshot = snapshotRef.current;
         const localPlayer = currentSnapshot?.players.find((player) => player.id === localPlayerIdRef.current);
+        const now = Date.now();
         if (localPlayer) centerPixiCameraOn(camera, localPlayer.position);
         const root = layers.root as unknown as PixiTransformNode;
         root.position.set(-camera.x * camera.zoom, -camera.y * camera.zoom);
@@ -251,9 +291,10 @@ export function PixiGameCanvas({ enabled = false, snapshot, localPlayerId }: Pix
         lighting.scale.set(1);
 
         playerGraphics.clear();
+        const smoothRemotePlayers = updateSmoothedRemotePlayers(remotePlayersRef.current, smoothedRemotePlayersRef.current, now);
         const drawablePlayers = [
           ...(localPlayer ? [{ player: localPlayer, isLocal: true }] : []),
-          ...remotePlayersRef.current
+          ...smoothRemotePlayers
             .filter((remotePlayer) => remotePlayer.id !== localPlayerIdRef.current)
             .filter((remotePlayer) => !localPlayer || isSamePlayerTile(localPlayer, remotePlayer))
             .map((remotePlayer) => ({ player: remotePlayer, isLocal: false })),
