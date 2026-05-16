@@ -1,7 +1,10 @@
-import type { InventoryState } from "@palpalworld/shared";
+import type { InventoryState, ItemStack } from "@palpalworld/shared";
 import { useEffect, useMemo, useState } from "react";
+import { getBuildPart } from "../buildings/buildPartCatalog";
+import { getProgressionBuildingByItemId, getProgressionRecipe } from "../crafting/progressionCatalog";
+import { getItemLabel } from "../items/itemLabels";
 import { getPetItemLabel } from "../pets/petInventory";
-import { readStoredInventory, removeInventoryStack, writeStoredInventory } from "./inventoryStore";
+import { addInventoryStack, readStoredInventory, removeInventoryStack, writeStoredInventory } from "./inventoryStore";
 import {
   buildInventoryEntries,
   findInventoryEntryByKey,
@@ -32,6 +35,42 @@ function EntryIcon({ entry }: { entry: InventoryEntry }) {
   return <span className="inventory-grid-slot__fallback">?</span>;
 }
 
+function compactRefunds(refunds: ItemStack[]) {
+  const merged = new Map<string, number>();
+  for (const refund of refunds) {
+    if (refund.amount <= 0) continue;
+    merged.set(refund.itemId, (merged.get(refund.itemId) ?? 0) + refund.amount);
+  }
+  return [...merged.entries()].map(([itemId, amount]) => ({ itemId, amount }));
+}
+
+function halfRefund(costs: ItemStack[], outputAmount = 1) {
+  const divisor = Math.max(1, outputAmount);
+  return compactRefunds(costs.map((cost) => ({
+    itemId: cost.itemId,
+    amount: Math.max(1, Math.floor((cost.amount / divisor) * 0.5)),
+  })));
+}
+
+function getDismantleRefunds(entry: InventoryEntry): ItemStack[] {
+  if (entry.category === "pet") return [];
+
+  const buildPart = getBuildPart(entry.itemId);
+  if (buildPart) return halfRefund(buildPart.cost);
+
+  const building = getProgressionBuildingByItemId(entry.itemId);
+  if (building) return halfRefund(building.requires);
+
+  const recipe = getProgressionRecipe(entry.itemId);
+  if (!recipe) return [];
+  const output = recipe.outputs.find((nextOutput) => nextOutput.itemId === entry.itemId);
+  return halfRefund(recipe.inputs, output?.amount ?? 1);
+}
+
+function getRefundSummary(refunds: ItemStack[]) {
+  return refunds.map((refund) => `${getItemLabel(refund.itemId)} ${refund.amount}`).join(" · ");
+}
+
 export function InventoryGridPanel({
   inventory,
   quickSlots,
@@ -58,6 +97,7 @@ export function InventoryGridPanel({
   const filteredEntries = entries.filter((entry) => entry.category === category);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const selectedEntry = entries.find((entry) => entry.key === selectedKey) ?? filteredEntries[0] ?? null;
+  const selectedRefunds = selectedEntry ? getDismantleRefunds(selectedEntry) : [];
   const visibleSlots = Array.from({ length: Math.max(gridSlotCount, Math.ceil(filteredEntries.length / 6) * 6 || gridSlotCount) }, (_, index) => filteredEntries[index] ?? null);
 
   useEffect(() => {
@@ -87,6 +127,20 @@ export function InventoryGridPanel({
     }
     const base = readStoredInventory(inventory ?? undefined);
     writeStoredInventory(removeInventoryStack(base, itemId, 1));
+    setSelectedKey(null);
+  };
+
+  const handleDismantle = (entry: InventoryEntry) => {
+    const refunds = getDismantleRefunds(entry);
+    if (refunds.length <= 0) return;
+
+    const base = readStoredInventory(inventory ?? undefined);
+    const withoutItem = entry.kind === "instance" && entry.instanceId
+      ? { ...base, itemInstances: base.itemInstances.filter((item) => item.instanceId !== entry.instanceId) }
+      : removeInventoryStack(base, entry.itemId, 1);
+    const nextInventory = refunds.reduce((next, refund) => addInventoryStack(next, refund.itemId, refund.amount), withoutItem);
+
+    writeStoredInventory(nextInventory);
     setSelectedKey(null);
   };
 
@@ -155,6 +209,10 @@ export function InventoryGridPanel({
                     <button onClick={() => handleReleasePet(selectedEntry.itemId)}>방생</button>
                   </>
                 ) : null}
+                {selectedRefunds.length > 0 ? (
+                  <button className="inventory-detail-card__dismantle" onClick={() => handleDismantle(selectedEntry)} title={`환급: ${getRefundSummary(selectedRefunds)}`}>분해</button>
+                ) : null}
+                {selectedRefunds.length > 0 ? <span className="inventory-detail-card__hint">분해 환급: {getRefundSummary(selectedRefunds)}</span> : null}
                 {selectedEntry.quickSlotEligible ? (
                   <div className="inventory-quick-assign inventory-quick-assign--icons">
                     <span>퀵슬롯 등록</span>
