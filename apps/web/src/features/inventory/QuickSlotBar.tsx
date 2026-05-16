@@ -1,5 +1,5 @@
 import type { EquipmentState, InventoryState } from "@palpalworld/shared";
-import { useCallback, useEffect, useRef, useState, type PointerEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type MouseEvent, type PointerEvent } from "react";
 import { createEmptyEquipment, equipItemInstance, findItemInstance, getEquipmentSlotForItemId, isEquippableItemId } from "../equipment/equipmentRules";
 import { getPetItemLabel, isPetItemId } from "../pets/petInventory";
 import { findInventoryEntryByKey } from "./inventoryUiModel";
@@ -120,14 +120,14 @@ export function QuickSlotBar({
     useSlot(slotIndex, entryKey);
   }, [useSlot]);
 
-  const handleQuickSlotClick = useCallback((event: React.MouseEvent<HTMLButtonElement>, slotIndex: number, entryKey: string | null) => {
+  const handleQuickSlotClick = useCallback((event: MouseEvent<HTMLButtonElement>, slotIndex: number, entryKey: string | null) => {
     event.preventDefault();
     event.stopPropagation();
     if (performance.now() - lastPointerUseAtRef.current < 350) return;
     useSlot(slotIndex, entryKey);
   }, [useSlot]);
 
-  const handleDismount = useCallback((event?: PointerEvent<HTMLButtonElement> | React.MouseEvent<HTMLButtonElement>) => {
+  const handleDismount = useCallback((event?: PointerEvent<HTMLButtonElement> | MouseEvent<HTMLButtonElement>) => {
     event?.preventDefault();
     event?.stopPropagation();
     persistMountedPet(null);
