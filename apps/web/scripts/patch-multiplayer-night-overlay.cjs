@@ -137,8 +137,8 @@ applyOverlay(
 );
 
 applyOverlay(
-  `          <div key={player.id} className={\`multiplayer-player ${mountedPet ? "multiplayer-player--mounted" : ""} ${mountedPet?.flying ? "multiplayer-player--flying-mounted" : ""}\`} style={{ left, top }}>`,
-  `          <div key={player.id} className={\`multiplayer-player ${mountedPet ? "multiplayer-player--mounted" : ""} ${mountedPet?.flying ? "multiplayer-player--flying-mounted" : ""} ${hasTorch ? "multiplayer-player--torch" : ""}\`} style={{ left, top }}>`,
+  '          <div key={player.id} className={`multiplayer-player ${mountedPet ? "multiplayer-player--mounted" : ""} ${mountedPet?.flying ? "multiplayer-player--flying-mounted" : ""}`} style={{ left, top }}>',
+  '          <div key={player.id} className={`multiplayer-player ${mountedPet ? "multiplayer-player--mounted" : ""} ${mountedPet?.flying ? "multiplayer-player--flying-mounted" : ""} ${hasTorch ? "multiplayer-player--torch" : ""}`} style={{ left, top }}>',
   "remote torch class",
 );
 
