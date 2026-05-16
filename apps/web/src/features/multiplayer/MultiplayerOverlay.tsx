@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type PointerEvent } from "react";
-import type { BuildingState, CreaturePublicState, PlayerPublicState, ResourceNodeState, WorldSnapshot } from "@palpalworld/shared";
+import type { BuildingState, PlayerPublicState, ResourceNodeState, WorldSnapshot } from "@palpalworld/shared";
 import { MAP_TILE_SIZE, isSameTile, type MapTileRef } from "../../../../../packages/shared/src/worldTiles";
 import { getPetSpeciesDefinition, isFlyingPetSpecies } from "../pets/petCatalog";
 import {
@@ -24,8 +24,6 @@ import {
   dispatchRemoteCreatureState,
   fetchWorldCreatures,
   subscribeWorldCreatures,
-  upsertWorldCreatures,
-  type WorldCreatureRow,
 } from "./supabaseWorldCreatures";
 import {
   dispatchRemoteResourceState,
@@ -46,34 +44,11 @@ import {
 type WorldSnapshotEvent = CustomEvent<{ snapshot?: WorldSnapshot; localPlayerId?: string | null }>;
 type BuildingDismantledEvent = CustomEvent<{ buildingId?: string; building?: BuildingState }>;
 
-type CameraState = {
-  width: number;
-  height: number;
-  cameraX: number;
-  cameraY: number;
-  currentTile: MapTileRef;
-};
-
+type CameraState = { width: number; height: number; cameraX: number; cameraY: number; currentTile: MapTileRef };
 type ChatPanelPosition = { x: number; y: number };
-type ChatPanelDragState = {
-  pointerId: number;
-  startX: number;
-  startY: number;
-  panelX: number;
-  panelY: number;
-};
-
-type SmoothRemotePlayer = {
-  player: PlayerPublicState;
-  lastSeenAt: number;
-};
-
-type MultiplayerMountedPetInfo = {
-  itemId: string;
-  speciesId: string;
-  label: string;
-  flying: boolean;
-};
+type ChatPanelDragState = { pointerId: number; startX: number; startY: number; panelX: number; panelY: number };
+type SmoothRemotePlayer = { player: PlayerPublicState; lastSeenAt: number };
+type MultiplayerMountedPetInfo = { itemId: string; speciesId: string; label: string; flying: boolean };
 
 const emotes = ["👋", "❤️", "⚔️", "🆘"];
 const chatBubbleVisibleMs = 12_000;
@@ -86,16 +61,8 @@ const chatPanelCollapsedWidth = 210;
 const chatPanelExpandedHeight = 226;
 const chatPanelCollapsedHeight = 48;
 
-function readMountedPetItemId() {
-  if (typeof window === "undefined") return null;
-  return window.localStorage.getItem(mountedPetStorageKey);
-}
-
-function readPixiStageEnabled() {
-  if (typeof window === "undefined") return false;
-  return window.localStorage.getItem(pixiStageFlagStorageKey) === "true";
-}
-
+function readMountedPetItemId() { if (typeof window === "undefined") return null; return window.localStorage.getItem(mountedPetStorageKey); }
+function readPixiStageEnabled() { if (typeof window === "undefined") return false; return window.localStorage.getItem(pixiStageFlagStorageKey) === "true"; }
 function getMountedPetInfo(player: PlayerPublicState): MultiplayerMountedPetInfo | null {
   const mountedPetItemId = (player as PlayerPublicState & { mountedPetItemId?: string | null }).mountedPetItemId;
   if (!mountedPetItemId?.startsWith("pet_")) return null;
@@ -103,60 +70,27 @@ function getMountedPetInfo(player: PlayerPublicState): MultiplayerMountedPetInfo
   const species = getPetSpeciesDefinition(speciesId);
   return { itemId: mountedPetItemId, speciesId, label: species.name, flying: isFlyingPetSpecies(speciesId) };
 }
-
-function getViewportSize() {
-  if (typeof window === "undefined") return { width: 1280, height: 720 };
-  return { width: window.innerWidth, height: window.innerHeight };
-}
-
-function cloneRemotePlayer(player: PlayerPublicState): PlayerPublicState {
-  return {
-    ...player,
-    position: { x: player.position.x, y: player.position.y },
-    currentTile: { ...(player.currentTile as MapTileRef) },
-  } as PlayerPublicState;
-}
-
-function distanceBetweenPlayers(a: PlayerPublicState, b: PlayerPublicState) {
-  return Math.hypot(a.position.x - b.position.x, a.position.y - b.position.y);
-}
-
+function getViewportSize() { if (typeof window === "undefined") return { width: 1280, height: 720 }; return { width: window.innerWidth, height: window.innerHeight }; }
+function cloneRemotePlayer(player: PlayerPublicState): PlayerPublicState { return { ...player, position: { x: player.position.x, y: player.position.y }, currentTile: { ...(player.currentTile as MapTileRef) } } as PlayerPublicState; }
+function distanceBetweenPlayers(a: PlayerPublicState, b: PlayerPublicState) { return Math.hypot(a.position.x - b.position.x, a.position.y - b.position.y); }
 function interpolateRemotePlayer(current: PlayerPublicState, target: PlayerPublicState) {
   const currentTile = current.currentTile as MapTileRef;
   const targetTile = target.currentTile as MapTileRef;
-  if (!isSameTile(currentTile, targetTile) || distanceBetweenPlayers(current, target) > 520) {
-    return cloneRemotePlayer(target);
-  }
-
+  if (!isSameTile(currentTile, targetTile) || distanceBetweenPlayers(current, target) > 520) return cloneRemotePlayer(target);
   const alpha = 0.22;
-  return {
-    ...target,
-    position: {
-      x: current.position.x + (target.position.x - current.position.x) * alpha,
-      y: current.position.y + (target.position.y - current.position.y) * alpha,
-    },
-    currentTile: { ...targetTile },
-  } as PlayerPublicState;
+  return { ...target, position: { x: current.position.x + (target.position.x - current.position.x) * alpha, y: current.position.y + (target.position.y - current.position.y) * alpha }, currentTile: { ...targetTile } } as PlayerPublicState;
 }
-
 function clampChatPanelPosition(position: ChatPanelPosition, collapsed = false): ChatPanelPosition {
   const viewport = getViewportSize();
   const width = Math.min(collapsed ? chatPanelCollapsedWidth : chatPanelWidth, Math.max(220, viewport.width - 16));
   const height = collapsed ? chatPanelCollapsedHeight : chatPanelExpandedHeight;
-  return {
-    x: Math.max(8, Math.min(viewport.width - width - 8, position.x)),
-    y: Math.max(8, Math.min(viewport.height - height - 8, position.y)),
-  };
+  return { x: Math.max(8, Math.min(viewport.width - width - 8, position.x)), y: Math.max(8, Math.min(viewport.height - height - 8, position.y)) };
 }
-
 function getDefaultChatPanelPosition(collapsed = false): ChatPanelPosition {
   const viewport = getViewportSize();
   const width = Math.min(collapsed ? chatPanelCollapsedWidth : chatPanelWidth, Math.max(220, viewport.width - 16));
-  const preferredX = viewport.width - width - 12;
-  const preferredY = viewport.width <= 720 ? Math.max(72, viewport.height - 310) : 256;
-  return clampChatPanelPosition({ x: preferredX, y: preferredY }, collapsed);
+  return clampChatPanelPosition({ x: viewport.width - width - 12, y: viewport.width <= 720 ? Math.max(72, viewport.height - 310) : 256 }, collapsed);
 }
-
 function readStoredChatPanelPosition(collapsed = false): ChatPanelPosition {
   if (typeof window === "undefined") return getDefaultChatPanelPosition(collapsed);
   try {
@@ -165,62 +99,23 @@ function readStoredChatPanelPosition(collapsed = false): ChatPanelPosition {
     const parsed = JSON.parse(raw) as Partial<ChatPanelPosition>;
     if (typeof parsed.x !== "number" || typeof parsed.y !== "number") return getDefaultChatPanelPosition(collapsed);
     return clampChatPanelPosition({ x: parsed.x, y: parsed.y }, collapsed);
-  } catch {
-    return getDefaultChatPanelPosition(collapsed);
-  }
+  } catch { return getDefaultChatPanelPosition(collapsed); }
 }
-
-function readStoredChatCollapsed() {
-  if (typeof window === "undefined") return false;
-  return window.localStorage.getItem(chatPanelCollapsedStorageKey) === "true";
-}
-
+function readStoredChatCollapsed() { if (typeof window === "undefined") return false; return window.localStorage.getItem(chatPanelCollapsedStorageKey) === "true"; }
 function computeCamera(player: PlayerPublicState): CameraState {
   const width = typeof window === "undefined" ? 1280 : window.innerWidth;
   const height = typeof window === "undefined" ? 720 : window.innerHeight;
-  return {
-    width,
-    height,
-    cameraX: Math.max(0, Math.min(Math.max(0, MAP_TILE_SIZE.width - width), player.position.x - width / 2)),
-    cameraY: Math.max(0, Math.min(Math.max(0, MAP_TILE_SIZE.height - height), player.position.y - height / 2)),
-    currentTile: player.currentTile as MapTileRef,
-  };
+  return { width, height, cameraX: Math.max(0, Math.min(Math.max(0, MAP_TILE_SIZE.width - width), player.position.x - width / 2)), cameraY: Math.max(0, Math.min(Math.max(0, MAP_TILE_SIZE.height - height), player.position.y - height / 2)), currentTile: player.currentTile as MapTileRef };
 }
-
-function shouldShareBuilding(building: BuildingState) {
-  return building.id.startsWith("demo-building-")
-    && !building.id.includes("starter_meadow")
-    && !building.id.endsWith("-workbench");
-}
-
+function shouldShareBuilding(building: BuildingState) { return building.id.startsWith("demo-building-") && !building.id.includes("starter_meadow") && !building.id.endsWith("-workbench"); }
 function appendChatMessage(current: WorldChatMessageRow[], message: WorldChatMessageRow) {
   const withoutDuplicate = current.filter((existing) => {
     if (existing.message_id === message.message_id) return false;
-    const isLocalEcho = existing.message_id.startsWith("local-")
-      && existing.player_id === message.player_id
-      && existing.message === message.message
-      && Math.abs(new Date(existing.created_at).getTime() - new Date(message.created_at).getTime()) < 10_000;
+    const isLocalEcho = existing.message_id.startsWith("local-") && existing.player_id === message.player_id && existing.message === message.message && Math.abs(new Date(existing.created_at).getTime() - new Date(message.created_at).getTime()) < 10_000;
     return !isLocalEcho;
   });
-  return [...withoutDuplicate, message]
-    .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
-    .slice(-30);
+  return [...withoutDuplicate, message].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()).slice(-30);
 }
-
-function applyRemoteCreatureRows(localCreatures: CreaturePublicState[], rows: WorldCreatureRow[]) {
-  if (localCreatures.length === 0 || rows.length === 0) return false;
-  const rowById = new Map(rows.map((row) => [row.creature_id, row]));
-  let changed = false;
-  for (const creature of localCreatures) {
-    const row = rowById.get(creature.id);
-    if (!row) continue;
-    const remoteHp = row.defeated ? 0 : Math.max(0, Math.min(row.hp, row.max_hp));
-    if (remoteHp < creature.hp) { creature.hp = remoteHp; changed = true; }
-    if (row.defeated && creature.hp !== 0) { creature.hp = 0; changed = true; }
-  }
-  return changed;
-}
-
 function applyRemoteResourceRows(localResources: ResourceNodeState[], rows: WorldResourceRow[]) {
   if (localResources.length === 0 || rows.length === 0) return false;
   const rowById = new Map(rows.map((row) => [row.resource_id, row]));
@@ -234,16 +129,12 @@ function applyRemoteResourceRows(localResources: ResourceNodeState[], rows: Worl
   }
   return changed;
 }
-
-function isFreshMessage(message: WorldChatMessageRow) {
-  return Date.now() - new Date(message.created_at).getTime() < chatBubbleVisibleMs;
-}
+function isFreshMessage(message: WorldChatMessageRow) { return Date.now() - new Date(message.created_at).getTime() < chatBubbleVisibleMs; }
 
 export function MultiplayerOverlay() {
   const [enabled] = useState(() => isSupabaseMultiplayerEnabled());
   const [playerId] = useState(() => getOrCreateMultiplayerPlayerId());
   const [camera, setCamera] = useState<CameraState | null>(null);
-  const [onlinePlayers, setOnlinePlayers] = useState<PlayerPublicState[]>([]);
   const [smoothOnlinePlayers, setSmoothOnlinePlayers] = useState<PlayerPublicState[]>([]);
   const [chatMessages, setChatMessages] = useState<WorldChatMessageRow[]>([]);
   const [chatInput, setChatInput] = useState("");
@@ -253,13 +144,11 @@ export function MultiplayerOverlay() {
   const [pixiStageEnabled, setPixiStageEnabled] = useState(readPixiStageEnabled);
   const latestLocalPlayerRef = useRef<PlayerPublicState | null>(null);
   const latestTileRef = useRef<MapTileRef | null>(null);
-  const latestCreaturesRef = useRef<CreaturePublicState[]>([]);
   const latestResourcesRef = useRef<ResourceNodeState[]>([]);
   const onlinePlayersRef = useRef<PlayerPublicState[]>([]);
   const smoothPlayersRef = useRef(new Map<string, SmoothRemotePlayer>());
   const localBuildingIdsRef = useRef(new Set<string>());
   const publishedBuildingIdsRef = useRef(new Set<string>());
-  const lastCreaturePublishAtRef = useRef(0);
   const lastResourcePublishAtRef = useRef(0);
   const chatDragRef = useRef<ChatPanelDragState | null>(null);
   const client = useMemo(() => getSupabaseClient(), []);
@@ -268,25 +157,20 @@ export function MultiplayerOverlay() {
     if (!client) return;
     const players = await fetchOnlinePlayers(client, playerId);
     onlinePlayersRef.current = players;
-    setOnlinePlayers(players);
     setStatus(players.length > 0 ? `온라인 ${players.length + 1}명` : "온라인 1명");
   }, [client, playerId]);
 
   const refreshBuildings = useCallback(async () => {
     if (!client) return;
     const buildings = await fetchWorldBuildings(client, latestTileRef.current);
-    const remoteBuildings = buildings
-      .filter((building) => building.ownerPlayerId !== playerId)
-      .map((building) => ({ ...building, isRemoteSharedBuilding: true }) as SharedBuildingState);
+    const remoteBuildings = buildings.filter((building) => building.ownerPlayerId !== playerId).map((building) => ({ ...building, isRemoteSharedBuilding: true }) as SharedBuildingState);
     dispatchRemoteBuildingState(remoteBuildings);
   }, [client, playerId]);
 
   const refreshCreatures = useCallback(async () => {
     if (!client) return;
     const rows = await fetchWorldCreatures(client, latestTileRef.current);
-    const changed = applyRemoteCreatureRows(latestCreaturesRef.current, rows);
     dispatchRemoteCreatureState(rows);
-    if (changed) window.dispatchEvent(new CustomEvent("palpalworld:remote-creatures-applied"));
   }, [client]);
 
   const refreshResources = useCallback(async () => {
@@ -308,15 +192,7 @@ export function MultiplayerOverlay() {
     const localPlayer = latestLocalPlayerRef.current;
     const tile = latestTileRef.current;
     if (!localPlayer || !tile) return;
-    const input = {
-      playerId,
-      nickname: localPlayer.nickname,
-      message,
-      messageType,
-      position: localPlayer.position,
-      direction: localPlayer.direction,
-      currentTile: tile,
-    };
+    const input = { playerId, nickname: localPlayer.nickname, message, messageType, position: localPlayer.position, direction: localPlayer.direction, currentTile: tile };
     const optimisticMessage = createOptimisticChatMessage(input);
     setChatMessages((current) => appendChatMessage(current, optimisticMessage));
     const savedMessage = await sendWorldChatMessage(client, input);
@@ -333,13 +209,7 @@ export function MultiplayerOverlay() {
 
   const handleChatPanelPointerDown = useCallback((event: PointerEvent<HTMLElement>) => {
     event.preventDefault();
-    chatDragRef.current = {
-      pointerId: event.pointerId,
-      startX: event.clientX,
-      startY: event.clientY,
-      panelX: chatPanelPosition.x,
-      panelY: chatPanelPosition.y,
-    };
+    chatDragRef.current = { pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, panelX: chatPanelPosition.x, panelY: chatPanelPosition.y };
     event.currentTarget.setPointerCapture(event.pointerId);
   }, [chatPanelPosition]);
 
@@ -347,10 +217,7 @@ export function MultiplayerOverlay() {
     const drag = chatDragRef.current;
     if (!drag || drag.pointerId !== event.pointerId) return;
     event.preventDefault();
-    const next = clampChatPanelPosition({
-      x: drag.panelX + event.clientX - drag.startX,
-      y: drag.panelY + event.clientY - drag.startY,
-    }, chatCollapsed);
+    const next = clampChatPanelPosition({ x: drag.panelX + event.clientX - drag.startX, y: drag.panelY + event.clientY - drag.startY }, chatCollapsed);
     setChatPanelPosition(next);
     if (typeof window !== "undefined") window.localStorage.setItem(chatPanelStorageKey, JSON.stringify(next));
   }, [chatCollapsed]);
@@ -375,20 +242,8 @@ export function MultiplayerOverlay() {
     });
   }, []);
 
-  useEffect(() => {
-    const syncPixiStageEnabled = () => setPixiStageEnabled(readPixiStageEnabled());
-    syncPixiStageEnabled();
-    const interval = window.setInterval(syncPixiStageEnabled, 700);
-    return () => window.clearInterval(interval);
-  }, []);
-
-  useEffect(() => {
-    if (!client || !enabled) return;
-    refreshPlayers();
-    const playerChannel = subscribeOnlinePlayers(client, refreshPlayers);
-    const interval = window.setInterval(refreshPlayers, 2500);
-    return () => { window.clearInterval(interval); client.removeChannel(playerChannel); };
-  }, [client, enabled, refreshPlayers]);
+  useEffect(() => { const sync = () => setPixiStageEnabled(readPixiStageEnabled()); sync(); const interval = window.setInterval(sync, 700); return () => window.clearInterval(interval); }, []);
+  useEffect(() => { if (!client || !enabled) return; refreshPlayers(); const channel = subscribeOnlinePlayers(client, refreshPlayers); const interval = window.setInterval(refreshPlayers, 2500); return () => { window.clearInterval(interval); client.removeChannel(channel); }; }, [client, enabled, refreshPlayers]);
 
   useEffect(() => {
     let animationFrame = 0;
@@ -397,25 +252,12 @@ export function MultiplayerOverlay() {
       const targets = onlinePlayersRef.current;
       const targetIds = new Set(targets.map((player) => player.id));
       const smoothMap = smoothPlayersRef.current;
-
       for (const target of targets) {
         const existing = smoothMap.get(target.id);
-        if (!existing) {
-          smoothMap.set(target.id, { player: cloneRemotePlayer(target), lastSeenAt: now });
-          continue;
-        }
-        smoothMap.set(target.id, {
-          player: interpolateRemotePlayer(existing.player, target),
-          lastSeenAt: now,
-        });
+        if (!existing) { smoothMap.set(target.id, { player: cloneRemotePlayer(target), lastSeenAt: now }); continue; }
+        smoothMap.set(target.id, { player: interpolateRemotePlayer(existing.player, target), lastSeenAt: now });
       }
-
-      for (const [id, entry] of smoothMap) {
-        if (!targetIds.has(id) && now - entry.lastSeenAt > 6_500) {
-          smoothMap.delete(id);
-        }
-      }
-
+      for (const [id, entry] of smoothMap) if (!targetIds.has(id) && now - entry.lastSeenAt > 6_500) smoothMap.delete(id);
       setSmoothOnlinePlayers(Array.from(smoothMap.values()).map((entry) => entry.player));
       animationFrame = requestAnimationFrame(tick);
     };
@@ -423,115 +265,27 @@ export function MultiplayerOverlay() {
     return () => cancelAnimationFrame(animationFrame);
   }, []);
 
-  useEffect(() => {
-    window.dispatchEvent(new CustomEvent("palpalworld:remote-players", { detail: { players: smoothOnlinePlayers } }));
-  }, [smoothOnlinePlayers]);
-
-  useEffect(() => {
-    if (!client || !enabled) return;
-    refreshBuildings();
-    const buildingChannel = subscribeWorldBuildings(client, refreshBuildings);
-    const interval = window.setInterval(refreshBuildings, 3000);
-    return () => { window.clearInterval(interval); client.removeChannel(buildingChannel); };
-  }, [client, enabled, refreshBuildings]);
-
-  useEffect(() => {
-    if (!client || !enabled) return;
-    refreshCreatures();
-    const creatureChannel = subscribeWorldCreatures(client, refreshCreatures);
-    const interval = window.setInterval(refreshCreatures, 1800);
-    return () => { window.clearInterval(interval); client.removeChannel(creatureChannel); };
-  }, [client, enabled, refreshCreatures]);
-
-  useEffect(() => {
-    if (!client || !enabled) return;
-    refreshResources();
-    const resourceChannel = subscribeWorldResources(client, refreshResources);
-    const interval = window.setInterval(refreshResources, 1800);
-    return () => { window.clearInterval(interval); client.removeChannel(resourceChannel); };
-  }, [client, enabled, refreshResources]);
-
-  useEffect(() => {
-    if (!client || !enabled) return;
-    refreshChat();
-    const chatChannel = subscribeWorldChatMessages(client, (message) => {
-      if (!isSameChatTile(message, latestTileRef.current)) return;
-      setChatMessages((current) => appendChatMessage(current, message));
-    });
-    const interval = window.setInterval(refreshChat, 12_000);
-    return () => { window.clearInterval(interval); client.removeChannel(chatChannel); };
-  }, [client, enabled, refreshChat]);
-
-  useEffect(() => {
-    const handleResize = () => {
-      setChatPanelPosition((position) => {
-        const next = clampChatPanelPosition(position, chatCollapsed);
-        if (typeof window !== "undefined") window.localStorage.setItem(chatPanelStorageKey, JSON.stringify(next));
-        return next;
-      });
-    };
-    window.addEventListener("resize", handleResize);
-    return () => window.removeEventListener("resize", handleResize);
-  }, [chatCollapsed]);
-
-  useEffect(() => {
-    if (!client || !enabled) return;
-    const publish = async () => {
-      const localPlayer = latestLocalPlayerRef.current;
-      if (!localPlayer) return;
-      await upsertLocalPresence(client, { playerId, nickname: localPlayer.nickname, position: localPlayer.position, direction: localPlayer.direction, currentTile: localPlayer.currentTile as MapTileRef, mountedPetItemId: readMountedPetItemId() });
-    };
-    const interval = window.setInterval(publish, 450);
-    return () => window.clearInterval(interval);
-  }, [client, enabled, playerId]);
-
-  useEffect(() => {
-    if (!client || !enabled) return;
-    const publishCreatures = async () => {
-      const now = performance.now();
-      if (now - lastCreaturePublishAtRef.current < 1000) return;
-      lastCreaturePublishAtRef.current = now;
-      const creatures = latestCreaturesRef.current;
-      if (creatures.length === 0) return;
-      await upsertWorldCreatures(client, creatures);
-    };
-    const interval = window.setInterval(publishCreatures, 1000);
-    return () => window.clearInterval(interval);
-  }, [client, enabled]);
-
-  useEffect(() => {
-    if (!client || !enabled) return;
-    const publishResources = async () => {
-      const now = performance.now();
-      if (now - lastResourcePublishAtRef.current < 1000) return;
-      lastResourcePublishAtRef.current = now;
-      const resources = latestResourcesRef.current;
-      if (resources.length === 0) return;
-      await upsertWorldResources(client, resources);
-    };
-    const interval = window.setInterval(publishResources, 1000);
-    return () => window.clearInterval(interval);
-  }, [client, enabled]);
+  useEffect(() => { window.dispatchEvent(new CustomEvent("palpalworld:remote-players", { detail: { players: smoothOnlinePlayers } })); }, [smoothOnlinePlayers]);
+  useEffect(() => { if (!client || !enabled) return; refreshBuildings(); const channel = subscribeWorldBuildings(client, refreshBuildings); const interval = window.setInterval(refreshBuildings, 3000); return () => { window.clearInterval(interval); client.removeChannel(channel); }; }, [client, enabled, refreshBuildings]);
+  useEffect(() => { if (!client || !enabled) return; refreshCreatures(); const channel = subscribeWorldCreatures(client, refreshCreatures); const interval = window.setInterval(refreshCreatures, 1800); return () => { window.clearInterval(interval); client.removeChannel(channel); }; }, [client, enabled, refreshCreatures]);
+  useEffect(() => { if (!client || !enabled) return; refreshResources(); const channel = subscribeWorldResources(client, refreshResources); const interval = window.setInterval(refreshResources, 1800); return () => { window.clearInterval(interval); client.removeChannel(channel); }; }, [client, enabled, refreshResources]);
+  useEffect(() => { if (!client || !enabled) return; refreshChat(); const channel = subscribeWorldChatMessages(client, (message) => { if (!isSameChatTile(message, latestTileRef.current)) return; setChatMessages((current) => appendChatMessage(current, message)); }); const interval = window.setInterval(refreshChat, 12_000); return () => { window.clearInterval(interval); client.removeChannel(channel); }; }, [client, enabled, refreshChat]);
+  useEffect(() => { const handleResize = () => setChatPanelPosition((position) => { const next = clampChatPanelPosition(position, chatCollapsed); if (typeof window !== "undefined") window.localStorage.setItem(chatPanelStorageKey, JSON.stringify(next)); return next; }); window.addEventListener("resize", handleResize); return () => window.removeEventListener("resize", handleResize); }, [chatCollapsed]);
+  useEffect(() => { if (!client || !enabled) return; const publish = async () => { const localPlayer = latestLocalPlayerRef.current; if (!localPlayer) return; await upsertLocalPresence(client, { playerId, nickname: localPlayer.nickname, position: localPlayer.position, direction: localPlayer.direction, currentTile: localPlayer.currentTile as MapTileRef, mountedPetItemId: readMountedPetItemId() }); }; const interval = window.setInterval(publish, 450); return () => window.clearInterval(interval); }, [client, enabled, playerId]);
+  useEffect(() => { if (!client || !enabled) return; const publishResources = async () => { const now = performance.now(); if (now - lastResourcePublishAtRef.current < 1000) return; lastResourcePublishAtRef.current = now; const resources = latestResourcesRef.current; if (resources.length === 0) return; await upsertWorldResources(client, resources); }; const interval = window.setInterval(publishResources, 1000); return () => window.clearInterval(interval); }, [client, enabled]);
 
   useEffect(() => {
     const handleSnapshot = (event: Event) => {
-      const customEvent = event as WorldSnapshotEvent;
-      const snapshot = customEvent.detail?.snapshot;
+      const snapshot = (event as WorldSnapshotEvent).detail?.snapshot;
       if (!snapshot) return;
       const localPlayer = snapshot.players[0];
       if (!localPlayer) return;
       latestLocalPlayerRef.current = localPlayer;
       const previousTile = latestTileRef.current;
       latestTileRef.current = localPlayer.currentTile as MapTileRef;
-      latestCreaturesRef.current = snapshot.creatures;
       latestResourcesRef.current = snapshot.resources;
       setCamera(computeCamera(localPlayer));
-      if (previousTile && !isSameTile(previousTile, latestTileRef.current)) {
-        void refreshBuildings();
-        void refreshCreatures();
-        void refreshResources();
-        void refreshChat();
-      }
+      if (previousTile && !isSameTile(previousTile, latestTileRef.current)) { void refreshBuildings(); void refreshCreatures(); void refreshResources(); void refreshChat(); }
       if (client && enabled) {
         for (const building of snapshot.buildings) {
           if (!shouldShareBuilding(building)) continue;
@@ -542,10 +296,7 @@ export function MultiplayerOverlay() {
         }
       }
     };
-    const handleResize = () => {
-      const localPlayer = latestLocalPlayerRef.current;
-      if (localPlayer) setCamera(computeCamera(localPlayer));
-    };
+    const handleResize = () => { const localPlayer = latestLocalPlayerRef.current; if (localPlayer) setCamera(computeCamera(localPlayer)); };
     window.addEventListener("palpalworld:world_snapshot", handleSnapshot);
     window.addEventListener("resize", handleResize);
     return () => { window.removeEventListener("palpalworld:world_snapshot", handleSnapshot); window.removeEventListener("resize", handleResize); };
@@ -566,14 +317,9 @@ export function MultiplayerOverlay() {
     return () => window.removeEventListener("palpalworld:building-dismantled", handleDismantled);
   }, [client, enabled, refreshBuildings]);
 
-  const visiblePlayers = useMemo(() => {
-    if (!camera) return [];
-    return smoothOnlinePlayers.filter((player) => isSameTile(player.currentTile as MapTileRef, camera.currentTile));
-  }, [camera, smoothOnlinePlayers]);
-
+  const visiblePlayers = useMemo(() => { if (!camera) return []; return smoothOnlinePlayers.filter((player) => isSameTile(player.currentTile as MapTileRef, camera.currentTile)); }, [camera, smoothOnlinePlayers]);
   const bubbleMessages = useMemo(() => chatMessages.filter(isFreshMessage).slice(-8), [chatMessages]);
   const latestChatMessage = chatMessages[chatMessages.length - 1];
-
   if (!enabled || !camera) return null;
 
   return (
@@ -623,34 +369,15 @@ export function MultiplayerOverlay() {
           </div>
         );
       }) : null}
-      <section
-        className={`world-chat-panel ${chatCollapsed ? "world-chat-panel--collapsed" : ""}`}
-        style={{ left: chatPanelPosition.x, top: chatPanelPosition.y }}
-        aria-label="근처 채팅"
-      >
-        <header
-          className="world-chat-panel__header"
-          onPointerDown={handleChatPanelPointerDown}
-          onPointerMove={handleChatPanelPointerMove}
-          onPointerUp={stopChatPanelDrag}
-          onPointerCancel={stopChatPanelDrag}
-        >
+      <section className={`world-chat-panel ${chatCollapsed ? "world-chat-panel--collapsed" : ""}`} style={{ left: chatPanelPosition.x, top: chatPanelPosition.y }} aria-label="근처 채팅">
+        <header className="world-chat-panel__header" onPointerDown={handleChatPanelPointerDown} onPointerMove={handleChatPanelPointerMove} onPointerUp={stopChatPanelDrag} onPointerCancel={stopChatPanelDrag}>
           <strong>근처 채팅</strong>
           <span>{latestChatMessage ? `${latestChatMessage.nickname}: ${latestChatMessage.message}` : "대화 없음"}</span>
-          <button
-            type="button"
-            onPointerDown={(event) => event.stopPropagation()}
-            onClick={toggleChatCollapsed}
-            aria-expanded={!chatCollapsed}
-          >
-            {chatCollapsed ? "펼치기" : "접기"}
-          </button>
+          <button type="button" onPointerDown={(event) => event.stopPropagation()} onClick={toggleChatCollapsed} aria-expanded={!chatCollapsed}>{chatCollapsed ? "펼치기" : "접기"}</button>
         </header>
         {!chatCollapsed ? (
           <>
-            <div className="world-chat-log">
-              {chatMessages.slice(-6).map((message) => <div key={message.message_id} className="world-chat-log__line"><b>{message.nickname}</b><span>{message.message}</span></div>)}
-            </div>
+            <div className="world-chat-log">{chatMessages.slice(-6).map((message) => <div key={message.message_id} className="world-chat-log__line"><b>{message.nickname}</b><span>{message.message}</span></div>)}</div>
             <div className="world-chat-emotes">{emotes.map((emote) => <button key={emote} type="button" onClick={() => void sendChat(emote, "emote")}>{emote}</button>)}</div>
             <form className="world-chat-form" onSubmit={handleSubmitChat}>
               <input value={chatInput} onChange={(event) => setChatInput(event.target.value)} maxLength={80} placeholder="근처 채팅" />
