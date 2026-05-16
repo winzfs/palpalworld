@@ -24,6 +24,14 @@ export type CreatureSyncResult = {
   error?: string;
 };
 
+export type AttackWorldCreatureResult = {
+  creatureId: string;
+  hp: number;
+  maxHp: number;
+  defeated: boolean;
+  damageApplied: number;
+};
+
 function sanitizeCreatureHp(hp: number, maxHp: number) {
   const safeMaxHp = Number.isFinite(maxHp) && maxHp > 0 ? maxHp : 1;
   const safeHp = Number.isFinite(hp) ? hp : safeMaxHp;
@@ -142,6 +150,28 @@ export async function seedMissingWorldCreatures(client: SupabaseClient, creature
   const existingIds = new Set((data ?? []).map((row: { creature_id: string }) => row.creature_id));
   const missing = creatures.filter((creature) => !existingIds.has(creature.id));
   await upsertWorldCreatures(client, missing);
+}
+
+export async function attackWorldCreature(client: SupabaseClient, creatureId: string, playerId: string, damage = 18): Promise<AttackWorldCreatureResult | null> {
+  const { data, error } = await client.rpc("attack_world_creature", {
+    p_creature_id: creatureId,
+    p_player_id: playerId,
+    p_damage: damage,
+  });
+
+  if (error || !data || data.length <= 0) {
+    if (error) emitCreatureSyncStatus({ ok: false, count: 0, error: error.message });
+    return null;
+  }
+
+  const row = data[0] as { creature_id: string; hp: number; max_hp: number; defeated: boolean; damage_applied: number };
+  return {
+    creatureId: row.creature_id,
+    hp: row.hp,
+    maxHp: row.max_hp,
+    defeated: row.defeated,
+    damageApplied: row.damage_applied,
+  };
 }
 
 export async function applyWorldCreatureDamage(client: SupabaseClient, creature: CreaturePublicState, damage: number) {
