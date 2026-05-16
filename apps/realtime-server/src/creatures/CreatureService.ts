@@ -2,8 +2,6 @@ import { CREATURE_CATALOG, STARTER_CREATURE_SPAWNS, type CreaturePublicState } f
 import { TraitService } from "../traits/TraitService";
 import type { WorldState } from "../world/WorldState";
 
-const combatEffectTestHpMultiplier = 3;
-
 export class CreatureService {
   constructor(
     private readonly world: WorldState,
@@ -16,20 +14,16 @@ export class CreatureService {
 
   calculateMaxHp(creature: CreaturePublicState) {
     const species = this.getSpecies(creature);
-    if (!species) return Math.max(1, Math.floor(creature.maxHp * combatEffectTestHpMultiplier));
+    if (!species) return creature.maxHp;
 
     const baseMaxHp = species.baseHp + creature.level * 8;
     const hpMultiplier = this.traits.getMultiplier(creature.traitIds, "max_hp_multiplier");
-    return Math.max(1, Math.floor(baseMaxHp * hpMultiplier * combatEffectTestHpMultiplier));
+    return Math.max(1, Math.floor(baseMaxHp * hpMultiplier));
   }
 
   normalizeAliveCreatureHp(creature: CreaturePublicState) {
     if (creature.hp <= 0) return;
     const nextMaxHp = this.calculateMaxHp(creature);
-    if (nextMaxHp <= creature.maxHp) return;
-
-    // Existing live creatures may still have the old max/current HP after a balance change.
-    // For this Pixi hit-effect test period, restore them to full updated HP so the bar starts filled.
     creature.maxHp = nextMaxHp;
     creature.hp = nextMaxHp;
   }
