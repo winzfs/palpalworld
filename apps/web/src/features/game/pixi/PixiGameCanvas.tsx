@@ -92,6 +92,12 @@ function makeLayers(PIXI: PixiModule, app: any): Layers {
   const debug = new PIXI.Container();
 
   world.sortableChildren = true;
+  terrain.zIndex = -100000;
+  buildings.zIndex = 0;
+  resources.zIndex = 10;
+  creatures.zIndex = 20;
+  buildParts.zIndex = 30;
+  players.zIndex = 40;
   buildings.sortableChildren = true;
   resources.sortableChildren = true;
   creatures.sortableChildren = true;
@@ -216,6 +222,13 @@ function colorFromHex(hex: string, fallback: number) {
   return Number.isFinite(value) ? value : fallback;
 }
 
+function getBuildPartRenderSort(part: PlacedBuildPart) {
+  const definition = BUILD_PARTS[part.partId];
+  const iso = buildGridToIsoCenter(part.gridX, part.gridY);
+  const layerBias = definition?.category === "roof" ? 36 : definition?.category === "wall" || definition?.category === "door" || definition?.category === "window" ? 18 : 0;
+  return iso.y + part.floorLevel * 96 + layerBias;
+}
+
 function drawBuildPartPolygon(g: AnyGraphics, points: Array<{ x: number; y: number }>, fill: number, alpha: number, stroke: number, strokeAlpha = 0.7) {
   if (points.length === 0) return;
   g.moveTo(points[0].x, points[0].y);
@@ -223,10 +236,30 @@ function drawBuildPartPolygon(g: AnyGraphics, points: Array<{ x: number; y: numb
   g.lineTo(points[0].x, points[0].y).fill({ color: fill, alpha });
   g.moveTo(points[0].x, points[0].y);
   for (const point of points.slice(1)) g.lineTo(point.x, point.y);
-  g.lineTo(points[0].x, points[0].y).stroke({ width: 1.5, color: stroke, alpha: strokeAlpha });
+  g.lineTo(points[0].x, points[0].y).stroke({ width: previewStrokeWidth(alpha), color: stroke, alpha: strokeAlpha });
 }
 
-function drawBuildPart(g: AnyGraphics, part: PlacedBuildPart, preview = false, valid = true) {
+function previewStrokeWidth(alpha: number) {
+  return alpha < 0.5 ? 2.5 : 1.5;
+}
+
+function drawBuildPartSelection(g: AnyGraphics, part: PlacedBuildPart, selected: boolean, preview = false, valid = true) {
+  if (!selected && !preview) return;
+  const definition = BUILD_PARTS[part.partId];
+  if (!definition) return;
+  const width = definition.width * BUILD_GRID_SIZE;
+  const height = definition.height * BUILD_GRID_SIZE;
+  const visualY = -part.floorLevel * BUILD_2P5D_FLOOR_HEIGHT + (definition.category === "roof" ? -48 : 0);
+  const points = getIsoTilePolygon2p5d({ x: 0, y: visualY, width, height: height * 0.62 });
+  const color = preview ? (valid ? 0x86efac : 0xfca5a5) : 0xfacc15;
+  if (points.length > 0) {
+    g.moveTo(points[0].x, points[0].y);
+    for (const point of points.slice(1)) g.lineTo(point.x, point.y);
+    g.lineTo(points[0].x, points[0].y).stroke({ width: preview ? 3 : 2, color, alpha: preview ? 0.96 : 0.78 });
+  }
+}
+
+function drawBuildPart(g: AnyGraphics, part: PlacedBuildPart, preview = false, valid = true, selected = false) {
   const definition = BUILD_PARTS[part.partId];
   if (!definition) return;
   const palette = getMaterialPalette(definition.material);
@@ -242,22 +275,37 @@ function drawBuildPart(g: AnyGraphics, part: PlacedBuildPart, preview = false, v
     const wallHeight = definition.id.includes("half") || definition.id.includes("railing") || definition.id.includes("fence") ? 34 : 72;
     const plane = getIsoWallPlane2p5d({ x: 0, y: visualY, width, height, rotation: part.rotation, wallHeight });
     drawBuildPartPolygon(g, [plane.baseStart, plane.baseEnd, plane.topEnd, plane.topStart], preview ? base : side, preview ? 0.25 : 0.92, preview ? base : dark, preview ? 0.95 : 0.72);
+    if (!preview) {
+      g.moveTo(plane.topStart.x, plane.topStart.y).lineTo(plane.topEnd.x, plane.topEnd.y).stroke({ width: 2, color: light, alpha: 0.32 });
+    }
     if (definition.category === "door") {
       const mx = (plane.baseStart.x + plane.baseEnd.x) / 2;
       const my = (plane.baseStart.y + plane.baseEnd.y) / 2;
       g.roundRect(mx - 8, my - wallHeight * 0.68, 16, wallHeight * 0.62, 3).fill({ color: dark, alpha: preview ? 0.26 : 0.62 });
+      g.circle(mx + 4, my - wallHeight * 0.38, 1.7).fill({ color: 0xfacc15, alpha: preview ? 0.35 : 0.84 });
     }
     if (definition.category === "window") {
       const mx = (plane.baseStart.x + plane.baseEnd.x) / 2;
       const my = (plane.baseStart.y + plane.baseEnd.y) / 2;
       g.roundRect(mx - 10, my - wallHeight * 0.62, 20, 14, 3).fill({ color: 0xbae6fd, alpha: preview ? 0.25 : 0.62 });
+      g.moveTo(mx, my - wallHeight * 0.62).lineTo(mx, my - wallHeight * 0.62 + 14).stroke({ width: 1, color: 0x0f172a, alpha: 0.28 });
     }
+    drawBuildPartSelection(g, part, selected, preview, valid);
     return;
   }
 
   const roofOffset = definition.category === "roof" ? -48 : 0;
   const points = getIsoTilePolygon2p5d({ x: 0, y: visualY + roofOffset, width, height: height * 0.62 });
   drawBuildPartPolygon(g, points, definition.category === "roof" && !preview ? dark : base, preview ? 0.25 : 0.94, definition.category === "roof" ? light : dark, preview ? 0.9 : 0.58);
+  if (definition.category === "floor" && !preview) {
+    const inner = getIsoTilePolygon2p5d({ x: 0, y: visualY, width: Math.max(0, width - 12), height: Math.max(0, height * 0.62 - 12) });
+    if (inner.length > 0) {
+      g.moveTo(inner[0].x, inner[0].y);
+      for (const point of inner.slice(1)) g.lineTo(point.x, point.y);
+      g.lineTo(inner[0].x, inner[0].y).stroke({ width: 1, color: light, alpha: 0.22 });
+    }
+  }
+  drawBuildPartSelection(g, part, selected, preview, valid);
 }
 
 function sameTile(a: PlayerPublicState, b: PlayerPublicState) {
@@ -320,146 +368,3 @@ export function PixiGameCanvas({ enabled = false, snapshot, localPlayerId }: Pix
       if (!host || disposed) return;
       const PIXI = await loadPixiRuntime();
       if (!hostRef.current || disposed) return;
-
-      const app = new PIXI.Application();
-      await app.init({ resizeTo: host, antialias: false, backgroundAlpha: 0, autoDensity: true, resolution: Math.min(window.devicePixelRatio || 1, 2) });
-      if (disposed || !hostRef.current) { app.destroy(true); return; }
-      app.canvas.style.display = "block";
-      app.canvas.style.width = "100%";
-      app.canvas.style.height = "100%";
-      host.appendChild(app.canvas);
-
-      const camera = createPixiCamera(host.clientWidth || 1, host.clientHeight || 1);
-      const layers = makeLayers(PIXI, app);
-      const terrainNodes = new Map<string, NodeRecord>();
-      const playerNodes = new Map<string, NodeRecord>();
-      const creatureNodes = new Map<string, NodeRecord>();
-      const resourceNodes = new Map<string, NodeRecord>();
-      const buildingNodes = new Map<string, NodeRecord>();
-      const buildPartNodes = new Map<string, NodeRecord>();
-      const lightingGraphics = new PIXI.Graphics();
-      const debugText = new PIXI.Text({ text: "", style: { fill: 0xffffff, fontSize: 12, fontFamily: "monospace", stroke: { color: 0x000000, width: 3 } } });
-      layers.lighting.addChild(lightingGraphics);
-      layers.debug.addChild(debugText);
-
-      const resize = () => resizePixiCamera(camera, host.clientWidth || 1, host.clientHeight || 1);
-      const resizeObserver = new ResizeObserver(resize);
-      resizeObserver.observe(host);
-
-      app.ticker.add(() => {
-        if (disposed || !hostRef.current) return;
-        const currentSnapshot = snapshotRef.current;
-        const localPlayer = currentSnapshot?.players.find((player) => player.id === localPlayerIdRef.current) ?? currentSnapshot?.players[0];
-        const frameId = ++frameIdRef.current;
-        if (localPlayer) centerPixiCameraOn(camera, localPlayer.position);
-
-        layers.world.position.set(-camera.x * camera.zoom, -camera.y * camera.zoom);
-        layers.world.scale.set(camera.zoom);
-        layers.lighting.position.set(0, 0);
-        layers.lighting.scale.set(1);
-        layers.debug.position.set(0, 0);
-        layers.debug.scale.set(1);
-
-        const startTileX = Math.floor(camera.x / terrainTileSize) - terrainPaddingTiles;
-        const startTileY = Math.floor(camera.y / terrainTileSize) - terrainPaddingTiles;
-        const endTileX = Math.ceil((camera.x + host.clientWidth) / terrainTileSize) + terrainPaddingTiles;
-        const endTileY = Math.ceil((camera.y + host.clientHeight) / terrainTileSize) + terrainPaddingTiles;
-        for (let tileY = startTileY; tileY <= endTileY; tileY += 1) {
-          for (let tileX = startTileX; tileX <= endTileX; tileX += 1) {
-            const key = `${tileX}:${tileY}`;
-            const node = upsertNode(PIXI, layers.terrain, terrainNodes, key, frameId);
-            node.container.position.set(tileX * terrainTileSize, tileY * terrainTileSize);
-            node.container.zIndex = -100000 + tileY;
-            drawTerrain(node.graphics, tileX, tileY);
-          }
-        }
-        pruneNodes(layers.terrain, terrainNodes, frameId);
-
-        const localBuildingIds = new Set((currentSnapshot?.buildings ?? []).map((building) => building.id));
-        const buildings = [...(currentSnapshot?.buildings ?? []), ...remoteBuildingsRef.current.filter((building) => !localBuildingIds.has(building.id))];
-        const resources = (currentSnapshot?.resources ?? []).filter((resource) => ((resource as ResourceNodeState & { remainingAmount?: number }).remainingAmount ?? 1) > 0);
-        const creatures = (currentSnapshot?.creatures ?? []).filter((creature) => creature.hp > 0);
-        const remotePlayers = remotePlayersRef.current.filter((player) => !localPlayer || (player.id !== localPlayer.id && sameTile(localPlayer, player)));
-        const players = [
-          ...(localPlayer ? [{ player: localPlayer, isLocal: true }] : []),
-          ...remotePlayers.map((player) => ({ player, isLocal: false })),
-        ].sort((a, b) => a.player.position.y - b.player.position.y);
-
-        for (const building of buildings) {
-          const node = upsertNode(PIXI, layers.buildings, buildingNodes, building.id, frameId);
-          node.container.position.set(building.position.x, building.position.y);
-          node.container.zIndex = building.position.y + 8;
-          drawBuilding(node.graphics, building);
-        }
-        pruneNodes(layers.buildings, buildingNodes, frameId);
-
-        for (const resource of resources) {
-          const node = upsertNode(PIXI, layers.resources, resourceNodes, resource.id, frameId);
-          node.container.position.set(resource.position.x, resource.position.y);
-          node.container.zIndex = resource.position.y - 12;
-          drawResource(node.graphics, resource);
-        }
-        pruneNodes(layers.resources, resourceNodes, frameId);
-
-        for (const creature of creatures) {
-          const node = upsertNode(PIXI, layers.creatures, creatureNodes, creature.id, frameId);
-          node.container.position.set(creature.position.x, creature.position.y);
-          node.container.zIndex = creature.position.y - 4;
-          drawCreature(node.graphics, creature);
-        }
-        pruneNodes(layers.creatures, creatureNodes, frameId);
-
-        const buildParts = buildPartsStateRef.current.parts ?? [];
-        for (const part of buildParts) {
-          const definition = BUILD_PARTS[part.partId];
-          if (!definition) continue;
-          const node = upsertNode(PIXI, layers.buildParts, buildPartNodes, part.id, frameId);
-          const iso = buildGridToIsoCenter(part.gridX, part.gridY);
-          node.container.position.set(iso.x, iso.y);
-          node.container.zIndex = iso.y + part.floorLevel * 96 + (definition.category === "roof" ? 48 : definition.category === "wall" ? 24 : 0);
-          drawBuildPart(node.graphics, part);
-        }
-        const preview = buildPartsStateRef.current.preview;
-        if (preview) {
-          const gridX = typeof preview.gridX === "number" ? preview.gridX : Math.round(preview.position.x / BUILD_GRID_SIZE);
-          const gridY = typeof preview.gridY === "number" ? preview.gridY : Math.round(preview.position.y / BUILD_GRID_SIZE);
-          const previewPart: PlacedBuildPart = { id: "__preview_build_part__", partId: preview.partId, ownerPlayerId: "preview", regionId: "preview", tileX: 0, tileY: 0, gridX, gridY, floorLevel: preview.floorLevel, rotation: preview.rotation, hp: 1, maxHp: 1, createdAt: 0, updatedAt: 0 };
-          const node = upsertNode(PIXI, layers.buildParts, buildPartNodes, previewPart.id, frameId);
-          const iso = buildGridToIsoCenter(gridX, gridY);
-          node.container.position.set(iso.x, iso.y);
-          node.container.zIndex = iso.y + 999;
-          drawBuildPart(node.graphics, previewPart, true, preview.valid);
-        }
-        pruneNodes(layers.buildParts, buildPartNodes, frameId);
-
-        for (const entry of players) {
-          const node = upsertNode(PIXI, layers.players, playerNodes, entry.player.id, frameId);
-          node.container.position.set(entry.player.position.x, entry.player.position.y);
-          node.container.zIndex = entry.player.position.y + 24;
-          drawPlayer(node.graphics, entry.player, entry.isLocal);
-        }
-        pruneNodes(layers.players, playerNodes, frameId);
-
-        drawNight(lightingGraphics, host.clientWidth || 1, host.clientHeight || 1, camera.x, camera.y, players);
-        if (pixiDebugEnabled()) {
-          debugText.visible = true;
-          debugText.text = `pixi p:${players.length} c:${creatures.length} r:${resources.length} b:${buildings.length} parts:${buildParts.length} snap:${currentSnapshot ? 1 : 0}`;
-          debugText.position.set(10, Math.max(72, (host.clientHeight || 120) - 34));
-        } else {
-          debugText.visible = false;
-          debugText.text = "";
-        }
-      });
-
-      cleanup = () => {
-        resizeObserver.disconnect();
-        app.destroy(true, { children: true });
-      };
-    }
-
-    void start();
-    return () => { disposed = true; cleanup?.(); cleanup = null; };
-  }, [enabled]);
-
-  return <div ref={hostRef} className={enabled ? "pixi-game-canvas pixi-game-canvas--enabled" : "pixi-game-canvas"} aria-hidden={!enabled} />;
-}
