@@ -3,7 +3,7 @@
 import type { Direction, PlayerPublicState, WorldSnapshot } from "@palpalworld/shared";
 import { useEffect, useRef } from "react";
 import { createPixiCamera, resizePixiCamera, centerPixiCameraOn } from "./PixiCamera";
-import { createPixiGameLayers } from "./PixiLayers";
+import { createPixiGameLayers, type PixiContainer } from "./PixiLayers";
 
 declare global {
   interface Window {
@@ -15,7 +15,7 @@ declare global {
         ticker: { add: (callback: () => void) => void };
         destroy: (removeView?: boolean, options?: { children?: boolean }) => void;
       };
-      Container: new () => unknown;
+      Container: new () => PixiContainer;
       Graphics: new () => {
         clear: () => void;
         moveTo: (x: number, y: number) => void;
@@ -26,6 +26,7 @@ declare global {
         ellipse: (x: number, y: number, halfWidth: number, halfHeight: number) => void;
         circle: (x: number, y: number, radius: number) => void;
         fill: (options: { color: number; alpha?: number }) => void;
+        destroy?: () => void;
       };
     };
   }
@@ -35,6 +36,8 @@ type RemotePlayersEvent = CustomEvent<{ players?: PlayerPublicState[] }>;
 type PixiGraphics = InstanceType<NonNullable<Window["PIXI"]>["Graphics"]>;
 type PixiTransformNode = { position: { set: (x: number, y: number) => void }; scale: { set: (value: number) => void } };
 type SmoothedRemotePlayer = { player: PlayerPublicState; x: number; y: number; lastSeenAt: number };
+type DrawablePlayer = { player: PlayerPublicState; isLocal: boolean };
+type PixiPlayerNode = { container: PixiContainer; graphics: PixiGraphics; lastSeenFrame: number };
 
 export type PixiGameCanvasProps = {
   enabled?: boolean;
@@ -134,6 +137,11 @@ function updateSmoothedRemotePlayers(remotePlayers: PlayerPublicState[], smoothM
   return Array.from(smoothMap.values()).map((cached) => clonePlayerWithPosition(cached.player, cached.x, cached.y));
 }
 
+function drawPixiCharacterAtOrigin(graphics: PixiGraphics, player: PlayerPublicState, isLocal: boolean) {
+  const localPlayer = clonePlayerWithPosition(player, 0, 0);
+  drawPixiCharacter(graphics, localPlayer, isLocal);
+}
+
 function drawPixiCharacter(graphics: PixiGraphics, player: PlayerPublicState, isLocal: boolean) {
   const x = player.position.x;
   const y = player.position.y;
@@ -151,7 +159,7 @@ function drawPixiCharacter(graphics: PixiGraphics, player: PlayerPublicState, is
   graphics.ellipse(x, y + 19, 18, 6);
   graphics.fill({ color: 0x000000, alpha: 0.24 });
 
-  const step = Math.sin(Date.now() / 150 + x * 0.01 + y * 0.01) * 1.4;
+  const step = Math.sin(Date.now() / 150 + player.position.x * 0.01 + player.position.y * 0.01) * 1.4;
   graphics.roundRect(x - 8, y + 9 + step, 5, 12, 3);
   graphics.roundRect(x + 3, y + 9 - step, 5, 12, 3);
   graphics.fill({ color: 0x1e293b, alpha: 1 });
@@ -194,7 +202,7 @@ function drawPixiCharacter(graphics: PixiGraphics, player: PlayerPublicState, is
   }
 }
 
-function drawPixiNightLighting(graphics: PixiGraphics, width: number, height: number, cameraX: number, cameraY: number, drawablePlayers: { player: PlayerPublicState; isLocal: boolean }[]) {
+function drawPixiNightLighting(graphics: PixiGraphics, width: number, height: number, cameraX: number, cameraY: number, drawablePlayers: DrawablePlayer[]) {
   graphics.clear();
   if (!isNightModeActive()) return;
 
@@ -222,12 +230,54 @@ function isSamePlayerTile(a: PlayerPublicState | null | undefined, b: PlayerPubl
     && a.currentTile?.tileY === b.currentTile?.tileY;
 }
 
+function getPixiPlayerNodeKey(entry: DrawablePlayer) {
+  return entry.isLocal ? `local:${entry.player.id}` : `remote:${entry.player.id}`;
+}
+
+function upsertPixiPlayerNodes(
+  PIXI: NonNullable<Window["PIXI"]>,
+  playerLayer: PixiContainer,
+  nodes: Map<string, PixiPlayerNode>,
+  drawablePlayers: DrawablePlayer[],
+  frameId: number,
+) {
+  for (const entry of drawablePlayers) {
+    const key = getPixiPlayerNodeKey(entry);
+    let node = nodes.get(key);
+    if (!node) {
+      const container = new PIXI.Container();
+      const graphics = new PIXI.Graphics();
+      container.addChild(graphics as unknown as PixiContainer);
+      playerLayer.addChild(container);
+      node = { container, graphics, lastSeenFrame: frameId };
+      nodes.set(key, node);
+    }
+
+    node.lastSeenFrame = frameId;
+    node.container.visible = true;
+    node.container.zIndex = entry.player.position.y;
+    node.container.position?.set(entry.player.position.x, entry.player.position.y);
+    node.graphics.clear();
+    drawPixiCharacterAtOrigin(node.graphics, entry.player, entry.isLocal);
+  }
+
+  for (const [key, node] of nodes.entries()) {
+    if (node.lastSeenFrame === frameId) continue;
+    node.container.visible = false;
+    playerLayer.removeChild?.(node.container);
+    node.container.destroy?.({ children: true });
+    nodes.delete(key);
+  }
+}
+
 export function PixiGameCanvas({ enabled = false, snapshot, localPlayerId }: PixiGameCanvasProps) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const snapshotRef = useRef<WorldSnapshot | null>(snapshot);
   const localPlayerIdRef = useRef(localPlayerId);
   const remotePlayersRef = useRef<PlayerPublicState[]>([]);
   const smoothedRemotePlayersRef = useRef(new Map<string, SmoothedRemotePlayer>());
+  const playerNodesRef = useRef(new Map<string, PixiPlayerNode>());
+  const frameIdRef = useRef(0);
 
   useEffect(() => {
     snapshotRef.current = snapshot;
@@ -269,10 +319,8 @@ export function PixiGameCanvas({ enabled = false, snapshot, localPlayerId }: Pix
       host.appendChild(app.canvas);
       const camera = createPixiCamera(host.clientWidth, host.clientHeight);
       const layers = createPixiGameLayers(app, PIXI);
-      const playerGraphics = new PIXI.Graphics();
       const lightingGraphics = new PIXI.Graphics();
-      layers.players.addChild(playerGraphics as never);
-      layers.lighting.addChild(lightingGraphics as never);
+      layers.lighting.addChild(lightingGraphics as unknown as PixiContainer);
 
       const resize = () => resizePixiCamera(camera, host.clientWidth, host.clientHeight);
       const resizeObserver = new ResizeObserver(resize);
@@ -282,6 +330,7 @@ export function PixiGameCanvas({ enabled = false, snapshot, localPlayerId }: Pix
         const currentSnapshot = snapshotRef.current;
         const localPlayer = currentSnapshot?.players.find((player) => player.id === localPlayerIdRef.current);
         const now = Date.now();
+        const frameId = ++frameIdRef.current;
         if (localPlayer) centerPixiCameraOn(camera, localPlayer.position);
         const root = layers.root as unknown as PixiTransformNode;
         root.position.set(-camera.x * camera.zoom, -camera.y * camera.zoom);
@@ -290,7 +339,6 @@ export function PixiGameCanvas({ enabled = false, snapshot, localPlayerId }: Pix
         lighting.position.set(0, 0);
         lighting.scale.set(1);
 
-        playerGraphics.clear();
         const smoothRemotePlayers = updateSmoothedRemotePlayers(remotePlayersRef.current, smoothedRemotePlayersRef.current, now);
         const drawablePlayers = [
           ...(localPlayer ? [{ player: localPlayer, isLocal: true }] : []),
@@ -300,12 +348,14 @@ export function PixiGameCanvas({ enabled = false, snapshot, localPlayerId }: Pix
             .map((remotePlayer) => ({ player: remotePlayer, isLocal: false })),
         ].sort((a, b) => a.player.position.y - b.player.position.y);
 
-        for (const entry of drawablePlayers) drawPixiCharacter(playerGraphics, entry.player, entry.isLocal);
+        upsertPixiPlayerNodes(PIXI, layers.players, playerNodesRef.current, drawablePlayers, frameId);
         drawPixiNightLighting(lightingGraphics, host.clientWidth, host.clientHeight, camera.x, camera.y, drawablePlayers);
       });
 
       cleanup = () => {
         resizeObserver.disconnect();
+        for (const node of playerNodesRef.current.values()) node.container.destroy?.({ children: true });
+        playerNodesRef.current.clear();
         app.destroy(true, { children: true });
       };
     }
