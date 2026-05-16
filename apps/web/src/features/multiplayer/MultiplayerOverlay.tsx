@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type PointerEvent } from "react";
 import type { BuildingState, CreaturePublicState, PlayerPublicState, ResourceNodeState, WorldSnapshot } from "@palpalworld/shared";
 import { MAP_TILE_SIZE, isSameTile, type MapTileRef } from "../../../../../packages/shared/src/worldTiles";
+import { getPetSpeciesDefinition, isFlyingPetSpecies } from "../pets/petCatalog";
 import {
   fetchOnlinePlayers,
   getOrCreateMultiplayerPlayerId,
@@ -67,14 +68,35 @@ type SmoothRemotePlayer = {
   lastSeenAt: number;
 };
 
+type MultiplayerMountedPetInfo = {
+  itemId: string;
+  speciesId: string;
+  label: string;
+  flying: boolean;
+};
+
 const emotes = ["👋", "❤️", "⚔️", "🆘"];
 const chatBubbleVisibleMs = 12_000;
 const chatPanelStorageKey = "palpalworld.ui.chatPanelPosition";
 const chatPanelCollapsedStorageKey = "palpalworld.ui.chatPanelCollapsed";
+const mountedPetStorageKey = "palpalworld.demo.mountedPetItemId";
 const chatPanelWidth = 330;
 const chatPanelCollapsedWidth = 210;
 const chatPanelExpandedHeight = 226;
 const chatPanelCollapsedHeight = 48;
+
+function readMountedPetItemId() {
+  if (typeof window === "undefined") return null;
+  return window.localStorage.getItem(mountedPetStorageKey);
+}
+
+function getMountedPetInfo(player: PlayerPublicState): MultiplayerMountedPetInfo | null {
+  const mountedPetItemId = (player as PlayerPublicState & { mountedPetItemId?: string | null }).mountedPetItemId;
+  if (!mountedPetItemId?.startsWith("pet_")) return null;
+  const speciesId = mountedPetItemId.slice(4);
+  const species = getPetSpeciesDefinition(speciesId);
+  return { itemId: mountedPetItemId, speciesId, label: species.name, flying: isFlyingPetSpecies(speciesId) };
+}
 
 function getViewportSize() {
   if (typeof window === "undefined") return { width: 1280, height: 720 };
@@ -443,7 +465,7 @@ export function MultiplayerOverlay() {
     const publish = async () => {
       const localPlayer = latestLocalPlayerRef.current;
       if (!localPlayer) return;
-      await upsertLocalPresence(client, { playerId, nickname: localPlayer.nickname, position: localPlayer.position, direction: localPlayer.direction, currentTile: localPlayer.currentTile as MapTileRef });
+      await upsertLocalPresence(client, { playerId, nickname: localPlayer.nickname, position: localPlayer.position, direction: localPlayer.direction, currentTile: localPlayer.currentTile as MapTileRef, mountedPetItemId: readMountedPetItemId() });
     };
     const interval = window.setInterval(publish, 450);
     return () => window.clearInterval(interval);
@@ -550,11 +572,29 @@ export function MultiplayerOverlay() {
         return <div key={message.message_id} className={`world-chat-bubble world-chat-bubble--${message.message_type}`} style={{ left, top }}>{message.message}</div>;
       })}
       {visiblePlayers.map((player) => {
+        const mountedPet = getMountedPetInfo(player);
         const left = player.position.x - camera.cameraX;
         const top = player.position.y - camera.cameraY;
-        if (left < -80 || left > camera.width + 80 || top < -100 || top > camera.height + 80) return null;
+        if (left < -90 || left > camera.width + 90 || top < -120 || top > camera.height + 100) return null;
         return (
-          <div key={player.id} className="multiplayer-player" style={{ left, top }}>
+          <div key={player.id} className={`multiplayer-player ${mountedPet ? "multiplayer-player--mounted" : ""} ${mountedPet?.flying ? "multiplayer-player--flying-mounted" : ""}`} style={{ left, top }}>
+            {mountedPet ? (
+              <div className={`multiplayer-mounted-pet multiplayer-mounted-pet--${mountedPet.speciesId} ${mountedPet.flying ? "multiplayer-mounted-pet--flying" : ""}`} aria-label={`${mountedPet.label} 탑승 중`}>
+                <span className="multiplayer-mounted-pet__shadow" />
+                <span className="multiplayer-mounted-pet__tail" />
+                <span className="multiplayer-mounted-pet__body" />
+                <span className="multiplayer-mounted-pet__belly" />
+                <span className="multiplayer-mounted-pet__head" />
+                <span className="multiplayer-mounted-pet__ear multiplayer-mounted-pet__ear--left" />
+                <span className="multiplayer-mounted-pet__ear multiplayer-mounted-pet__ear--right" />
+                <span className="multiplayer-mounted-pet__eye" />
+                <span className="multiplayer-mounted-pet__leg multiplayer-mounted-pet__leg--1" />
+                <span className="multiplayer-mounted-pet__leg multiplayer-mounted-pet__leg--2" />
+                <span className="multiplayer-mounted-pet__leg multiplayer-mounted-pet__leg--3" />
+                <span className="multiplayer-mounted-pet__leg multiplayer-mounted-pet__leg--4" />
+                {mountedPet.flying ? <><span className="multiplayer-mounted-pet__wing multiplayer-mounted-pet__wing--left" /><span className="multiplayer-mounted-pet__wing multiplayer-mounted-pet__wing--right" /></> : null}
+              </div>
+            ) : null}
             <div className={`multiplayer-player__avatar multiplayer-player__avatar--${player.direction ?? "down"}`}>
               <span className="multiplayer-player__shadow" />
               <span className="multiplayer-player__leg multiplayer-player__leg--back" />
