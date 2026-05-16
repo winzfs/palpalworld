@@ -12,6 +12,8 @@ export type WorldPlayerPresenceRow = {
   tile_x: number;
   tile_y: number;
   updated_at: string;
+  mounted_pet_item_id?: string | null;
+  equipped_weapon_item_id?: string | null;
 };
 
 export type LocalPresencePayload = {
@@ -20,6 +22,8 @@ export type LocalPresencePayload = {
   position: { x: number; y: number };
   direction: Direction;
   currentTile: MapTileRef;
+  mountedPetItemId?: string | null;
+  equippedWeaponItemId?: string | null;
 };
 
 const defaultSupabaseUrl = "https://bbpqhwexbdozkxsfoyrn.supabase.co";
@@ -73,6 +77,8 @@ export function rowToPlayer(row: WorldPlayerPresenceRow): PlayerPublicState {
     currentTile: { regionId: row.region_id, tileX: row.tile_x, tileY: row.tile_y },
     hp: 100,
     maxHp: 100,
+    mountedPetItemId: row.mounted_pet_item_id ?? null,
+    equippedWeaponItemId: row.equipped_weapon_item_id ?? null,
   } as PlayerPublicState;
 }
 
@@ -86,6 +92,8 @@ export async function upsertLocalPresence(client: SupabaseClient, payload: Local
     region_id: payload.currentTile.regionId,
     tile_x: payload.currentTile.tileX,
     tile_y: payload.currentTile.tileY,
+    mounted_pet_item_id: payload.mountedPetItemId ?? null,
+    equipped_weapon_item_id: payload.equippedWeaponItemId ?? null,
     updated_at: new Date().toISOString(),
   });
 }
@@ -94,7 +102,7 @@ export async function fetchOnlinePlayers(client: SupabaseClient, localPlayerId: 
   const since = new Date(Date.now() - 60_000).toISOString();
   const { data, error } = await client
     .from("world_players")
-    .select("player_id,nickname,x,y,direction,region_id,tile_x,tile_y,updated_at")
+    .select("player_id,nickname,x,y,direction,region_id,tile_x,tile_y,mounted_pet_item_id,equipped_weapon_item_id,updated_at")
     .neq("player_id", localPlayerId)
     .gt("updated_at", since);
 
