@@ -56,6 +56,9 @@ ensureUseRef('lastCreatureHostClaimAtRef', '-999999', '  const isCreatureHostRef
 ensureUseRef('lastCreatureBroadcastAtRef', '0', '  const lastCreatureHostClaimAtRef = useRef(-999999);\n', 'dedupe broadcast tick ref');
 ensureUseRef('lastCreatureSnapshotSaveAtRef', '0', '  const lastCreatureBroadcastAtRef = useRef(0);\n', 'dedupe snapshot save ref');
 
+source = source.replace(/\n\s*const applyCreatureBroadcastPayload = useCallback\(\(payload: CreaturePositionsBroadcastPayload\) => \{[\s\S]*?\n\s*\}, \[[^\]]*\]\);\n/g, '\n');
+patch('dedupe broadcast handler');
+
 const handler = `
   const applyCreatureBroadcastPayload = useCallback((payload: CreaturePositionsBroadcastPayload) => {
     if (payload.hostId === getCurrentMultiplayerPlayerId()) return;
