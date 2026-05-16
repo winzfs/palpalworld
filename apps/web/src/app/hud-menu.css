@@ -213,9 +213,7 @@
   backdrop-filter: blur(12px);
 }
 
-.inventory-overlay-panel {
-  padding: 10px;
-}
+.inventory-overlay-panel { padding: 10px; }
 
 .inventory-overlay-panel__close,
 .station-overlay-panel__header button {
@@ -254,158 +252,29 @@
   color: var(--jrpg-gold);
 }
 
-.station-overlay-panel__header strong {
-  overflow: hidden;
-  font-size: 14px;
-  font-weight: 950;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.station-overlay-panel__body {
-  min-height: 0;
-  overflow: auto;
-  padding: 10px;
-}
-
-.inventory-grid-panel {
-  display: grid;
-  gap: 10px;
-  min-height: 0;
-}
-
-.inventory-grid-panel__tabs {
-  display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 6px;
-  padding-right: 34px;
-}
-
-.inventory-grid-panel__tab {
-  min-height: 32px;
-  border: 1px solid rgb(242 209 107 / 0.28);
-  border-radius: 999px;
-  background: rgb(0 0 0 / 0.2);
-  color: var(--jrpg-muted);
-  font-size: 12px;
-  font-weight: 950;
-  cursor: pointer;
-}
-
-.inventory-grid-panel__tab--active {
-  border-color: var(--jrpg-border-bright);
-  background: linear-gradient(#4f3d1f, #241b14);
-  color: var(--jrpg-text);
-}
-
-.inventory-grid-panel__content {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 220px;
-  gap: 10px;
-  min-height: 0;
-}
-
-.inventory-grid-panel__slots {
-  display: grid;
-  grid-template-columns: repeat(6, minmax(42px, 1fr));
-  gap: 6px;
-  align-content: start;
-  max-height: min(58vh, 520px);
-  overflow: auto;
-  padding: 6px;
-  border: 1px solid rgb(255 255 255 / 0.08);
-  border-radius: 12px;
-  background: rgb(0 0 0 / 0.2);
-}
-
-.inventory-grid-slot {
-  position: relative;
-  display: grid;
-  place-items: center;
-  aspect-ratio: 1 / 1;
-  min-width: 0;
-  padding: 4px;
-  border: 1px solid rgb(242 209 107 / 0.22);
-  border-radius: 8px;
-  background: rgb(20 18 28 / 0.82);
-  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.04);
-  cursor: pointer;
-}
-
+.station-overlay-panel__header strong { overflow: hidden; font-size: 14px; font-weight: 950; text-overflow: ellipsis; white-space: nowrap; }
+.station-overlay-panel__body { min-height: 0; overflow: auto; padding: 10px; }
+.inventory-grid-panel { display: grid; gap: 10px; min-height: 0; }
+.inventory-grid-panel__tabs { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; padding-right: 34px; }
+.inventory-grid-panel__tab { min-height: 32px; border: 1px solid rgb(242 209 107 / 0.28); border-radius: 999px; background: rgb(0 0 0 / 0.2); color: var(--jrpg-muted); font-size: 12px; font-weight: 950; cursor: pointer; }
+.inventory-grid-panel__tab--active { border-color: var(--jrpg-border-bright); background: linear-gradient(#4f3d1f, #241b14); color: var(--jrpg-text); }
+.inventory-grid-panel__content { display: grid; grid-template-columns: minmax(0, 1fr) 220px; gap: 10px; min-height: 0; }
+.inventory-grid-panel__slots { display: grid; grid-template-columns: repeat(6, minmax(42px, 1fr)); gap: 6px; align-content: start; max-height: min(58vh, 520px); overflow: auto; padding: 6px; border: 1px solid rgb(255 255 255 / 0.08); border-radius: 12px; background: rgb(0 0 0 / 0.2); }
+.inventory-grid-slot { position: relative; display: grid; place-items: center; aspect-ratio: 1 / 1; min-width: 0; padding: 4px; border: 1px solid rgb(242 209 107 / 0.22); border-radius: 8px; background: rgb(20 18 28 / 0.82); box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.04); cursor: pointer; }
 .inventory-grid-slot:disabled { opacity: 0.38; cursor: default; }
-
-.inventory-grid-slot--selected {
-  border-color: var(--jrpg-border-bright);
-  box-shadow: 0 0 0 2px rgb(250 204 21 / 0.18), inset 0 0 0 1px rgb(255 255 255 / 0.08);
-}
-
-.inventory-grid-slot img {
-  width: 72%;
-  height: 72%;
-  image-rendering: pixelated;
-  object-fit: contain;
-}
-
-.inventory-grid-slot b {
-  position: absolute;
-  right: 4px;
-  bottom: 2px;
-  color: #fff7df;
-  font-size: 11px;
-  font-weight: 950;
-  text-shadow: 0 1px 3px rgb(0 0 0 / 0.9);
-}
-
-.inventory-grid-slot small {
-  position: absolute;
-  left: 4px;
-  top: 3px;
-  color: var(--jrpg-gold);
-  font-size: 9px;
-  font-weight: 900;
-  text-shadow: 0 1px 3px rgb(0 0 0 / 0.9);
-}
-
-.inventory-detail-card {
-  display: grid;
-  align-content: start;
-  gap: 8px;
-  min-height: 0;
-  padding: 10px;
-  border: 1px solid rgb(242 209 107 / 0.2);
-  border-radius: 12px;
-  background: rgb(0 0 0 / 0.22);
-  color: var(--jrpg-muted);
-  font-size: 12px;
-}
-
-.inventory-detail-card__icon {
-  display: grid;
-  place-items: center;
-  width: 56px;
-  height: 56px;
-  border: 1px solid rgb(242 209 107 / 0.25);
-  border-radius: 10px;
-  background: rgb(20 18 28 / 0.82);
-}
-
+.inventory-grid-slot--selected { border-color: var(--jrpg-border-bright); box-shadow: 0 0 0 2px rgb(250 204 21 / 0.18), inset 0 0 0 1px rgb(255 255 255 / 0.08); }
+.inventory-grid-slot img { width: 72%; height: 72%; image-rendering: pixelated; object-fit: contain; }
+.inventory-grid-slot b { position: absolute; right: 4px; bottom: 2px; color: #fff7df; font-size: 11px; font-weight: 950; text-shadow: 0 1px 3px rgb(0 0 0 / 0.9); }
+.inventory-grid-slot small { position: absolute; left: 4px; top: 3px; color: var(--jrpg-gold); font-size: 9px; font-weight: 900; text-shadow: 0 1px 3px rgb(0 0 0 / 0.9); }
+.inventory-detail-card { display: grid; align-content: start; gap: 8px; min-height: 0; padding: 10px; border: 1px solid rgb(242 209 107 / 0.2); border-radius: 12px; background: rgb(0 0 0 / 0.22); color: var(--jrpg-muted); font-size: 12px; }
+.inventory-detail-card__icon { display: grid; place-items: center; width: 56px; height: 56px; border: 1px solid rgb(242 209 107 / 0.25); border-radius: 10px; background: rgb(20 18 28 / 0.82); }
 .inventory-detail-card__icon img { width: 42px; height: 42px; image-rendering: pixelated; }
 .inventory-detail-card strong { color: var(--jrpg-text); font-size: 15px; }
 .inventory-detail-card small { color: var(--jrpg-gold); font-size: 11px; font-weight: 900; }
 .inventory-detail-card p { margin: 0; line-height: 1.45; }
 .inventory-detail-card__actions { display: grid; gap: 8px; }
-
 .inventory-detail-card__actions > button,
-.inventory-quick-assign__slot {
-  min-height: 30px;
-  border: 1px solid rgb(242 209 107 / 0.35);
-  border-radius: 8px;
-  background: linear-gradient(#3b2f1e, #241b14);
-  color: var(--jrpg-text);
-  font-weight: 900;
-  cursor: pointer;
-}
-
+.inventory-quick-assign__slot { min-height: 30px; border: 1px solid rgb(242 209 107 / 0.35); border-radius: 8px; background: linear-gradient(#3b2f1e, #241b14); color: var(--jrpg-text); font-weight: 900; cursor: pointer; }
 .inventory-quick-assign { display: grid; gap: 5px; }
 .inventory-quick-assign span,
 .inventory-detail-card__hint,
@@ -414,169 +283,45 @@
 .inventory-quick-assign__slot--active { border-color: var(--jrpg-border-bright); color: var(--jrpg-gold); }
 
 .crafting-station-section,
-.feature-panel--crafting {
-  display: grid;
-  gap: 10px;
-}
-
-.crafting-station-section__intro {
-  display: grid;
-  gap: 3px;
-  padding: 8px 10px;
-  border: 1px solid rgb(242 209 107 / 0.18);
-  border-radius: 10px;
-  background: rgb(0 0 0 / 0.2);
-}
-
-.crafting-station-section__intro strong {
-  color: var(--jrpg-gold);
-  font-size: 14px;
-}
-
-.crafting-station-section__intro span {
-  color: var(--jrpg-muted);
-  font-size: 11px;
-  line-height: 1.35;
-}
-
+.feature-panel--crafting { display: grid; gap: 10px; }
+.crafting-station-section__intro { display: grid; gap: 3px; padding: 8px 10px; border: 1px solid rgb(242 209 107 / 0.18); border-radius: 10px; background: rgb(0 0 0 / 0.2); }
+.crafting-station-section__intro strong { color: var(--jrpg-gold); font-size: 14px; }
+.crafting-station-section__intro span { color: var(--jrpg-muted); font-size: 11px; line-height: 1.35; }
 .crafting-recipe-grid,
-.crafting-queue-list {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
-}
-
-.crafting-card {
-  display: grid;
-  gap: 7px;
-  min-width: 0;
-  padding: 9px;
-  border: 1px solid rgb(242 209 107 / 0.24);
-  border-radius: 10px;
-  background: rgb(20 18 28 / 0.72);
-  color: var(--jrpg-text);
-  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.04);
-}
-
-.crafting-card--disabled {
-  opacity: 0.58;
-}
-
-.crafting-card__main {
-  display: grid;
-  grid-template-columns: 44px minmax(0, 1fr);
-  gap: 8px;
-  align-items: center;
-}
-
-.crafting-card__icon {
-  display: grid;
-  place-items: center;
-  width: 44px;
-  height: 44px;
-  border: 1px solid rgb(242 209 107 / 0.25);
-  border-radius: 9px;
-  background: rgb(0 0 0 / 0.24);
-}
-
-.crafting-card__icon img {
-  width: 34px;
-  height: 34px;
-  image-rendering: pixelated;
-  object-fit: contain;
-}
-
-.crafting-card__text {
-  display: grid;
-  gap: 2px;
-  min-width: 0;
-}
-
-.crafting-card__text b {
-  overflow: hidden;
-  color: var(--jrpg-text);
-  font-size: 13px;
-  font-weight: 950;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
+.crafting-queue-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.crafting-card { display: grid; gap: 7px; min-width: 0; padding: 9px; border: 1px solid rgb(242 209 107 / 0.24); border-radius: 10px; background: rgb(20 18 28 / 0.72); color: var(--jrpg-text); box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.04); }
+.crafting-card--disabled { opacity: 0.58; }
+.crafting-card__main { display: grid; grid-template-columns: 44px minmax(0, 1fr); gap: 8px; align-items: center; }
+.crafting-card__icon { display: grid; place-items: center; width: 44px; height: 44px; border: 1px solid rgb(242 209 107 / 0.25); border-radius: 9px; background: rgb(0 0 0 / 0.24); }
+.crafting-card__icon img { width: 34px; height: 34px; image-rendering: pixelated; object-fit: contain; }
+.crafting-card__text { display: grid; gap: 2px; min-width: 0; }
+.crafting-card__text b { overflow: hidden; color: var(--jrpg-text); font-size: 13px; font-weight: 950; text-overflow: ellipsis; white-space: nowrap; }
 .crafting-card__text span,
-.crafting-card__text small {
-  color: var(--jrpg-muted);
-  font-size: 10px;
-  line-height: 1.3;
-}
-
-.crafting-card__requirements {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-}
-
-.crafting-card__requirement {
-  padding: 2px 5px;
-  border-radius: 999px;
-  border: 1px solid rgb(255 255 255 / 0.12);
-  background: rgb(0 0 0 / 0.22);
-  font-size: 9px;
-  font-weight: 800;
-}
-
-.crafting-card__requirement--enough {
-  color: #bbf7d0;
-  border-color: rgb(34 197 94 / 0.35);
-}
-
-.crafting-card__requirement--missing {
-  color: #fecaca;
-  border-color: rgb(239 68 68 / 0.42);
-}
-
-.crafting-card__button {
-  min-height: 30px;
-  border: 1px solid rgb(242 209 107 / 0.38);
-  border-radius: 8px;
-  background: linear-gradient(#4f3d1f, #241b14);
-  color: var(--jrpg-text);
-  font-size: 11px;
-  font-weight: 950;
-  cursor: pointer;
-}
-
-.crafting-card__button--ghost {
-  background: rgb(0 0 0 / 0.24);
-  color: var(--jrpg-muted);
-}
-
-.crafting-queue__bar {
-  position: relative;
-  height: 8px;
-  overflow: hidden;
-  border: 1px solid rgb(125 211 252 / 0.28);
-  border-radius: 999px;
-  background: rgb(0 0 0 / 0.36);
-}
-
-.crafting-queue__bar span {
-  display: block;
-  height: 100%;
-  border-radius: inherit;
-  background: linear-gradient(90deg, var(--jrpg-blue), var(--jrpg-gold));
-  transition: width 0.2s linear;
-}
+.crafting-card__text small { color: var(--jrpg-muted); font-size: 10px; line-height: 1.3; }
+.crafting-card__requirements { display: flex; flex-wrap: wrap; gap: 4px; }
+.crafting-card__requirement { padding: 2px 5px; border-radius: 999px; border: 1px solid rgb(255 255 255 / 0.12); background: rgb(0 0 0 / 0.22); font-size: 9px; font-weight: 800; }
+.crafting-card__requirement--enough { color: #bbf7d0; border-color: rgb(34 197 94 / 0.35); }
+.crafting-card__requirement--missing { color: #fecaca; border-color: rgb(239 68 68 / 0.42); }
+.crafting-card__button { min-height: 30px; border: 1px solid rgb(242 209 107 / 0.38); border-radius: 8px; background: linear-gradient(#4f3d1f, #241b14); color: var(--jrpg-text); font-size: 11px; font-weight: 950; cursor: pointer; }
+.crafting-card__button--ghost { background: rgb(0 0 0 / 0.24); color: var(--jrpg-muted); }
+.crafting-queue__bar { position: relative; height: 8px; overflow: hidden; border: 1px solid rgb(125 211 252 / 0.28); border-radius: 999px; background: rgb(0 0 0 / 0.36); }
+.crafting-queue__bar span { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--jrpg-blue), var(--jrpg-gold)); transition: width 0.2s linear; }
 
 .quick-slot-bar {
   pointer-events: auto;
   position: absolute;
   right: calc(14px + var(--safe-right));
   bottom: calc(110px + var(--safe-bottom));
-  z-index: 14;
+  z-index: 26;
   display: grid;
   gap: 6px;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .quick-slot {
+  pointer-events: auto;
   position: relative;
   display: grid;
   place-items: center;
@@ -589,119 +334,55 @@
   box-shadow: 0 8px 18px rgb(0 0 0 / 0.26), inset 0 0 0 1px rgb(255 255 255 / 0.05);
   backdrop-filter: blur(8px);
   cursor: pointer;
+  touch-action: manipulation;
 }
 
+.quick-slot:active { transform: scale(0.94); border-color: var(--jrpg-border-bright); }
 .quick-slot--empty { opacity: 0.58; }
 .quick-slot em { position: absolute; left: 3px; top: 2px; color: rgb(255 247 223 / 0.72); font-size: 8px; font-style: normal; font-weight: 950; }
 .quick-slot img { width: 28px; height: 28px; image-rendering: pixelated; object-fit: contain; }
 .quick-slot b { position: absolute; right: 3px; bottom: 1px; color: #fff7df; font-size: 9px; font-weight: 950; text-shadow: 0 1px 3px rgb(0 0 0 / 0.9); }
 
 @media (max-width: 720px) {
-  .hud-menu-button {
-    left: calc(8px + var(--safe-left));
-    top: calc(8px + var(--safe-top));
-    min-height: 34px;
-    padding: 6px 10px;
-    border-width: 1px;
-    font-size: 11px;
-  }
-
+  .hud-menu-button { left: calc(8px + var(--safe-left)); top: calc(8px + var(--safe-top)); min-height: 34px; padding: 6px 10px; border-width: 1px; font-size: 11px; }
   .hud-quick-button { width: 38px; height: 38px; border-radius: 10px; opacity: 0.72; }
   .hud-quick-button span { font-size: 16px; }
   .hud-quick-button small { font-size: 7px; }
-
-  .hud-minimap {
-    right: calc(8px + var(--safe-right));
-    top: calc(8px + var(--safe-top));
-    padding: 3px;
-    border-radius: 8px;
-  }
-
+  .hud-minimap { right: calc(8px + var(--safe-right)); top: calc(8px + var(--safe-top)); padding: 3px; border-radius: 8px; }
   .hud-minimap--small { width: 78px; }
   .hud-minimap--medium { width: 104px; }
   .hud-minimap--large { width: 136px; }
-
-  .hud-minimap__size-button {
-    right: 5px;
-    top: 5px;
-    min-width: 19px;
-    min-height: 18px;
-    padding: 1px 4px;
-    font-size: 8px;
-  }
-
-  .hud-menu-panel {
-    left: calc(8px + var(--safe-left));
-    right: calc(8px + var(--safe-right));
-    top: calc(50px + var(--safe-top));
-    width: auto;
-    max-height: calc(100vh - 172px - var(--safe-top) - var(--safe-bottom));
-    border-width: 1px;
-    border-radius: 10px;
-  }
-
+  .hud-minimap__size-button { right: 5px; top: 5px; min-width: 19px; min-height: 18px; padding: 1px 4px; font-size: 8px; }
+  .hud-menu-panel { left: calc(8px + var(--safe-left)); right: calc(8px + var(--safe-right)); top: calc(50px + var(--safe-top)); width: auto; max-height: calc(100vh - 172px - var(--safe-top) - var(--safe-bottom)); border-width: 1px; border-radius: 10px; }
   .hud-menu-panel__header { padding: 6px 8px; font-size: 12px; }
   .hud-menu-panel__header button { min-height: 24px; padding: 3px 7px; font-size: 10px; }
   .hud-menu-tabs { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; padding: 6px; }
   .hud-menu-tabs__button { min-height: 25px; padding: 4px 5px; border-radius: 6px; font-size: 9px; }
   .hud-menu-panel__body { padding: 6px; }
-
   .inventory-overlay-panel,
-  .station-overlay-panel {
-    width: calc(100vw - 14px);
-    max-height: calc(100vh - 120px - var(--safe-bottom));
-    border-width: 1px;
-    border-radius: 12px;
-  }
-
+  .station-overlay-panel { width: calc(100vw - 14px); max-height: calc(100vh - 120px - var(--safe-bottom)); border-width: 1px; border-radius: 12px; }
   .inventory-overlay-panel { padding: 7px; }
   .station-overlay-panel__header { min-height: 36px; padding: 6px 8px; }
   .station-overlay-panel__header strong { font-size: 12px; }
   .station-overlay-panel__body { padding: 7px; }
-
   .inventory-grid-panel__tabs { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 4px; }
   .inventory-grid-panel__tab { min-height: 26px; font-size: 9px; }
   .inventory-grid-panel__content { grid-template-columns: 1fr; }
   .inventory-grid-panel__slots { grid-template-columns: repeat(6, minmax(34px, 1fr)); gap: 4px; max-height: 42vh; }
-
   .inventory-detail-card { padding: 7px; gap: 5px; font-size: 10px; }
   .inventory-detail-card__icon { display: none; }
   .inventory-detail-card strong { font-size: 12px; }
-
   .crafting-recipe-grid,
-  .crafting-queue-list {
-    grid-template-columns: 1fr;
-    gap: 6px;
-  }
-
-  .crafting-card {
-    padding: 7px;
-    gap: 5px;
-    border-radius: 8px;
-  }
-
-  .crafting-card__main {
-    grid-template-columns: 38px minmax(0, 1fr);
-    gap: 6px;
-  }
-
-  .crafting-card__icon {
-    width: 38px;
-    height: 38px;
-    border-radius: 8px;
-  }
-
-  .crafting-card__icon img {
-    width: 29px;
-    height: 29px;
-  }
-
+  .crafting-queue-list { grid-template-columns: 1fr; gap: 6px; }
+  .crafting-card { padding: 7px; gap: 5px; border-radius: 8px; }
+  .crafting-card__main { grid-template-columns: 38px minmax(0, 1fr); gap: 6px; }
+  .crafting-card__icon { width: 38px; height: 38px; border-radius: 8px; }
+  .crafting-card__icon img { width: 29px; height: 29px; }
   .crafting-card__text b { font-size: 11px; }
   .crafting-card__text span,
   .crafting-card__text small { font-size: 9px; }
   .crafting-card__button { min-height: 27px; font-size: 10px; }
-
-  .quick-slot-bar { right: calc(10px + var(--safe-right)); bottom: calc(96px + var(--safe-bottom)); gap: 5px; }
+  .quick-slot-bar { right: calc(10px + var(--safe-right)); bottom: calc(96px + var(--safe-bottom)); gap: 5px; z-index: 28; }
   .quick-slot { width: 36px; height: 36px; border-radius: 8px; }
   .quick-slot img { width: 24px; height: 24px; }
 }
