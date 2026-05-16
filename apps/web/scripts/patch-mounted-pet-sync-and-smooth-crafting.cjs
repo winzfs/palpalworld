@@ -23,6 +23,21 @@ function replaceOnce(source, search, replacement, label) {
   return source.replace(search, replacement);
 }
 
+function replaceOnceUnless(source, search, replacement, guard, label) {
+  if (source.includes(guard)) return source;
+  return replaceOnce(source, search, replacement, label);
+}
+
+function dedupeFunction(source, functionName) {
+  const pattern = new RegExp(`\\nfunction ${functionName}\\(\\) \\{[\\s\\S]*?\\n\\}`, "g");
+  let seen = false;
+  return source.replace(pattern, (match) => {
+    if (seen) return "";
+    seen = true;
+    return match;
+  });
+}
+
 patchFile("packages/shared/src/index.ts", (source) => {
   source = replaceOnce(
     source,
@@ -56,22 +71,24 @@ patchFile("apps/web/src/features/multiplayer/supabaseMultiplayer.ts", (source) =
 patchFile("apps/web/src/features/multiplayer/MultiplayerOverlay.tsx", (source) => {
   source = replaceOnce(source, `const chatPanelCollapsedStorageKey = "palpalworld.ui.chatPanelCollapsed";`, `const chatPanelCollapsedStorageKey = "palpalworld.ui.chatPanelCollapsed";
 const mountedPetStorageKey = "palpalworld.demo.mountedPetItemId";`, "mounted pet storage key");
-  source = replaceOnce(source, `function getViewportSize() {`, `function readMountedPetItemId() {
+  source = replaceOnceUnless(source, `function getViewportSize() {`, `function readMountedPetItemId() {
   if (typeof window === "undefined") return null;
   return window.localStorage.getItem(mountedPetStorageKey);
 }
 
-function getViewportSize() {`, "read mounted pet helper");
+function getViewportSize() {`, "function readMountedPetItemId()", "read mounted pet helper");
+  source = dedupeFunction(source, "readMountedPetItemId");
   source = replaceOnce(source, `      await upsertLocalPresence(client, { playerId, nickname: localPlayer.nickname, position: localPlayer.position, direction: localPlayer.direction, currentTile: localPlayer.currentTile as MapTileRef });`, `      await upsertLocalPresence(client, { playerId, nickname: localPlayer.nickname, position: localPlayer.position, direction: localPlayer.direction, currentTile: localPlayer.currentTile as MapTileRef, mountedPetItemId: readMountedPetItemId() });`, "publish mounted pet presence");
   return source;
 });
 
 patchFile("apps/web/src/features/game/GameClientTileDemoStation.tsx", (source) => {
-  source = replaceOnce(source, `function getMountedPlayerMoveSpeed() {`, `function readMountedPetItemId() {
+  source = replaceOnceUnless(source, `function getMountedPlayerMoveSpeed() {`, `function readMountedPetItemId() {
   if (typeof window === "undefined") return null;
   return window.localStorage.getItem(mountedPetStorageKey);
 }
-function getMountedPlayerMoveSpeed() {`, "demo mounted pet reader");
+function getMountedPlayerMoveSpeed() {`, "function readMountedPetItemId()", "demo mounted pet reader");
+  source = dedupeFunction(source, "readMountedPetItemId");
   source = replaceOnce(source, `  const mountedPetItemId = window.localStorage.getItem(mountedPetStorageKey);`, `  const mountedPetItemId = readMountedPetItemId();`, "demo mounted speed uses reader");
   source = replaceOnce(source, `return { worldId: "offline-demo", serverTime: Date.now(), players: [{ id: demoPlayerId, nickname: nickname === "..." ? "Demo" : nickname, position, direction, currentTile, hp: 100, maxHp: 100 } as any], creatures, resources, buildings };`, `return { worldId: "offline-demo", serverTime: Date.now(), players: [{ id: demoPlayerId, nickname: nickname === "..." ? "Demo" : nickname, position, direction, currentTile, hp: 100, maxHp: 100, mountedPetItemId: readMountedPetItemId() } as any], creatures, resources, buildings };`, "demo snapshot mounted pet");
   return source;
@@ -87,7 +104,7 @@ patchFile("apps/web/src/features/crafting/CraftingPanel.tsx", (source) => {
   const oldProgress = '  const progress = Math.max(0, Math.min(100, Math.round(((now - startedAt) / totalMs) * 100)));\n  return <div className="crafting-queue__bar" aria-label={`제작 진행도 ${progress}%`}><span style={{ width: `${progress}%` }} /></div>;';
   const newProgress = '  const progress = Math.max(0, Math.min(100, ((now - startedAt) / totalMs) * 100));\n  const labelProgress = Math.round(progress);\n  return <div className="crafting-queue__bar" aria-label={`제작 진행도 ${labelProgress}%`}><span style={{ width: `${progress.toFixed(2)}%` }} /></div>;';
   source = replaceOnce(source, oldProgress, newProgress, "smooth progress precision");
-  source = replaceOnce(source, `  useEffect(() => {
+  source = replaceOnceUnless(source, `  useEffect(() => {
     const timer = window.setInterval(() => {`, `  useEffect(() => {
     let animationFrame = 0;
     const tickProgress = () => {
@@ -101,7 +118,7 @@ patchFile("apps/web/src/features/crafting/CraftingPanel.tsx", (source) => {
   }, []);
 
   useEffect(() => {
-    const timer = window.setInterval(() => {`, "raf smooth crafting now");
+    const timer = window.setInterval(() => {`, "const tickProgress = () =>", "raf smooth crafting now");
   return source;
 });
 
