@@ -48,7 +48,6 @@ type PixiCreatureNode = { container: PixiContainer; graphics: PixiGraphics; last
 type PixiResourceNode = { container: PixiContainer; graphics: PixiGraphics; lastSeenFrame: number };
 type PixiHitEffect = { id: string; x: number; y: number; damage: number; createdAt: number; durationMs: number };
 type PixiHitEffectNode = { container: PixiContainer; graphics: PixiGraphics; lastSeenFrame: number };
-type PixiResourceNode = { container: PixiContainer; graphics: PixiGraphics; lastSeenFrame: number };
 type PixiBuildingNode = { container: PixiContainer; graphics: PixiGraphics; lastSeenFrame: number };
 type PixiTerrainNode = { container: PixiContainer; graphics: PixiGraphics; lastSeenFrame: number };
 type PixiBuildPartNode = { container: PixiContainer; graphics: PixiGraphics; lastSeenFrame: number };
@@ -825,7 +824,6 @@ export function PixiGameCanvas({ enabled = false, snapshot, localPlayerId }: Pix
   const hitEffectNodesRef = useRef(new Map<string, PixiHitEffectNode>());
   const hitEffectsRef = useRef<PixiHitEffect[]>([]);
   const previousCreatureHpRef = useRef(new Map<string, number>());
-  const resourceNodesRef = useRef(new Map<string, PixiResourceNode>());
   const buildingNodesRef = useRef(new Map<string, PixiBuildingNode>());
   const terrainNodesRef = useRef(new Map<string, PixiTerrainNode>());
   const buildPartNodesRef = useRef(new Map<string, PixiBuildPartNode>());
@@ -928,7 +926,6 @@ export function PixiGameCanvas({ enabled = false, snapshot, localPlayerId }: Pix
         const drawableCreatures = (currentSnapshot?.creatures ?? []).filter((creature) => creature.hp > 0);
         const drawableResources = (currentSnapshot?.resources ?? []).filter((resource) => ((resource as ResourceNodeState & { remainingAmount?: number }).remainingAmount ?? 1) > 0);
         syncPixiHitEffects(drawableCreatures, previousCreatureHpRef.current, hitEffectsRef.current, now);
-        const drawableResources = (currentSnapshot?.resources ?? []).filter((resource) => ((resource as ResourceNodeState & { remainingAmount?: number }).remainingAmount ?? 1) > 0);
         const localBuildingIds = new Set((currentSnapshot?.buildings ?? []).map((building) => building.id));
         const drawableBuildings = [...(currentSnapshot?.buildings ?? []), ...remoteBuildingsRef.current.filter((building) => !localBuildingIds.has(building.id))];
 
@@ -948,7 +945,6 @@ export function PixiGameCanvas({ enabled = false, snapshot, localPlayerId }: Pix
         for (const node of creatureNodesRef.current.values()) node.container.destroy?.({ children: true });
         for (const node of resourceNodesRef.current.values()) node.container.destroy?.({ children: true });
         for (const node of hitEffectNodesRef.current.values()) node.container.destroy?.({ children: true });
-        for (const node of resourceNodesRef.current.values()) node.container.destroy?.({ children: true });
         for (const node of buildingNodesRef.current.values()) node.container.destroy?.({ children: true });
         for (const node of terrainNodesRef.current.values()) node.container.destroy?.({ children: true });
         for (const node of buildPartNodesRef.current.values()) node.container.destroy?.({ children: true });
@@ -958,7 +954,6 @@ export function PixiGameCanvas({ enabled = false, snapshot, localPlayerId }: Pix
         hitEffectNodesRef.current.clear();
         hitEffectsRef.current.length = 0;
         previousCreatureHpRef.current.clear();
-        resourceNodesRef.current.clear();
         buildingNodesRef.current.clear();
         terrainNodesRef.current.clear();
         buildPartNodesRef.current.clear();
