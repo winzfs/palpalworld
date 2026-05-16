@@ -53,22 +53,40 @@ function patchFeedbackMethod() {
 }
 
 function patchDrawCall() {
-  if (source.includes('this.dispatchPixiFeedback();\n    this.drawInteractionHint')) return;
-  const search = '    this.drawPlayers(ctx, camera.x, camera.y, now, viewport);\n    this.drawInteractionHint(ctx, camera.x, camera.y);';
-  const replacement = '    this.drawPlayers(ctx, camera.x, camera.y, now, viewport);\n    this.dispatchPixiFeedback();\n    this.drawInteractionHint(ctx, camera.x, camera.y);';
-  if (!source.includes(search)) {
-    console.log('[patch-pixi-feedback-events] skipped feedback draw call');
+  if (source.includes('this.dispatchPixiFeedback();')) return;
+
+  const literalSearch = '    this.drawPlayers(ctx, camera.x, camera.y, now, viewport);\n    this.drawInteractionHint(ctx, camera.x, camera.y);';
+  const literalReplacement = '    this.drawPlayers(ctx, camera.x, camera.y, now, viewport);\n    this.dispatchPixiFeedback();\n    this.drawInteractionHint(ctx, camera.x, camera.y);';
+  if (source.includes(literalSearch)) {
+    source = source.replace(literalSearch, literalReplacement);
+    changed = true;
+    console.log('[patch-pixi-feedback-events] patched feedback draw call literal');
     return;
   }
-  source = source.replace(search, replacement);
-  changed = true;
-  console.log('[patch-pixi-feedback-events] patched feedback draw call');
+
+  const regex = /(\n\s*this\.drawPlayers\(ctx, camera\.x, camera\.y, now, viewport\);)(\s*\n)/;
+  if (regex.test(source)) {
+    source = source.replace(regex, '$1\n    this.dispatchPixiFeedback();$2');
+    changed = true;
+    console.log('[patch-pixi-feedback-events] patched feedback draw call regex');
+    return;
+  }
+
+  const fallbackRegex = /(\n\s*this\.drawPlacementPreview\(ctx, camera\.x, camera\.y\);)(\s*\n)/;
+  if (fallbackRegex.test(source)) {
+    source = source.replace(fallbackRegex, '\n    this.dispatchPixiFeedback();$1$2');
+    changed = true;
+    console.log('[patch-pixi-feedback-events] patched feedback draw call fallback');
+    return;
+  }
+
+  console.log('[patch-pixi-feedback-events] skipped feedback draw call');
 }
 
 function patchCanvasFeedbackHiding() {
   const interactionSearch = '  private drawInteractionHint(ctx: CanvasRenderingContext2D, cameraX: number, cameraY: number) {\n    if (this.placementPreviewBuildingType) return;';
   const interactionReplacement = '  private drawInteractionHint(ctx: CanvasRenderingContext2D, cameraX: number, cameraY: number) {\n    if (isPixiStageEnabled()) return;\n    if (this.placementPreviewBuildingType) return;';
-  if (!source.includes(interactionReplacement) && source.includes(interactionSearch)) {
+  if (!source.includes('private drawInteractionHint(ctx: CanvasRenderingContext2D, cameraX: number, cameraY: number) {\n    if (isPixiStageEnabled()) return;') && source.includes(interactionSearch)) {
     source = source.replace(interactionSearch, interactionReplacement);
     changed = true;
     console.log('[patch-pixi-feedback-events] patched interaction hint hiding');
@@ -76,7 +94,7 @@ function patchCanvasFeedbackHiding() {
 
   const previewSearch = '  private drawPlacementPreview(ctx: CanvasRenderingContext2D, cameraX: number, cameraY: number) {\n    if (!this.placementPreviewBuildingType || !this.pointerWorldPosition) return;';
   const previewReplacement = '  private drawPlacementPreview(ctx: CanvasRenderingContext2D, cameraX: number, cameraY: number) {\n    if (isPixiStageEnabled()) return;\n    if (!this.placementPreviewBuildingType || !this.pointerWorldPosition) return;';
-  if (!source.includes(previewReplacement) && source.includes(previewSearch)) {
+  if (!source.includes('private drawPlacementPreview(ctx: CanvasRenderingContext2D, cameraX: number, cameraY: number) {\n    if (isPixiStageEnabled()) return;') && source.includes(previewSearch)) {
     source = source.replace(previewSearch, previewReplacement);
     changed = true;
     console.log('[patch-pixi-feedback-events] patched placement preview hiding');
