@@ -1,4 +1,4 @@
-import type { Application, Container } from "pixi.js";
+import { Container, type Application } from "pixi.js";
 
 export type PixiGameLayers = {
   root: Container;
@@ -14,16 +14,16 @@ export type PixiGameLayers = {
 };
 
 export function createPixiGameLayers(app: Application): PixiGameLayers {
-  const root = new app.stage.constructor() as Container;
-  const terrain = new app.stage.constructor() as Container;
-  const resources = new app.stage.constructor() as Container;
-  const buildingsBack = new app.stage.constructor() as Container;
-  const creatures = new app.stage.constructor() as Container;
-  const players = new app.stage.constructor() as Container;
-  const buildingsFront = new app.stage.constructor() as Container;
-  const effects = new app.stage.constructor() as Container;
-  const lighting = new app.stage.constructor() as Container;
-  const debug = new app.stage.constructor() as Container;
+  const root = new Container();
+  const terrain = new Container();
+  const resources = new Container();
+  const buildingsBack = new Container();
+  const creatures = new Container();
+  const players = new Container();
+  const buildingsFront = new Container();
+  const effects = new Container();
+  const lighting = new Container();
+  const debug = new Container();
 
   root.sortableChildren = true;
   players.sortableChildren = true;
