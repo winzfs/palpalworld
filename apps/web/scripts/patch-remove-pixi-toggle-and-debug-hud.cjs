@@ -27,12 +27,10 @@ replaceRegex(/\n  const handleTogglePixiStage = useCallback\(\(\) => \{[\s\S]*?\
 replaceRegex(/\n  useEffect\(\(\) => \{\n    const handleCreatureSyncStatus = \(event: Event\) => \{[\s\S]*?\n  \}, \[\]\);/g, '', 'creature sync status listener');
 
 replaceAll(' ${pixiStageEnabled ? "game-shell--pixi-stage" : ""}', ' game-shell--pixi-stage', 'conditional pixi shell class');
-replaceAll(' ${pixiStageEnabled ? "game-shell--pixi-stage" : ""}', ' game-shell--pixi-stage', 'conditional pixi shell class duplicate');
 replaceAll('<PixiGameCanvas enabled={pixiStageEnabled} snapshot={snapshot} localPlayerId={demoPlayerId} />', '<PixiGameCanvas enabled={true} snapshot={snapshot} localPlayerId={demoPlayerId} />', 'conditional Pixi canvas enabled');
 replaceRegex(/\n\s*<button className=\{pixiStageEnabled \? "hud-pixi-toggle hud-pixi-toggle--on" : "hud-pixi-toggle"\} onClick=\{handleTogglePixiStage\} aria-pressed=\{pixiStageEnabled\}>\{pixiStageEnabled \? "Pixi ON" : "Pixi OFF"\}<\/button>/g, '', 'Pixi ON/OFF button');
 replaceRegex(/\n\s*<div className="creature-sync-status-badge">\{creatureSyncStatus\}<\/div>/g, '', 'creature sync status badge');
 
-// Multiplayer overlay should not hide CSS players based on the removed Pixi flag.
 const overlayPath = path.join(__dirname, '..', 'src', 'features', 'multiplayer', 'MultiplayerOverlay.tsx');
 if (fs.existsSync(overlayPath)) {
   let overlay = fs.readFileSync(overlayPath, 'utf8');
@@ -58,3 +56,12 @@ if (fs.existsSync(overlayPath)) {
 
 if (changed) fs.writeFileSync(target, source);
 else console.log('[patch-remove-pixi-toggle-and-debug-hud] no GameClient changes');
+
+for (const script of [
+  './patch-existing-client-broadcast-base.cjs',
+  './patch-existing-client-broadcast-receive.cjs',
+  './patch-existing-client-broadcast-loop.cjs',
+  './patch-existing-client-attack-rpc.cjs',
+]) {
+  require(script);
+}
