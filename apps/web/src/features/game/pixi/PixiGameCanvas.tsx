@@ -1,6 +1,6 @@
 "use client";
 
-import type { WorldSnapshot } from "@palpalworld/shared";
+import type { PlayerPublicState, WorldSnapshot } from "@palpalworld/shared";
 import { useEffect, useRef } from "react";
 import { createPixiCamera, resizePixiCamera, centerPixiCameraOn } from "./PixiCamera";
 import { createPixiGameLayers } from "./PixiLayers";
@@ -27,6 +27,10 @@ declare global {
     };
   }
 }
+
+type RemotePlayersEvent = CustomEvent<{ players?: PlayerPublicState[] }>;
+type PixiGraphics = InstanceType<NonNullable<Window["PIXI"]>["Graphics"]>;
+type PixiTransformNode = { position: { set: (x: number, y: number) => void }; scale: { set: (value: number) => void } };
 
 export type PixiGameCanvasProps = {
   enabled?: boolean;
@@ -62,10 +66,45 @@ function loadPixiRuntime() {
   return pixiLoaderPromise;
 }
 
+function getPlayerColor(player: PlayerPublicState, isLocal: boolean) {
+  if (isLocal) return 0x60a5fa;
+  const hasTorch = (player as PlayerPublicState & { equippedWeaponItemId?: string | null }).equippedWeaponItemId === "torch";
+  return hasTorch ? 0xfacc15 : 0xa78bfa;
+}
+
+function drawPlayerMarker(graphics: PixiGraphics, player: PlayerPublicState, isLocal: boolean) {
+  const color = getPlayerColor(player, isLocal);
+  const radius = isLocal ? 18 : 15;
+  const hasTorch = (player as PlayerPublicState & { equippedWeaponItemId?: string | null }).equippedWeaponItemId === "torch";
+
+  if (hasTorch) {
+    graphics.circle(player.position.x, player.position.y, 44);
+    graphics.fill({ color: 0xfacc15, alpha: 0.12 });
+  }
+
+  graphics.circle(player.position.x, player.position.y, radius);
+  graphics.fill({ color, alpha: isLocal ? 0.28 : 0.34 });
+  graphics.circle(player.position.x, player.position.y, Math.max(6, radius - 7));
+  graphics.fill({ color, alpha: 0.88 });
+  graphics.moveTo(player.position.x - radius, player.position.y);
+  graphics.lineTo(player.position.x + radius, player.position.y);
+  graphics.moveTo(player.position.x, player.position.y - radius);
+  graphics.lineTo(player.position.x, player.position.y + radius);
+  graphics.stroke({ width: 2, color, alpha: 0.76 });
+}
+
+function isSamePlayerTile(a: PlayerPublicState | null | undefined, b: PlayerPublicState | null | undefined) {
+  if (!a || !b) return false;
+  return String(a.currentTile?.regionId) === String(b.currentTile?.regionId)
+    && a.currentTile?.tileX === b.currentTile?.tileX
+    && a.currentTile?.tileY === b.currentTile?.tileY;
+}
+
 export function PixiGameCanvas({ enabled = false, snapshot, localPlayerId }: PixiGameCanvasProps) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const snapshotRef = useRef<WorldSnapshot | null>(snapshot);
   const localPlayerIdRef = useRef(localPlayerId);
+  const remotePlayersRef = useRef<PlayerPublicState[]>([]);
 
   useEffect(() => {
     snapshotRef.current = snapshot;
@@ -74,6 +113,15 @@ export function PixiGameCanvas({ enabled = false, snapshot, localPlayerId }: Pix
   useEffect(() => {
     localPlayerIdRef.current = localPlayerId;
   }, [localPlayerId]);
+
+  useEffect(() => {
+    const handleRemotePlayers = (event: Event) => {
+      const customEvent = event as RemotePlayersEvent;
+      remotePlayersRef.current = customEvent.detail?.players ?? [];
+    };
+    window.addEventListener("palpalworld:remote-players", handleRemotePlayers);
+    return () => window.removeEventListener("palpalworld:remote-players", handleRemotePlayers);
+  }, []);
 
   useEffect(() => {
     if (!enabled || !hostRef.current) return;
@@ -98,8 +146,8 @@ export function PixiGameCanvas({ enabled = false, snapshot, localPlayerId }: Pix
       host.appendChild(app.canvas);
       const camera = createPixiCamera(host.clientWidth, host.clientHeight);
       const layers = createPixiGameLayers(app, PIXI);
-      const debugCross = new PIXI.Graphics();
-      layers.debug.addChild(debugCross as never);
+      const playerMarkers = new PIXI.Graphics();
+      layers.players.addChild(playerMarkers as never);
 
       const resize = () => resizePixiCamera(camera, host.clientWidth, host.clientHeight);
       const resizeObserver = new ResizeObserver(resize);
@@ -109,19 +157,17 @@ export function PixiGameCanvas({ enabled = false, snapshot, localPlayerId }: Pix
         const currentSnapshot = snapshotRef.current;
         const localPlayer = currentSnapshot?.players.find((player) => player.id === localPlayerIdRef.current);
         if (localPlayer) centerPixiCameraOn(camera, localPlayer.position);
-        const root = layers.root as unknown as { position: { set: (x: number, y: number) => void }; scale: { set: (value: number) => void } };
+        const root = layers.root as unknown as PixiTransformNode;
         root.position.set(-camera.x * camera.zoom, -camera.y * camera.zoom);
         root.scale.set(camera.zoom);
 
-        debugCross.clear();
-        if (!localPlayer) return;
-        debugCross.moveTo(localPlayer.position.x - 14, localPlayer.position.y);
-        debugCross.lineTo(localPlayer.position.x + 14, localPlayer.position.y);
-        debugCross.moveTo(localPlayer.position.x, localPlayer.position.y - 14);
-        debugCross.lineTo(localPlayer.position.x, localPlayer.position.y + 14);
-        debugCross.stroke({ width: 2, color: 0x60a5fa, alpha: 0.7 });
-        debugCross.circle(localPlayer.position.x, localPlayer.position.y, 24);
-        debugCross.fill({ color: 0x60a5fa, alpha: 0.12 });
+        playerMarkers.clear();
+        if (localPlayer) drawPlayerMarker(playerMarkers, localPlayer, true);
+        for (const remotePlayer of remotePlayersRef.current) {
+          if (remotePlayer.id === localPlayerIdRef.current) continue;
+          if (localPlayer && !isSamePlayerTile(localPlayer, remotePlayer)) continue;
+          drawPlayerMarker(playerMarkers, remotePlayer, false);
+        }
       });
 
       cleanup = () => {
