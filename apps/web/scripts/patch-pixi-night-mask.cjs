@@ -33,127 +33,149 @@ function replaceFunction(functionName, nextFunctionName, replacement) {
   console.log(`[patch-pixi-night-mask] patched ${functionName}`);
 }
 
-replaceOnce(
-  '        stage: { addChild: (...children: unknown[]) => void };\n        ticker: { add: (callback: () => void) => void };',
-  '        stage: { addChild: (...children: unknown[]) => void };\n        ticker: { add: (callback: () => void) => void };',
-  'noop app typing anchor',
-);
-
-if (!source.includes('Texture: { from: (source: HTMLCanvasElement) =>')) {
+if (!source.includes('RenderTexture: { create:')) {
   replaceOnce(
-    '      Graphics: new () => {',
-    '      Texture: { from: (source: HTMLCanvasElement) => { source?: { update?: () => void }; update?: () => void; destroy?: (destroySource?: boolean) => void } };\n      Sprite: new (texture: { source?: { update?: () => void }; update?: () => void; destroy?: (destroySource?: boolean) => void }) => PixiContainer & { texture: { source?: { update?: () => void }; update?: () => void; destroy?: (destroySource?: boolean) => void }; width: number; height: number; alpha: number; destroy?: (options?: { children?: boolean }) => void };\n      Graphics: new () => {',
-    'pixi texture sprite typing',
+    '        stage: { addChild: (...children: unknown[]) => void };\n        ticker: { add: (callback: () => void) => void };',
+    '        stage: { addChild: (...children: unknown[]) => void };\n        renderer: { render: (options: { container: unknown; target: unknown; clear?: boolean }) => void };\n        ticker: { add: (callback: () => void) => void };',
+    'app renderer typing',
+  );
+  replaceOnce(
+    '      Container: new () => PixiContainer;\n      Graphics: new () => {',
+    '      Container: new () => PixiContainer;\n      RenderTexture: { create: (options: { width: number; height: number; resolution?: number }) => { resize?: (width: number, height: number) => void; destroy?: (destroyBase?: boolean) => void } };\n      Sprite: new (texture: { resize?: (width: number, height: number) => void; destroy?: (destroyBase?: boolean) => void }) => PixiContainer & { texture: unknown; width: number; height: number; alpha: number; destroy?: (options?: { children?: boolean }) => void };\n      Graphics: new () => {',
+    'render texture sprite typing',
   );
 }
 
-replaceFunction('drawPixiNightLighting', 'isSamePlayerTile', `function carvePixiNightLight(ctx: CanvasRenderingContext2D, x: number, y: number, radius: number, strength: number) {
-  const gradient = ctx.createRadialGradient(x, y, 0, x, y, radius);
-  gradient.addColorStop(0, \`rgba(0,0,0,\${Math.min(1, strength)})\`);
-  gradient.addColorStop(0.42, \`rgba(0,0,0,\${Math.min(1, strength * 0.82)})\`);
-  gradient.addColorStop(0.72, \`rgba(0,0,0,\${Math.min(1, strength * 0.34)})\`);
-  gradient.addColorStop(1, "rgba(0,0,0,0)");
-  ctx.fillStyle = gradient;
-  ctx.beginPath();
-  ctx.arc(x, y, radius, 0, Math.PI * 2);
-  ctx.fill();
-}
+replaceFunction('drawPixiNightLighting', 'isSamePlayerTile', `function drawPixiNightLighting(PIXI: NonNullable<Window["PIXI"]>, app: InstanceType<NonNullable<Window["PIXI"]>["Application"]>, darknessGraphics: PixiGraphics, glowGraphics: PixiGraphics, cutoutGraphics: PixiGraphics, renderContainer: PixiContainer, renderTexture: { resize?: (width: number, height: number) => void }, nightSprite: PixiContainer & { width: number; height: number; alpha: number }, width: number, height: number, cameraX: number, cameraY: number, drawablePlayers: DrawablePlayer[]) {
+  const screenWidth = Math.max(1, Math.ceil(width));
+  const screenHeight = Math.max(1, Math.ceil(height));
+  nightSprite.width = screenWidth;
+  nightSprite.height = screenHeight;
+  renderTexture.resize?.(screenWidth, screenHeight);
 
-function drawPixiNightGlow(ctx: CanvasRenderingContext2D, x: number, y: number, radius: number, torch: boolean) {
-  const gradient = ctx.createRadialGradient(x, y, 0, x, y, radius);
-  if (torch) {
-    gradient.addColorStop(0, "rgba(255,218,145,0.16)");
-    gradient.addColorStop(0.46, "rgba(255,156,74,0.055)");
-    gradient.addColorStop(1, "rgba(255,156,74,0)");
-  } else {
-    gradient.addColorStop(0, "rgba(191,219,254,0.065)");
-    gradient.addColorStop(0.56, "rgba(147,197,253,0.022)");
-    gradient.addColorStop(1, "rgba(147,197,253,0)");
-  }
-  ctx.fillStyle = gradient;
-  ctx.beginPath();
-  ctx.arc(x, y, radius, 0, Math.PI * 2);
-  ctx.fill();
-}
-
-function drawPixiNightLighting(maskCanvas: HTMLCanvasElement, maskContext: CanvasRenderingContext2D, maskTexture: { source?: { update?: () => void }; update?: () => void }, width: number, height: number, cameraX: number, cameraY: number, drawablePlayers: DrawablePlayer[]) {
-  const canvasWidth = Math.max(1, Math.ceil(width));
-  const canvasHeight = Math.max(1, Math.ceil(height));
-  if (maskCanvas.width !== canvasWidth || maskCanvas.height !== canvasHeight) {
-    maskCanvas.width = canvasWidth;
-    maskCanvas.height = canvasHeight;
-  }
-
-  maskContext.setTransform(1, 0, 0, 1, 0, 0);
-  maskContext.clearRect(0, 0, canvasWidth, canvasHeight);
+  darknessGraphics.clear();
+  glowGraphics.clear();
+  cutoutGraphics.clear();
   if (!isNightModeActive()) {
-    maskTexture.source?.update?.();
-    maskTexture.update?.();
+    nightSprite.alpha = 0;
+    app.renderer.render({ container: renderContainer, target: renderTexture, clear: true });
     return;
   }
 
-  maskContext.globalCompositeOperation = "source-over";
-  maskContext.fillStyle = "rgba(1, 3, 10, 0.88)";
-  maskContext.fillRect(0, 0, canvasWidth, canvasHeight);
+  nightSprite.alpha = 1;
+  darknessGraphics.rect(0, 0, screenWidth, screenHeight);
+  darknessGraphics.fill({ color: 0x01030a, alpha: 0.88 });
 
-  const lights: { x: number; y: number; radius: number; strength: number; torch: boolean }[] = [];
   for (const entry of drawablePlayers) {
     const screenX = entry.player.position.x - cameraX;
     const screenY = entry.player.position.y - cameraY + 2;
-    if (screenX < -320 || screenY < -320 || screenX > width + 320 || screenY > height + 320) continue;
+    if (screenX < -360 || screenY < -360 || screenX > screenWidth + 360 || screenY > screenHeight + 360) continue;
     const torch = hasTorchEquipped(entry.player);
-    const radius = torch ? 238 : entry.isLocal ? 66 : 0;
-    if (radius <= 0) continue;
+    const outerRadius = torch ? 238 : entry.isLocal ? 68 : 0;
+    if (outerRadius <= 0) continue;
     const flicker = torch ? 0.94 + Math.sin(Date.now() / 90 + screenX * 0.013) * 0.06 : 1;
-    lights.push({ x: screenX, y: screenY, radius: radius * flicker, strength: torch ? 0.96 : 0.56, torch });
+    const r1 = outerRadius * flicker;
+    const r2 = r1 * 0.74;
+    const r3 = r1 * 0.48;
+    const r4 = torch ? r1 * 0.25 : r1 * 0.30;
+
+    // Soft glow tint lives inside the isolated render texture, never erasing the main stage.
+    glowGraphics.circle(screenX, screenY, r1);
+    glowGraphics.fill({ color: torch ? 0xfbbf24 : 0x93c5fd, alpha: torch ? 0.09 : 0.035 });
+    glowGraphics.circle(screenX, screenY, r2);
+    glowGraphics.fill({ color: torch ? 0xffedd5 : 0xbfdbfe, alpha: torch ? 0.065 : 0.025 });
+
+    // Erase only the isolated darkness texture. This is safe because cutoutGraphics is not on app.stage.
+    cutoutGraphics.circle(screenX, screenY, r1);
+    cutoutGraphics.fill({ color: 0xffffff, alpha: torch ? 0.20 : 0.12 });
+    cutoutGraphics.circle(screenX, screenY, r2);
+    cutoutGraphics.fill({ color: 0xffffff, alpha: torch ? 0.28 : 0.18 });
+    cutoutGraphics.circle(screenX, screenY, r3);
+    cutoutGraphics.fill({ color: 0xffffff, alpha: torch ? 0.42 : 0.26 });
+    cutoutGraphics.circle(screenX, screenY, r4);
+    cutoutGraphics.fill({ color: 0xffffff, alpha: torch ? 0.74 : 0.36 });
   }
 
-  maskContext.globalCompositeOperation = "destination-out";
-  for (const light of lights) carvePixiNightLight(maskContext, light.x, light.y, light.radius, light.strength);
-
-  maskContext.globalCompositeOperation = "source-over";
-  for (const light of lights) drawPixiNightGlow(maskContext, light.x, light.y, light.radius * 0.78, light.torch);
-
-  maskContext.globalCompositeOperation = "source-over";
-  maskTexture.source?.update?.();
-  maskTexture.update?.();
+  app.renderer.render({ container: renderContainer, target: renderTexture, clear: true });
 }`);
 
 replaceOnce(
   '      const lightingGraphics = new PIXI.Graphics();\n      layers.lighting.addChild(lightingGraphics as unknown as PixiContainer);',
-  '      const nightMaskCanvas = document.createElement("canvas");\n      const nightMaskContext = nightMaskCanvas.getContext("2d", { alpha: true });\n      if (!nightMaskContext) throw new Error("Failed to create Pixi night mask context.");\n      const nightMaskTexture = PIXI.Texture.from(nightMaskCanvas);\n      const nightMaskSprite = new PIXI.Sprite(nightMaskTexture);\n      nightMaskSprite.alpha = 1;\n      app.stage.addChild(nightMaskSprite as unknown as PixiContainer);\n      layers.lighting.visible = false;',
-  'create pixi night sprite from layer lighting',
+  '      const nightRenderContainer = new PIXI.Container();\n      const nightDarknessGraphics = new PIXI.Graphics();\n      const nightGlowGraphics = new PIXI.Graphics();\n      const nightCutoutGraphics = new PIXI.Graphics();\n      (nightCutoutGraphics as unknown as { blendMode: string }).blendMode = "erase";\n      nightRenderContainer.addChild(nightDarknessGraphics as unknown as PixiContainer, nightGlowGraphics as unknown as PixiContainer, nightCutoutGraphics as unknown as PixiContainer);\n      let nightRenderTexture = PIXI.RenderTexture.create({ width: Math.max(1, host.clientWidth), height: Math.max(1, host.clientHeight), resolution: Math.min(window.devicePixelRatio || 1, 2) });\n      const nightMaskSprite = new PIXI.Sprite(nightRenderTexture);\n      nightMaskSprite.alpha = 0;\n      app.stage.addChild(nightMaskSprite as unknown as PixiContainer);\n      layers.lighting.visible = false;',
+  'create isolated pixi night render texture from layer lighting',
 );
 
 replaceOnce(
   '      const lightingGraphics = new PIXI.Graphics();\n      app.stage.addChild(lightingGraphics as unknown as PixiContainer);\n      layers.lighting.visible = false;',
-  '      const nightMaskCanvas = document.createElement("canvas");\n      const nightMaskContext = nightMaskCanvas.getContext("2d", { alpha: true });\n      if (!nightMaskContext) throw new Error("Failed to create Pixi night mask context.");\n      const nightMaskTexture = PIXI.Texture.from(nightMaskCanvas);\n      const nightMaskSprite = new PIXI.Sprite(nightMaskTexture);\n      nightMaskSprite.alpha = 1;\n      app.stage.addChild(nightMaskSprite as unknown as PixiContainer);\n      layers.lighting.visible = false;',
-  'create pixi night sprite from screen lighting',
+  '      const nightRenderContainer = new PIXI.Container();\n      const nightDarknessGraphics = new PIXI.Graphics();\n      const nightGlowGraphics = new PIXI.Graphics();\n      const nightCutoutGraphics = new PIXI.Graphics();\n      (nightCutoutGraphics as unknown as { blendMode: string }).blendMode = "erase";\n      nightRenderContainer.addChild(nightDarknessGraphics as unknown as PixiContainer, nightGlowGraphics as unknown as PixiContainer, nightCutoutGraphics as unknown as PixiContainer);\n      let nightRenderTexture = PIXI.RenderTexture.create({ width: Math.max(1, host.clientWidth), height: Math.max(1, host.clientHeight), resolution: Math.min(window.devicePixelRatio || 1, 2) });\n      const nightMaskSprite = new PIXI.Sprite(nightRenderTexture);\n      nightMaskSprite.alpha = 0;\n      app.stage.addChild(nightMaskSprite as unknown as PixiContainer);\n      layers.lighting.visible = false;',
+  'create isolated pixi night render texture from screen lighting',
 );
 
 replaceOnce(
   '      const lightingGraphics = new PIXI.Graphics();\n      const feedbackGraphics = new PIXI.Graphics();\n      layers.effects.addChild(feedbackGraphics as unknown as PixiContainer);\n      app.stage.addChild(lightingGraphics as unknown as PixiContainer);\n      layers.lighting.visible = false;',
+  '      const nightRenderContainer = new PIXI.Container();\n      const nightDarknessGraphics = new PIXI.Graphics();\n      const nightGlowGraphics = new PIXI.Graphics();\n      const nightCutoutGraphics = new PIXI.Graphics();\n      (nightCutoutGraphics as unknown as { blendMode: string }).blendMode = "erase";\n      nightRenderContainer.addChild(nightDarknessGraphics as unknown as PixiContainer, nightGlowGraphics as unknown as PixiContainer, nightCutoutGraphics as unknown as PixiContainer);\n      let nightRenderTexture = PIXI.RenderTexture.create({ width: Math.max(1, host.clientWidth), height: Math.max(1, host.clientHeight), resolution: Math.min(window.devicePixelRatio || 1, 2) });\n      const nightMaskSprite = new PIXI.Sprite(nightRenderTexture);\n      nightMaskSprite.alpha = 0;\n      const feedbackGraphics = new PIXI.Graphics();\n      layers.effects.addChild(feedbackGraphics as unknown as PixiContainer);\n      app.stage.addChild(nightMaskSprite as unknown as PixiContainer);\n      layers.lighting.visible = false;',
+  'create isolated pixi night render texture with feedback',
+);
+
+replaceOnce(
+  '      const nightMaskCanvas = document.createElement("canvas");\n      const nightMaskContext = nightMaskCanvas.getContext("2d", { alpha: true });\n      if (!nightMaskContext) throw new Error("Failed to create Pixi night mask context.");\n      const nightMaskTexture = PIXI.Texture.from(nightMaskCanvas);\n      const nightMaskSprite = new PIXI.Sprite(nightMaskTexture);\n      nightMaskSprite.alpha = 1;\n      app.stage.addChild(nightMaskSprite as unknown as PixiContainer);\n      layers.lighting.visible = false;',
+  '      const nightRenderContainer = new PIXI.Container();\n      const nightDarknessGraphics = new PIXI.Graphics();\n      const nightGlowGraphics = new PIXI.Graphics();\n      const nightCutoutGraphics = new PIXI.Graphics();\n      (nightCutoutGraphics as unknown as { blendMode: string }).blendMode = "erase";\n      nightRenderContainer.addChild(nightDarknessGraphics as unknown as PixiContainer, nightGlowGraphics as unknown as PixiContainer, nightCutoutGraphics as unknown as PixiContainer);\n      let nightRenderTexture = PIXI.RenderTexture.create({ width: Math.max(1, host.clientWidth), height: Math.max(1, host.clientHeight), resolution: Math.min(window.devicePixelRatio || 1, 2) });\n      const nightMaskSprite = new PIXI.Sprite(nightRenderTexture);\n      nightMaskSprite.alpha = 0;\n      app.stage.addChild(nightMaskSprite as unknown as PixiContainer);\n      layers.lighting.visible = false;',
+  'replace canvas night mask with isolated render texture',
+);
+
+replaceOnce(
   '      const nightMaskCanvas = document.createElement("canvas");\n      const nightMaskContext = nightMaskCanvas.getContext("2d", { alpha: true });\n      if (!nightMaskContext) throw new Error("Failed to create Pixi night mask context.");\n      const nightMaskTexture = PIXI.Texture.from(nightMaskCanvas);\n      const nightMaskSprite = new PIXI.Sprite(nightMaskTexture);\n      nightMaskSprite.alpha = 1;\n      const feedbackGraphics = new PIXI.Graphics();\n      layers.effects.addChild(feedbackGraphics as unknown as PixiContainer);\n      app.stage.addChild(nightMaskSprite as unknown as PixiContainer);\n      layers.lighting.visible = false;',
-  'create pixi night sprite with feedback',
+  '      const nightRenderContainer = new PIXI.Container();\n      const nightDarknessGraphics = new PIXI.Graphics();\n      const nightGlowGraphics = new PIXI.Graphics();\n      const nightCutoutGraphics = new PIXI.Graphics();\n      (nightCutoutGraphics as unknown as { blendMode: string }).blendMode = "erase";\n      nightRenderContainer.addChild(nightDarknessGraphics as unknown as PixiContainer, nightGlowGraphics as unknown as PixiContainer, nightCutoutGraphics as unknown as PixiContainer);\n      let nightRenderTexture = PIXI.RenderTexture.create({ width: Math.max(1, host.clientWidth), height: Math.max(1, host.clientHeight), resolution: Math.min(window.devicePixelRatio || 1, 2) });\n      const nightMaskSprite = new PIXI.Sprite(nightRenderTexture);\n      nightMaskSprite.alpha = 0;\n      const feedbackGraphics = new PIXI.Graphics();\n      layers.effects.addChild(feedbackGraphics as unknown as PixiContainer);\n      app.stage.addChild(nightMaskSprite as unknown as PixiContainer);\n      layers.lighting.visible = false;',
+  'replace canvas night mask with isolated render texture and feedback',
 );
 
 replaceOnce(
   '        const lighting = lightingGraphics as unknown as PixiTransformNode;\n        lighting.position.set(0, 0);\n        lighting.scale.set(1);',
+  '        const lighting = nightMaskSprite as unknown as PixiTransformNode;\n        lighting.position.set(0, 0);\n        lighting.scale.set(1);',
+  'night render texture sprite transform from graphics',
+);
+
+replaceOnce(
   '        const lighting = nightMaskSprite as unknown as PixiTransformNode;\n        lighting.position.set(0, 0);\n        lighting.scale.set(1);\n        nightMaskSprite.width = host.clientWidth;\n        nightMaskSprite.height = host.clientHeight;',
-  'night sprite transform',
+  '        const lighting = nightMaskSprite as unknown as PixiTransformNode;\n        lighting.position.set(0, 0);\n        lighting.scale.set(1);',
+  'remove canvas night sprite sizing transform',
 );
 
 replaceOnce(
   '        drawPixiNightLighting(lightingGraphics, host.clientWidth, host.clientHeight, camera.x, camera.y, drawablePlayers);',
+  '        drawPixiNightLighting(PIXI, app, nightDarknessGraphics, nightGlowGraphics, nightCutoutGraphics, nightRenderContainer, nightRenderTexture, nightMaskSprite, host.clientWidth, host.clientHeight, camera.x, camera.y, drawablePlayers);',
+  'night render texture draw call from graphics',
+);
+
+replaceOnce(
   '        drawPixiNightLighting(nightMaskCanvas, nightMaskContext, nightMaskTexture, host.clientWidth, host.clientHeight, camera.x, camera.y, drawablePlayers);',
-  'night sprite draw call',
+  '        drawPixiNightLighting(PIXI, app, nightDarknessGraphics, nightGlowGraphics, nightCutoutGraphics, nightRenderContainer, nightRenderTexture, nightMaskSprite, host.clientWidth, host.clientHeight, camera.x, camera.y, drawablePlayers);',
+  'night render texture draw call from canvas',
 );
 
 replaceOnce(
   '        lightingGraphics.destroy?.();',
-  '        nightMaskSprite.destroy?.({ children: true });\n        nightMaskTexture.destroy?.(true);',
-  'night sprite cleanup',
+  '        nightMaskSprite.destroy?.({ children: true });\n        nightRenderTexture.destroy?.(true);\n        nightRenderContainer.destroy?.({ children: true });',
+  'night render texture cleanup from graphics',
 );
+
+replaceOnce(
+  '        nightMaskSprite.destroy?.({ children: true });\n        nightMaskTexture.destroy?.(true);',
+  '        nightMaskSprite.destroy?.({ children: true });\n        nightRenderTexture.destroy?.(true);\n        nightRenderContainer.destroy?.({ children: true });',
+  'night render texture cleanup from canvas',
+);
+
+const fallbackBlock = `/* pixi night dom fallback */
+.game-shell--pixi-stage.game-shell--night .night-field-overlay,
+.game-shell--pixi-stage.game-shell--night .night-player-light {
+  display: block;
+}
+`;
+if (css.includes(fallbackBlock)) {
+  css = css.replace(fallbackBlock, '');
+  cssChanged = true;
+  console.log('[patch-pixi-night-mask] removed DOM fallback block');
+}
 
 const hideBlock = `.game-shell--pixi-stage.game-shell--night .night-field-overlay,
 .game-shell--pixi-stage.game-shell--night .night-player-light {
@@ -162,10 +184,9 @@ const hideBlock = `.game-shell--pixi-stage.game-shell--night .night-field-overla
 
 `;
 if (!css.includes(hideBlock)) {
-  css = css.replace('/* pixi night dom fallback */\n.game-shell--pixi-stage.game-shell--night .night-field-overlay,\n.game-shell--pixi-stage.game-shell--night .night-player-light {\n  display: block;\n}\n', '');
   css = `${css.trimEnd()}\n\n/* pixi night ownership */\n${hideBlock}.game-shell--pixi-stage.game-shell--night .pixi-game-canvas {\n  filter: saturate(0.92) contrast(1.04);\n}\n`;
   cssChanged = true;
-  console.log('[patch-pixi-night-mask] restored Pixi ownership and hid DOM night fallback');
+  console.log('[patch-pixi-night-mask] hid DOM night fallback for Pixi night ownership');
 }
 
 if (changed) fs.writeFileSync(pixiPath, source);
