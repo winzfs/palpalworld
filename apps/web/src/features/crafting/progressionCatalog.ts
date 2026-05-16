@@ -49,6 +49,7 @@ export const CRAFTING_STATIONS: CraftingStationDefinition[] = [
 ];
 
 export const PROGRESSION_RECIPES: ProgressionRecipe[] = [
+  { id: "torch", name: "횃불", tier: "초반", station: "hand", category: "tool", inputs: [{ itemId: "wood", amount: 3 }, { itemId: "fiber", amount: 2 }, { itemId: "coal", amount: 1 }], outputs: [{ itemId: "torch", amount: 1 }], craftTimeMs: 1200, description: "밤에 캐릭터 주변을 더 넓게 밝혀주는 임시 광원 아이템." },
   { id: "basic_axe", name: "기본 도끼", tier: "초반", station: "workbench", category: "tool", inputs: [{ itemId: "wood", amount: 12 }, { itemId: "stone", amount: 6 }], outputs: [{ itemId: "basic_axe", amount: 1 }], craftTimeMs: 2000, description: "나무 채집 효율을 올리는 기본 도구." },
   { id: "basic_pickaxe", name: "기본 곡괭이", tier: "초반", station: "workbench", category: "tool", inputs: [{ itemId: "wood", amount: 10 }, { itemId: "stone", amount: 10 }], outputs: [{ itemId: "basic_pickaxe", amount: 1 }], craftTimeMs: 2000, description: "돌과 광석 채집 효율을 올리는 기본 도구." },
   { id: "capture_orb", name: "초급 포획구", tier: "초반", station: "workbench", category: "pal", inputs: [{ itemId: "stone", amount: 5 }, { itemId: "fiber", amount: 3 }], outputs: [{ itemId: "capture_orb", amount: 3 }], craftTimeMs: 3000, description: "낮은 레벨 몬스터를 포획하는 기본 포획구." },
