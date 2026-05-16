@@ -93,7 +93,10 @@ function createPlayer(socketId: string, nickname: string): PlayerPublicState {
 function syncPlayerEquipmentState(playerId: string) {
   const player = world.players.get(playerId);
   if (!player) return;
-  player.equippedWeaponItemId = equipment.getEquippedMainHandItemId(playerId);
+  const serverWeaponItemId = equipment.getEquippedMainHandItemId(playerId);
+  if (serverWeaponItemId || player.equippedWeaponItemId === undefined) {
+    player.equippedWeaponItemId = serverWeaponItemId;
+  }
 }
 
 function travelPlayerIfAtPortal(player: PlayerPublicState, forcedDirection?: MapDirection) {
@@ -153,11 +156,15 @@ io.on("connection", (socket) => {
 
   socket.on("client:player_input", (payload) => {
     lastInputs.set(socket.id, payload.movement);
+    const player = world.players.get(socket.id);
+    if (player) {
+      const equippedWeaponItemId = (payload as PlayerInputPayload & { equippedWeaponItemId?: string | null }).equippedWeaponItemId;
+      if (equippedWeaponItemId !== undefined) player.equippedWeaponItemId = equippedWeaponItemId;
+    }
     if (payload.primaryAction) {
       handleAttack(socket.id);
     }
     if (payload.secondaryAction) {
-      const player = world.players.get(socket.id);
       if (player && travelPlayerIfAtPortal(player)) {
         socket.emit("server:toast", { type: "success", message: "다른 맵 타일로 이동했습니다." });
       }
