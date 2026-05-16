@@ -84,10 +84,9 @@ patchFile("apps/web/src/features/rendering/SpriteRenderer.ts", (source) => {
 });
 
 patchFile("apps/web/src/features/crafting/CraftingPanel.tsx", (source) => {
-  source = replaceOnce(source, `  const progress = Math.max(0, Math.min(100, Math.round(((now - startedAt) / totalMs) * 100)));
-  return <div className="crafting-queue__bar" aria-label={\`제작 진행도 ${progress}%\`}><span style={{ width: \`${progress}%\` }} /></div>;`, `  const progress = Math.max(0, Math.min(100, ((now - startedAt) / totalMs) * 100));
-  const labelProgress = Math.round(progress);
-  return <div className="crafting-queue__bar" aria-label={\`제작 진행도 ${labelProgress}%\`}><span style={{ width: \`${progress.toFixed(2)}%\` }} /></div>;`, "smooth progress precision");
+  const oldProgress = '  const progress = Math.max(0, Math.min(100, Math.round(((now - startedAt) / totalMs) * 100)));\n  return <div className="crafting-queue__bar" aria-label={`제작 진행도 ${progress}%`}><span style={{ width: `${progress}%` }} /></div>;';
+  const newProgress = '  const progress = Math.max(0, Math.min(100, ((now - startedAt) / totalMs) * 100));\n  const labelProgress = Math.round(progress);\n  return <div className="crafting-queue__bar" aria-label={`제작 진행도 ${labelProgress}%`}><span style={{ width: `${progress.toFixed(2)}%` }} /></div>;';
+  source = replaceOnce(source, oldProgress, newProgress, "smooth progress precision");
   source = replaceOnce(source, `  useEffect(() => {
     const timer = window.setInterval(() => {`, `  useEffect(() => {
     let animationFrame = 0;
