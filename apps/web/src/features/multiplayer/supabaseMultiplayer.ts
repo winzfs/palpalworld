@@ -110,6 +110,26 @@ export async function fetchOnlinePlayers(client: SupabaseClient, localPlayerId: 
   return (data as WorldPlayerPresenceRow[]).map(rowToPlayer);
 }
 
+export async function isCurrentPlayerWorldHost(client: SupabaseClient, localPlayerId: string, tile: MapTileRef | null) {
+  if (!localPlayerId || localPlayerId === "unknown") return false;
+  const since = new Date(Date.now() - 15_000).toISOString();
+  let query = client
+    .from("world_players")
+    .select("player_id,updated_at")
+    .gt("updated_at", since)
+    .order("updated_at", { ascending: true })
+    .order("player_id", { ascending: true })
+    .limit(1);
+
+  if (tile) {
+    query = query.eq("region_id", tile.regionId).eq("tile_x", tile.tileX).eq("tile_y", tile.tileY);
+  }
+
+  const { data, error } = await query;
+  if (error || !data || data.length <= 0) return true;
+  return data[0]?.player_id === localPlayerId;
+}
+
 export function subscribeOnlinePlayers(
   client: SupabaseClient,
   onChange: () => void,
