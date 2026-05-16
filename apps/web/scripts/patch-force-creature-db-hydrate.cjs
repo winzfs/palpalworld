@@ -12,8 +12,33 @@ r('  const lastUiSnapshotAtRef = useRef(0);\n', '  const lastUiSnapshotAtRef = u
 const effect = '  useEffect(() => {\n    const client = forceHydrateClientRef.current;\n    if (!client || !isSupabaseMultiplayerEnabled()) return;\n    let stopped = false;\n    const load = async () => {\n      const rows = await fetchWorldCreatures(client, demoTileRef.current);\n      if (stopped || rows.length <= 0) return;\n      demoCreaturesRef.current = rows.map(rowToCreature);\n      demoTileIndexRef.current = createDemoTileIndex(demoResourcesRef.current, demoCreaturesRef.current, demoBuildingsRef.current);\n      applyDemoSnapshot(true);\n    };\n    void load();\n    const id = window.setInterval(load, 2500);\n    return () => { stopped = true; window.clearInterval(id); };\n  }, [applyDemoSnapshot]);\n';
 
 r('  useEffect(() => { setNickname(createClientNickname()); commitInventory(readStoredInventory(createDemoInventory())); }, [commitInventory]);\n', '  useEffect(() => { setNickname(createClientNickname()); commitInventory(readStoredInventory(createDemoInventory())); }, [commitInventory]);\n' + effect, 'direct hydrate effect after inventory');
-insertBefore('  const handleInteract = useCallback(() => {', effect, 'direct hydrate effect before handlers');
+insertBefore('  const handleDemoInteract = useCallback(() => {', effect, 'direct hydrate effect before demo interact');
+
+function mergeImports(modulePath) {
+  const pattern = new RegExp('import \\{([^}]+)\\} from "' + modulePath.replace(/[.*+?^${}()|[\\]\\]/g, '\\$&') + '";\\n', 'g');
+  const matches = [...s.matchAll(pattern)];
+  if (matches.length <= 1) return;
+  const names = [];
+  const seen = new Set();
+  for (const match of matches) {
+    for (const raw of match[1].split(',')) {
+      const name = raw.trim();
+      if (!name || seen.has(name)) continue;
+      seen.add(name);
+      names.push(name);
+    }
+  }
+  s = s.replace(pattern, '');
+  const merged = 'import { ' + names.join(', ') + ' } from "' + modulePath + '";\n';
+  const anchor = 'import { PixiGameCanvas } from "./pixi/PixiGameCanvas";\n';
+  s = s.includes(anchor) ? s.replace(anchor, anchor + merged) : merged + s;
+  c = true;
+  console.log('[patch-force-creature-db-hydrate] merged ' + modulePath);
+}
+
+mergeImports('../multiplayer/supabaseMultiplayer');
+mergeImports('../multiplayer/supabaseWorldCreatures');
+mergeImports('../multiplayer/supabaseCreatureBroadcast');
 
 if(c) fs.writeFileSync(f,s);
 else console.log('[patch-force-creature-db-hydrate] no changes');
-require('./patch-existing-client-import-merge-final.cjs');
