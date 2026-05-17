@@ -94,29 +94,17 @@ export async function upsertWorldCreatures(client: SupabaseClient, creatures: Cr
 }
 
 export async function updateWorldCreaturePositions(client: SupabaseClient, creatures: CreaturePublicState[]) {
-  if (creatures.length === 0) return;
+  const aliveCreatures = creatures.filter((creature) => creature.hp > 0);
+  if (aliveCreatures.length === 0) return;
+
   const updatedAt = new Date().toISOString();
-  let count = 0;
-  for (const creature of creatures) {
-    const currentTile = (creature as { currentTile?: MapTileRef }).currentTile ?? { regionId: "starter_meadow", tileX: 1, tileY: 1 } as MapTileRef;
-    const { error } = await client
-      .from("world_creatures")
-      .update({
-        x: creature.position.x,
-        y: creature.position.y,
-        region_id: currentTile.regionId,
-        tile_x: currentTile.tileX,
-        tile_y: currentTile.tileY,
-        updated_at: updatedAt,
-      })
-      .eq("creature_id", creature.id);
-    if (error) {
-      emitCreatureSyncStatus({ ok: false, count, error: error.message });
-      return;
-    }
-    count += 1;
-  }
-  emitCreatureSyncStatus({ ok: true, count });
+  const rows = aliveCreatures.map((creature) => ({
+    ...creatureToRow(creature),
+    updated_at: updatedAt,
+  }));
+
+  const { error } = await client.from("world_creatures").upsert(rows);
+  emitCreatureSyncStatus({ ok: !error, count: aliveCreatures.length, error: error?.message });
 }
 
 export async function fetchWorldCreatures(client: SupabaseClient, tile: MapTileRef | null) {
