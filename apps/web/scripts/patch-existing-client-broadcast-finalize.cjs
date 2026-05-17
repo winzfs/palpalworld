@@ -58,6 +58,8 @@ ensureUseRef('lastCreatureSnapshotSaveAtRef', '0', '  const lastCreatureBroadcas
 
 source = source.replace(/\n\s*const applyCreatureBroadcastPayload = useCallback\(\(payload: CreaturePositionsBroadcastPayload\) => \{[\s\S]*?\n\s*\}, \[[^\]]*\]\);\n/g, '\n');
 patch('dedupe broadcast handler');
+source = source.replace(/\n\s*useEffect\(\(\) => \{[\s\S]*?createCreatureBroadcastChannel\(client, demoTileRef\.current, applyCreatureBroadcastPayload\)[\s\S]*?\n\s*\}, \[[^\]]*applyCreatureBroadcastPayload[^\]]*\]\);\n/g, '\n');
+patch('dedupe broadcast lifecycle');
 
 const handler = `
   const applyCreatureBroadcastPayload = useCallback((payload: CreaturePositionsBroadcastPayload) => {
