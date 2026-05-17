@@ -62,6 +62,7 @@ for (const script of [
   './patch-supabase-authoritative-creature-start.cjs',
   './patch-force-creature-db-hydrate.cjs',
   './patch-creature-hydrate-once-final.cjs',
+  './patch-creature-sync-force-final.cjs',
 ]) {
   require(script);
 }
