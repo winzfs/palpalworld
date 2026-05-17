@@ -19,3 +19,5 @@ if (s.includes(oldLine) && !s.includes(newLine)) {
 }
 
 if (s !== before) fs.writeFileSync(target, s);
+
+require('./patch-creature-rescue-visible.cjs');
