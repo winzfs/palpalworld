@@ -8,18 +8,30 @@ const tag = '[patch-remote-creatures-into-demo-world]';
 
 function log(message) { console.log(`${tag} ${message}`); }
 
-if (!s.includes('from "../multiplayer/supabaseWorldCreatures"')) {
-  s = s.replace(
-    'import { LogPanel } from "../logs/LogPanel";\n',
-    'import { LogPanel } from "../logs/LogPanel";\nimport { rowToCreature, type WorldCreatureRow } from "../multiplayer/supabaseWorldCreatures";\n',
-  );
-  log('added creature row import');
-} else if (!s.includes('WorldCreatureRow')) {
-  s = s.replace(
-    'from "../multiplayer/supabaseWorldCreatures";',
-    ', type WorldCreatureRow } from "../multiplayer/supabaseWorldCreatures";',
-  ).replace('{ fetchWorldCreatures, rowToCreature,', '{ fetchWorldCreatures, rowToCreature,');
-  log('added WorldCreatureRow type import');
+function mergeWorldCreatureImport() {
+  const importRegex = /^import \{([^}]+)\} from "\.\.\/multiplayer\/supabaseWorldCreatures";\n?/gm;
+  const names = new Set(['rowToCreature', 'type WorldCreatureRow']);
+  let found = false;
+  s = s.replace(importRegex, (_full, rawNames) => {
+    found = true;
+    rawNames.split(',').map((name) => name.trim()).filter(Boolean).forEach((name) => names.add(name));
+    return '';
+  });
+  if (found) {
+    s = `import { ${Array.from(names).sort().join(', ')} } from "../multiplayer/supabaseWorldCreatures";\n` + s;
+    log('merged world creature import');
+  } else {
+    s = s.replace(
+      'import { LogPanel } from "../logs/LogPanel";\n',
+      'import { LogPanel } from "../logs/LogPanel";\nimport { rowToCreature, type WorldCreatureRow } from "../multiplayer/supabaseWorldCreatures";\n',
+    );
+    log('added world creature import');
+  }
+}
+
+if (!s.includes('WorldCreatureRow') || s.includes('} , type WorldCreatureRow } from "../multiplayer/supabaseWorldCreatures";')) {
+  s = s.replace(/^import \{[^\n]+\} , type WorldCreatureRow \} from "\.\.\/multiplayer\/supabaseWorldCreatures";\n?/gm, '');
+  mergeWorldCreatureImport();
 }
 
 const effectAnchor = '  useEffect(() => { setNickname(createClientNickname()); commitInventory(readStoredInventory(createDemoInventory())); }, [commitInventory]);\n';
