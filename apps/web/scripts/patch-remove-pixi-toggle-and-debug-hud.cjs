@@ -83,6 +83,7 @@ const refNames = [
   'lastCreatureHostClaimAtRef',
   'lastCreatureBroadcastAtRef',
   'lastCreatureSnapshotSaveAtRef',
+  'dbPosOnceRef',
 ];
 for (const name of refNames) {
   let seen = false;
