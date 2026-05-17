@@ -22,25 +22,25 @@ function ensureUseRef(name, expression, anchor, label) {
 
 addAfter('import { PixiGameCanvas } from "./pixi/PixiGameCanvas";\n', 'import { broadcastCreaturePositions, createCreatureBroadcastChannel, type CreaturePositionsBroadcastPayload } from "../multiplayer/supabaseCreatureBroadcast";\nimport { claimWorldHost, getCurrentMultiplayerPlayerId, getSupabaseClient, isSupabaseMultiplayerEnabled } from "../multiplayer/supabaseMultiplayer";\nimport { updateWorldCreaturePositions } from "../multiplayer/supabaseWorldCreatures";\n', 'ensure broadcast imports');
 addAfter('type CreatureWanderTarget = { x: number; y: number; nextRetargetAt: number };\n', 'type CreatureBroadcastTarget = { x: number; y: number; hp: number; maxHp: number; receivedAt: number };\n', 'ensure broadcast target type');
-ensureConst('creatureBroadcastMs', '250');
-ensureConst('creatureSnapshotSaveMs', '1000');
-ensureConst('creatureHostClaimMs', '0');
-ensureConst('creatureBroadcastLerpPerSecond', '9');
-ensureConst('creatureBroadcastSnapDistance', '520');
+ensureConst('creatureBroadcastMs', '100');
+ensureConst('creatureSnapshotSaveMs', '1200');
+ensureConst('creatureHostClaimMs', '2000');
+ensureConst('creatureBroadcastLerpPerSecond', '18');
+ensureConst('creatureBroadcastSnapDistance', '220');
 
 const smoothHelper = `
 function smoothRemoteCreatures(creatures: CreaturePublicState[], targets: Map<string, CreatureBroadcastTarget>, deltaSeconds: number, now: number) {
   if (targets.size <= 0 || creatures.length <= 0) return;
-  const alpha = Math.max(0.08, Math.min(0.72, 1 - Math.exp(-creatureBroadcastLerpPerSecond * deltaSeconds)));
+  const alpha = Math.max(0.16, Math.min(0.88, 1 - Math.exp(-creatureBroadcastLerpPerSecond * deltaSeconds)));
   for (const creature of creatures) {
     const target = targets.get(creature.id);
     if (!target) continue;
-    if (now - target.receivedAt > 2500) { targets.delete(creature.id); continue; }
+    if (now - target.receivedAt > 1200) { targets.delete(creature.id); continue; }
     const dx = target.x - creature.position.x;
     const dy = target.y - creature.position.y;
     const distance = Math.hypot(dx, dy);
     if (distance > creatureBroadcastSnapDistance) { creature.position.x = target.x; creature.position.y = target.y; }
-    else if (distance > 0.5) { creature.position.x += dx * alpha; creature.position.y += dy * alpha; }
+    else if (distance > 0.2) { creature.position.x += dx * alpha; creature.position.y += dy * alpha; }
     creature.hp = target.hp;
     creature.maxHp = target.maxHp;
   }
@@ -67,17 +67,36 @@ const handler = `
     const tile = demoTileRef.current;
     if (payload.tile.regionId !== tile.regionId || payload.tile.tileX !== tile.tileX || payload.tile.tileY !== tile.tileY) return;
     isCreatureHostRef.current = false;
-    creatureBroadcastTargetsRef.current.clear();
-    demoCreaturesRef.current = payload.creatures.map((packet) => ({
-      id: packet.id,
-      speciesId: packet.speciesId,
-      level: packet.level,
-      position: { x: packet.x, y: packet.y },
-      currentTile: { ...payload.tile },
-      hp: packet.hp,
-      maxHp: packet.maxHp,
-      traitIds: packet.traitIds ?? [],
-    }) as CreaturePublicState);
+    const now = performance.now();
+    const existingById = new Map(demoCreaturesRef.current.map((creature) => [creature.id, creature]));
+    const nextCreatures = payload.creatures.map((packet) => {
+      const existing = existingById.get(packet.id);
+      if (!existing) {
+        creatureBroadcastTargetsRef.current.set(packet.id, { x: packet.x, y: packet.y, hp: packet.hp, maxHp: packet.maxHp, receivedAt: now });
+        return ({
+          id: packet.id,
+          speciesId: packet.speciesId,
+          level: packet.level,
+          position: { x: packet.x, y: packet.y },
+          currentTile: { ...payload.tile },
+          hp: packet.hp,
+          maxHp: packet.maxHp,
+          traitIds: packet.traitIds ?? [],
+        }) as CreaturePublicState;
+      }
+      existing.speciesId = packet.speciesId;
+      existing.level = packet.level;
+      existing.currentTile = { ...payload.tile } as CreaturePublicState["currentTile"];
+      existing.hp = packet.hp;
+      existing.maxHp = packet.maxHp;
+      existing.traitIds = packet.traitIds ?? [];
+      const dx = packet.x - existing.position.x;
+      const dy = packet.y - existing.position.y;
+      if (Math.hypot(dx, dy) > 120) { existing.position.x = packet.x; existing.position.y = packet.y; }
+      creatureBroadcastTargetsRef.current.set(packet.id, { x: packet.x, y: packet.y, hp: packet.hp, maxHp: packet.maxHp, receivedAt: now });
+      return existing;
+    });
+    demoCreaturesRef.current = nextCreatures;
     demoTileIndexRef.current = createDemoTileIndex(demoResourcesRef.current, demoCreaturesRef.current, demoBuildingsRef.current);
     applyDemoSnapshot(true);
   }, [applyDemoSnapshot]);
