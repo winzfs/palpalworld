@@ -1,6 +1,8 @@
 const fs = require('fs');
 const path = require('path');
 
+require('./patch-multiplayer-current-id.cjs');
+
 const target = path.join(__dirname, '..', 'src', 'features', 'game', 'GameClientTileDemoStation.tsx');
 let source = fs.readFileSync(target, 'utf8');
 let changed = false;
