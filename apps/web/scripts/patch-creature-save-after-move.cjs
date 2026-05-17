@@ -14,40 +14,39 @@ if (s.includes(refAnchor) && !s.includes('forceCreatureDbSaveAtRef')) {
   log('added save tick ref');
 }
 
+const saveBlock = `      if (isSupabaseMultiplayerEnabled() && creatureAuthorityRef.current !== "client" && now - forceCreatureDbSaveAtRef.current >= 800) {
+        const creatureSaveClient = supabaseClientRef.current ?? getSupabaseClient();
+        if (creatureSaveClient) {
+          forceCreatureDbSaveAtRef.current = now;
+          void updateWorldCreaturePositions(creatureSaveClient, getCurrentCreatures());
+        }
+      }`;
+
+const oldSaveRegex = /\n      if \(supabaseClientRef\.current && isSupabaseMultiplayerEnabled\(\) && isCreatureHostRef\.current && now - forceCreatureDbSaveAtRef\.current >= 800\) \{\n        forceCreatureDbSaveAtRef\.current = now;\n        void updateWorldCreaturePositions\(supabaseClientRef\.current, getCurrentCreatures\(\)\);\n      \}/g;
+if (oldSaveRegex.test(s)) {
+  s = s.replace(oldSaveRegex, `\n${saveBlock}`);
+  log('replaced save block with client fallback');
+}
+
 const guardedMove = '      if (!isSupabaseMultiplayerEnabled() || creatureAuthorityRef.current !== "client") moveDemoCreatures(getCurrentCreatures(), deltaSeconds, now, demoPositionRef.current);';
-const guardedMoveWithSave = `      if (!isSupabaseMultiplayerEnabled() || creatureAuthorityRef.current !== "client") moveDemoCreatures(getCurrentCreatures(), deltaSeconds, now, demoPositionRef.current);
-      if (supabaseClientRef.current && isSupabaseMultiplayerEnabled() && isCreatureHostRef.current && now - forceCreatureDbSaveAtRef.current >= 800) {
-        forceCreatureDbSaveAtRef.current = now;
-        void updateWorldCreaturePositions(supabaseClientRef.current, getCurrentCreatures());
-      }`;
-
 const strictMove = '      if (!isSupabaseMultiplayerEnabled() || isCreatureHostRef.current) moveDemoCreatures(getCurrentCreatures(), deltaSeconds, now, demoPositionRef.current);';
-const strictMoveWithSave = `      if (!isSupabaseMultiplayerEnabled() || isCreatureHostRef.current) moveDemoCreatures(getCurrentCreatures(), deltaSeconds, now, demoPositionRef.current);
-      if (supabaseClientRef.current && isSupabaseMultiplayerEnabled() && isCreatureHostRef.current && now - forceCreatureDbSaveAtRef.current >= 800) {
-        forceCreatureDbSaveAtRef.current = now;
-        void updateWorldCreaturePositions(supabaseClientRef.current, getCurrentCreatures());
-      }`;
-
 const plainMove = '      moveDemoCreatures(getCurrentCreatures(), deltaSeconds, now, demoPositionRef.current);';
-const plainMoveWithSave = `      moveDemoCreatures(getCurrentCreatures(), deltaSeconds, now, demoPositionRef.current);
-      if (supabaseClientRef.current && isSupabaseMultiplayerEnabled() && isCreatureHostRef.current && now - forceCreatureDbSaveAtRef.current >= 800) {
-        forceCreatureDbSaveAtRef.current = now;
-        void updateWorldCreaturePositions(supabaseClientRef.current, getCurrentCreatures());
-      }`;
 
-if (s.includes(guardedMove) && !s.includes('forceCreatureDbSaveAtRef.current = now;')) {
-  s = s.replace(guardedMove, guardedMoveWithSave);
-  log('patched save after authority guarded movement');
-} else if (s.includes(strictMove) && !s.includes('forceCreatureDbSaveAtRef.current = now;')) {
-  s = s.replace(strictMove, strictMoveWithSave);
-  log('patched save after strict guarded movement');
-} else if (s.includes(plainMove) && !s.includes('forceCreatureDbSaveAtRef.current = now;')) {
-  s = s.replace(plainMove, plainMoveWithSave);
-  log('patched save after plain movement');
-} else if (s.includes('forceCreatureDbSaveAtRef.current = now;')) {
-  log('save after movement already patched');
+if (!s.includes('const creatureSaveClient = supabaseClientRef.current ?? getSupabaseClient();')) {
+  if (s.includes(guardedMove)) {
+    s = s.replace(guardedMove, `${guardedMove}\n${saveBlock}`);
+    log('patched save after authority guarded movement');
+  } else if (s.includes(strictMove)) {
+    s = s.replace(strictMove, `${strictMove}\n${saveBlock}`);
+    log('patched save after strict guarded movement');
+  } else if (s.includes(plainMove)) {
+    s = s.replace(plainMove, `${plainMove}\n${saveBlock}`);
+    log('patched save after plain movement');
+  } else {
+    log('movement line not found');
+  }
 } else {
-  log('movement line not found');
+  log('save after movement already patched');
 }
 
 if (s !== before) fs.writeFileSync(target, s);
