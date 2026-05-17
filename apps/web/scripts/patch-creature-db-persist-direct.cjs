@@ -63,3 +63,5 @@ if (s.includes(anchor) && !s.includes('const hydrateOnce = async () => {')) {
 
 if (s !== before) fs.writeFileSync(target, s);
 else log('no changes');
+
+require('./patch-creature-nonhost-no-move.cjs');
