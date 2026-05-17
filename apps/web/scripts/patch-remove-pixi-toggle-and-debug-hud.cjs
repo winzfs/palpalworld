@@ -53,9 +53,6 @@ if (fs.existsSync(overlayPath)) {
   if (overlayChanged) fs.writeFileSync(overlayPath, overlay);
 }
 
-if (changed) fs.writeFileSync(target, source);
-else console.log('[patch-remove-pixi-toggle-and-debug-hud] no GameClient changes');
-
 for (const script of [
   './patch-existing-client-broadcast-base.cjs',
   './patch-existing-client-broadcast-receive.cjs',
@@ -68,3 +65,39 @@ for (const script of [
 ]) {
   require(script);
 }
+
+// Final safety guard: Cloudflare next-on-pages can run prebuild twice through the Next build lifecycle.
+// Keep only the first declaration for refs that older patches may insert repeatedly.
+source = fs.readFileSync(target, 'utf8');
+const refNames = [
+  'cachedBuildPartsRef',
+  'handleDemoAttackRef',
+  'lastCreatureAiAtRef',
+  'lastSceneSnapshotAtRef',
+  'lastDemoAttackAtRef',
+  'lastUiSnapshotAtRef',
+  'supabaseClientRef',
+  'creatureBroadcastChannelRef',
+  'creatureBroadcastTargetsRef',
+  'isCreatureHostRef',
+  'lastCreatureHostClaimAtRef',
+  'lastCreatureBroadcastAtRef',
+  'lastCreatureSnapshotSaveAtRef',
+];
+for (const name of refNames) {
+  let seen = false;
+  const lineRegex = new RegExp(`^\\s*const ${name} = useRef(?:<[^\\n]+?>)?\\([^\\n]*\\);\\n?`, 'gm');
+  source = source.replace(lineRegex, (line) => {
+    if (!seen) {
+      seen = true;
+      return line.endsWith('\n') ? line : `${line}\n`;
+    }
+    changed = true;
+    console.log(`[patch-remove-pixi-toggle-and-debug-hud] removed duplicate ${name}`);
+    return '';
+  });
+}
+source = source.replace(/\n{4,}/g, '\n\n\n');
+
+if (changed) fs.writeFileSync(target, source);
+else console.log('[patch-remove-pixi-toggle-and-debug-hud] no GameClient changes');
