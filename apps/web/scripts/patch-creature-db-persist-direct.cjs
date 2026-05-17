@@ -36,7 +36,11 @@ const effect = `  useEffect(() => {
         demoTileIndexRef.current = createDemoTileIndex(demoResourcesRef.current, demoCreaturesRef.current, demoBuildingsRef.current);
         applyDemoSnapshot(true);
       } else {
-        await seedMissingWorldCreatures(client, getCurrentCreatures());
+        const fallbackCreatures = getCurrentCreatures().length > 0 ? demoCreaturesRef.current : createTileBasedDemoCreatures();
+        demoCreaturesRef.current = fallbackCreatures;
+        demoTileIndexRef.current = createDemoTileIndex(demoResourcesRef.current, demoCreaturesRef.current, demoBuildingsRef.current);
+        applyDemoSnapshot(true);
+        await seedMissingWorldCreatures(client, fallbackCreatures);
       }
       directCreatureDbHydratedRef.current = true;
     };
@@ -56,7 +60,11 @@ const effect = `  useEffect(() => {
   }, [applyDemoSnapshot, getCurrentCreatures]);
 
 `;
-if (s.includes(anchor) && !s.includes('const hydrateOnce = async () => {')) {
+const oldEffectRegex = /  useEffect\(\(\) => \{\n    const client = getSupabaseClient\(\);\n    if \(!client \|\| !isSupabaseMultiplayerEnabled\(\)\) return;\n    let disposed = false;\n    const hydrateOnce = async \(\) => \{[\s\S]*?\n  \}, \[applyDemoSnapshot, getCurrentCreatures\]\);\n\n/;
+if (oldEffectRegex.test(s)) {
+  s = s.replace(oldEffectRegex, effect);
+  log('replaced effect');
+} else if (s.includes(anchor) && !s.includes('const hydrateOnce = async () => {')) {
   s = s.replace(anchor, effect + anchor);
   log('effect');
 }
