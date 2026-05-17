@@ -41,7 +41,7 @@ const beforeToggle = '  const handleTogglePixiStage = useCallback(() => {\n';
 const handlers = `  const handleEnterRoom = useCallback((room: GameRoom) => {
     setCurrentRoom(room);
     setActiveRoomId(room.room_id);
-    setChatLines((prev) => [...prev.slice(-5), `[room] ${room.room_name} 입장`]);
+    setChatLines((prev) => [...prev.slice(-5), "[room] " + room.room_name + " 입장"]);
     applyDemoSnapshot(true);
   }, [applyDemoSnapshot]);
   const handleLeaveRoom = useCallback(() => {
@@ -74,11 +74,6 @@ const menuWithLeave = menuButton + '        <button className="hud-leave-room-bu
 if (s.includes(menuButton) && !s.includes('hud-leave-room-button')) {
   s = s.replace(menuButton, menuWithLeave);
   log('added leave room button');
-}
-
-const activeContentDeps = '  }, [activeMenuTab, chatLines, handleCraft, handleCraftBuildingItem, inventory, nickname, objectiveText, snapshot]);\n';
-if (s.includes(activeContentDeps) && !s.includes('currentRoom?.room_name')) {
-  // Keep dependency list stable for existing content. The room badge uses currentRoom in JSX only.
 }
 
 if (s !== before) fs.writeFileSync(target, s);
