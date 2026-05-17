@@ -5,170 +5,104 @@ const target = path.join(__dirname, '..', 'src', 'features', 'game', 'GameClient
 let source = fs.readFileSync(target, 'utf8');
 let changed = false;
 
-function patch(label) { changed = true; console.log(`[patch-existing-client-broadcast-finalize] ${label}`); }
-function addAfter(anchor, text, label) { if (source.includes(text)) return; if (!source.includes(anchor)) { console.log(`[patch-existing-client-broadcast-finalize] skip ${label}`); return; } source = source.replace(anchor, anchor + text); patch(label); }
-function ensureConst(name, value) {
-  const line = `const ${name} = ${value};\n`;
-  const regex = new RegExp(`const ${name} = [^;]+;\\n`, 'g');
-  source = source.replace(regex, '');
-  addAfter('const creatureMapSize = creatureMapMax - creatureMapMin;\n', line, `dedupe ${name}`);
+const tag = '[patch-existing-client-broadcast-finalize]';
+function mark(label) {
+  changed = true;
+  console.log(`${tag} ${label}`);
 }
-function ensureUseRef(name, expression, anchor, label) {
-  const line = `  const ${name} = useRef(${expression});\n`;
-  const regex = new RegExp(`\\s*const ${name} = useRef\\([^\\n]+\\);\\n`, 'g');
-  source = source.replace(regex, '');
-  addAfter(anchor, line, label);
+function insertAfter(anchor, text, label) {
+  if (source.includes(text.trim())) return;
+  if (!source.includes(anchor)) {
+    console.log(`${tag} skipped ${label}`);
+    return;
+  }
+  source = source.replace(anchor, anchor + text);
+  mark(label);
+}
+function replaceExact(search, replacement, label) {
+  if (source.includes(replacement.trim())) return;
+  if (!source.includes(search)) {
+    console.log(`${tag} skipped ${label}`);
+    return;
+  }
+  source = source.replace(search, replacement);
+  mark(label);
+}
+function removeRegex(regex, label) {
+  const next = source.replace(regex, '\n');
+  if (next !== source) {
+    source = next;
+    mark(`dedupe ${label}`);
+  }
+}
+function ensureConst(name, value) {
+  source = source.replace(new RegExp(`\\nconst ${name} = [^;]+;`, 'g'), '');
+  insertAfter('const creatureMapSize = creatureMapMax - creatureMapMin;\n', `const ${name} = ${value};\n`, `ensure ${name}`);
 }
 
-addAfter('import { PixiGameCanvas } from "./pixi/PixiGameCanvas";\n', 'import { broadcastCreaturePositions, createCreatureBroadcastChannel, requestCreatureSnapshot, type CreaturePositionsBroadcastPayload } from "../multiplayer/supabaseCreatureBroadcast";\nimport { claimWorldHost, getCurrentMultiplayerPlayerId, getSupabaseClient, isSupabaseMultiplayerEnabled } from "../multiplayer/supabaseMultiplayer";\nimport { updateWorldCreaturePositions } from "../multiplayer/supabaseWorldCreatures";\n', 'ensure broadcast imports');
-addAfter('type CreatureWanderTarget = { x: number; y: number; nextRetargetAt: number };\n', 'type CreatureBroadcastTarget = { x: number; y: number; hp: number; maxHp: number; receivedAt: number };\n', 'ensure broadcast target type');
+insertAfter(
+  'import { PixiGameCanvas } from "./pixi/PixiGameCanvas";\n',
+  'import { broadcastCreaturePositions, createCreatureBroadcastChannel, requestCreatureSnapshot, type CreaturePositionsBroadcastPayload } from "../multiplayer/supabaseCreatureBroadcast";\nimport { claimWorldHost, getCurrentMultiplayerPlayerId, getSupabaseClient, isSupabaseMultiplayerEnabled } from "../multiplayer/supabaseMultiplayer";\nimport { attackWorldCreature, seedMissingWorldCreatures, updateWorldCreaturePositions, upsertWorldCreature } from "../multiplayer/supabaseWorldCreatures";\n',
+  'ensure creature sync imports',
+);
+
+insertAfter(
+  'type CreatureWanderTarget = { x: number; y: number; nextRetargetAt: number };\n',
+  'type CreatureBroadcastTarget = { x: number; y: number; hp: number; maxHp: number; receivedAt: number };\n',
+  'ensure broadcast target type',
+);
+
 ensureConst('creatureBroadcastMs', '100');
 ensureConst('creatureSnapshotSaveMs', '1200');
 ensureConst('creatureHostClaimMs', '2000');
 ensureConst('creatureBroadcastLerpPerSecond', '18');
 ensureConst('creatureBroadcastSnapDistance', '220');
 
-const smoothHelper = `
-function smoothRemoteCreatures(creatures: CreaturePublicState[], targets: Map<string, CreatureBroadcastTarget>, deltaSeconds: number, now: number) {
-  if (targets.size <= 0 || creatures.length <= 0) return;
-  const alpha = Math.max(0.16, Math.min(0.88, 1 - Math.exp(-creatureBroadcastLerpPerSecond * deltaSeconds)));
-  for (const creature of creatures) {
-    const target = targets.get(creature.id);
-    if (!target) continue;
-    if (now - target.receivedAt > 1200) { targets.delete(creature.id); continue; }
-    const dx = target.x - creature.position.x;
-    const dy = target.y - creature.position.y;
-    const distance = Math.hypot(dx, dy);
-    if (distance > creatureBroadcastSnapDistance) { creature.position.x = target.x; creature.position.y = target.y; }
-    else if (distance > 0.2) { creature.position.x += dx * alpha; creature.position.y += dy * alpha; }
-    creature.hp = target.hp;
-    creature.maxHp = target.maxHp;
-  }
-}
-`;
-addAfter('function createDemoInventory(): InventoryState {\n', smoothHelper + '\n', 'ensure smooth remote helper');
+insertAfter(
+  'function createDemoInventory(): InventoryState {\n',
+  `function isSameMapTile(a: MapTileRef, b: MapTileRef) {\n  return a.regionId === b.regionId && a.tileX === b.tileX && a.tileY === b.tileY;\n}\nfunction smoothRemoteCreatures(creatures: CreaturePublicState[], targets: Map<string, CreatureBroadcastTarget>, deltaSeconds: number, now: number) {\n  if (targets.size <= 0 || creatures.length <= 0) return;\n  const alpha = Math.max(0.16, Math.min(0.88, 1 - Math.exp(-creatureBroadcastLerpPerSecond * deltaSeconds)));\n  for (const creature of creatures) {\n    const target = targets.get(creature.id);\n    if (!target) continue;\n    if (now - target.receivedAt > 1200) { targets.delete(creature.id); continue; }\n    const dx = target.x - creature.position.x;\n    const dy = target.y - creature.position.y;\n    const distance = Math.hypot(dx, dy);\n    if (distance > creatureBroadcastSnapDistance) {\n      creature.position.x = target.x;\n      creature.position.y = target.y;\n    } else if (distance > 0.2) {\n      creature.position.x += dx * alpha;\n      creature.position.y += dy * alpha;\n    }\n    creature.hp = target.hp;\n    creature.maxHp = target.maxHp;\n  }\n}\n`,
+  'ensure remote creature smoothing helpers',
+);
 
-ensureUseRef('supabaseClientRef', 'getSupabaseClient()', '  const lastUiSnapshotAtRef = useRef(0);\n', 'dedupe supabase client ref');
-ensureUseRef('creatureBroadcastChannelRef', '<ReturnType<typeof createCreatureBroadcastChannel> | null>(null)', '  const supabaseClientRef = useRef(getSupabaseClient());\n', 'dedupe broadcast channel ref');
-ensureUseRef('creatureBroadcastTargetsRef', 'new Map<string, CreatureBroadcastTarget>()', '  const creatureBroadcastChannelRef = useRef<ReturnType<typeof createCreatureBroadcastChannel> | null>(null);\n', 'dedupe broadcast target ref');
-ensureUseRef('isCreatureHostRef', 'false', '  const creatureBroadcastTargetsRef = useRef(new Map<string, CreatureBroadcastTarget>());\n', 'dedupe host ref');
-ensureUseRef('lastCreatureHostClaimAtRef', '-999999', '  const isCreatureHostRef = useRef(false);\n', 'dedupe host claim ref');
-ensureUseRef('lastCreatureBroadcastAtRef', '0', '  const lastCreatureHostClaimAtRef = useRef(-999999);\n', 'dedupe broadcast tick ref');
-ensureUseRef('lastCreatureSnapshotSaveAtRef', '0', '  const lastCreatureBroadcastAtRef = useRef(0);\n', 'dedupe snapshot save ref');
+removeRegex(/\n\s*const supabaseClientRef = useRef\(getSupabaseClient\(\)\);/g, 'supabase client ref');
+removeRegex(/\n\s*const creatureBroadcastChannelRef = useRef[\s\S]*?;\n/g, 'broadcast channel ref');
+removeRegex(/\n\s*const creatureBroadcastTargetsRef = useRef[\s\S]*?;\n/g, 'broadcast targets ref');
+removeRegex(/\n\s*const isCreatureHostRef = useRef\(false\);/g, 'host ref');
+removeRegex(/\n\s*const lastCreatureHostClaimAtRef = useRef\([^\n]+\);/g, 'host claim ref');
+removeRegex(/\n\s*const lastCreatureBroadcastAtRef = useRef\([^\n]+\);/g, 'broadcast tick ref');
+removeRegex(/\n\s*const lastCreatureSnapshotSaveAtRef = useRef\([^\n]+\);/g, 'snapshot save ref');
 
-source = source.replace(/\n\s*const applyCreatureBroadcastPayload = useCallback\(\(payload: CreaturePositionsBroadcastPayload\) => \{[\s\S]*?\n\s*\}, \[[^\]]*\]\);\n/g, '\n');
-patch('dedupe broadcast handler');
-source = source.replace(/\n\s*useEffect\(\(\) => \{[\s\S]*?createCreatureBroadcastChannel\(client, demoTileRef\.current, applyCreatureBroadcastPayload\)[\s\S]*?\n\s*\}, \[[^\]]*applyCreatureBroadcastPayload[^\]]*\]\);\n/g, '\n');
-patch('dedupe broadcast lifecycle');
+insertAfter(
+  '  const lastUiSnapshotAtRef = useRef(0);\n',
+  '  const supabaseClientRef = useRef(getSupabaseClient());\n  const creatureBroadcastChannelRef = useRef<ReturnType<typeof createCreatureBroadcastChannel> | null>(null);\n  const creatureBroadcastTargetsRef = useRef(new Map<string, CreatureBroadcastTarget>());\n  const isCreatureHostRef = useRef(false);\n  const lastCreatureHostClaimAtRef = useRef(-999999);\n  const lastCreatureBroadcastAtRef = useRef(0);\n  const lastCreatureSnapshotSaveAtRef = useRef(0);\n',
+  'ensure creature sync refs',
+);
 
-const handler = `
-  const applyCreatureBroadcastPayload = useCallback((payload: CreaturePositionsBroadcastPayload) => {
-    if (payload.hostId === getCurrentMultiplayerPlayerId()) return;
-    const tile = demoTileRef.current;
-    if (payload.tile.regionId !== tile.regionId || payload.tile.tileX !== tile.tileX || payload.tile.tileY !== tile.tileY) return;
-    isCreatureHostRef.current = false;
-    const now = performance.now();
-    const existingById = new Map(demoCreaturesRef.current.map((creature) => [creature.id, creature]));
-    const nextCreatures = payload.creatures.map((packet) => {
-      const existing = existingById.get(packet.id);
-      if (!existing) {
-        creatureBroadcastTargetsRef.current.set(packet.id, { x: packet.x, y: packet.y, hp: packet.hp, maxHp: packet.maxHp, receivedAt: now });
-        return ({
-          id: packet.id,
-          speciesId: packet.speciesId,
-          level: packet.level,
-          position: { x: packet.x, y: packet.y },
-          currentTile: { ...payload.tile },
-          hp: packet.hp,
-          maxHp: packet.maxHp,
-          traitIds: packet.traitIds ?? [],
-        }) as CreaturePublicState;
-      }
-      existing.speciesId = packet.speciesId;
-      existing.level = packet.level;
-      existing.currentTile = { ...payload.tile } as CreaturePublicState["currentTile"];
-      existing.hp = packet.hp;
-      existing.maxHp = packet.maxHp;
-      existing.traitIds = packet.traitIds ?? [];
-      const dx = packet.x - existing.position.x;
-      const dy = packet.y - existing.position.y;
-      if (Math.hypot(dx, dy) > 120) { existing.position.x = packet.x; existing.position.y = packet.y; }
-      creatureBroadcastTargetsRef.current.set(packet.id, { x: packet.x, y: packet.y, hp: packet.hp, maxHp: packet.maxHp, receivedAt: now });
-      return existing;
-    });
-    demoCreaturesRef.current = nextCreatures;
-    demoTileIndexRef.current = createDemoTileIndex(demoResourcesRef.current, demoCreaturesRef.current, demoBuildingsRef.current);
-    applyDemoSnapshot(true);
-  }, [applyDemoSnapshot]);
-`;
-addAfter('  }, [getCurrentBuildings, getCurrentCreatures, getCurrentResources, nickname]);\n', handler, 'ensure broadcast handler');
+removeRegex(/\n\s*const applyCreatureBroadcastPayload = useCallback\(\(payload: CreaturePositionsBroadcastPayload\) => \{[\s\S]*?\n\s*\}, \[[^\]]*\]\);\n/g, 'broadcast payload handler');
+insertAfter(
+  '  }, [getCurrentBuildings, getCurrentCreatures, getCurrentResources, nickname]);\n',
+  `\n  const applyCreatureBroadcastPayload = useCallback((payload: CreaturePositionsBroadcastPayload) => {\n    if (payload.hostId === getCurrentMultiplayerPlayerId()) return;\n    const tile = demoTileRef.current;\n    if (!isSameMapTile(payload.tile, tile)) return;\n    isCreatureHostRef.current = false;\n    const now = performance.now();\n    const existingById = new Map(demoCreaturesRef.current.map((creature) => [creature.id, creature]));\n    const nextCreatures = payload.creatures.map((packet) => {\n      const existing = existingById.get(packet.id);\n      if (!existing) {\n        creatureBroadcastTargetsRef.current.set(packet.id, { x: packet.x, y: packet.y, hp: packet.hp, maxHp: packet.maxHp, receivedAt: now });\n        return ({\n          id: packet.id,\n          speciesId: packet.speciesId,\n          level: packet.level,\n          position: { x: packet.x, y: packet.y },\n          currentTile: { ...payload.tile },\n          hp: packet.hp,\n          maxHp: packet.maxHp,\n          traitIds: packet.traitIds ?? [],\n        }) as CreaturePublicState;\n      }\n      existing.speciesId = packet.speciesId;\n      existing.level = packet.level;\n      (existing as { currentTile?: MapTileRef }).currentTile = { ...payload.tile };\n      existing.hp = packet.hp;\n      existing.maxHp = packet.maxHp;\n      existing.traitIds = packet.traitIds ?? [];\n      const dx = packet.x - existing.position.x;\n      const dy = packet.y - existing.position.y;\n      if (Math.hypot(dx, dy) > 120) {\n        existing.position.x = packet.x;\n        existing.position.y = packet.y;\n      }\n      creatureBroadcastTargetsRef.current.set(packet.id, { x: packet.x, y: packet.y, hp: packet.hp, maxHp: packet.maxHp, receivedAt: now });\n      return existing;\n    });\n    demoCreaturesRef.current = nextCreatures;\n    demoTileIndexRef.current = createDemoTileIndex(demoResourcesRef.current, demoCreaturesRef.current, demoBuildingsRef.current);\n    applyDemoSnapshot(true);\n  }, [applyDemoSnapshot]);\n`,
+  'ensure broadcast payload handler',
+);
 
-const lifecycle = `  useEffect(() => {
-    const client = supabaseClientRef.current;
-    if (!client || !isSupabaseMultiplayerEnabled()) return;
-    let cancelled = false;
-    const playerId = getCurrentMultiplayerPlayerId();
-    const channel = createCreatureBroadcastChannel(client, demoTileRef.current, applyCreatureBroadcastPayload, (request) => {
-      if (!isCreatureHostRef.current || request.requesterId === playerId) return;
-      void broadcastCreaturePositions({ channel, hostId: playerId, tile: demoTileRef.current, creatures: getCurrentCreatures() });
-    });
-    creatureBroadcastChannelRef.current = channel;
-    demoCreaturesRef.current = [];
-    creatureBroadcastTargetsRef.current.clear();
-    demoTileIndexRef.current = createDemoTileIndex(demoResourcesRef.current, demoCreaturesRef.current, demoBuildingsRef.current);
-    applyDemoSnapshot(true);
-    void claimWorldHost(client, playerId, demoTileRef.current).then((result) => {
-      if (cancelled) return;
-      isCreatureHostRef.current = result.isHost;
-      if (result.isHost) {
-        creatureBroadcastTargetsRef.current.clear();
-        if (getCurrentCreatures().length <= 0) demoCreaturesRef.current = createTileBasedDemoCreatures();
-        demoTileIndexRef.current = createDemoTileIndex(demoResourcesRef.current, demoCreaturesRef.current, demoBuildingsRef.current);
-        applyDemoSnapshot(true);
-        void broadcastCreaturePositions({ channel, hostId: playerId, tile: demoTileRef.current, creatures: getCurrentCreatures() });
-      } else {
-        window.setTimeout(() => { if (!cancelled) void requestCreatureSnapshot({ channel, requesterId: playerId, tile: demoTileRef.current }); }, 150);
-        window.setTimeout(() => { if (!cancelled && demoCreaturesRef.current.length <= 0) void requestCreatureSnapshot({ channel, requesterId: playerId, tile: demoTileRef.current }); }, 900);
-      }
-    }).catch(() => {
-      if (cancelled) return;
-      isCreatureHostRef.current = false;
-      window.setTimeout(() => { if (!cancelled) void requestCreatureSnapshot({ channel, requesterId: playerId, tile: demoTileRef.current }); }, 150);
-    });
-    return () => { cancelled = true; client.removeChannel(channel); if (creatureBroadcastChannelRef.current === channel) creatureBroadcastChannelRef.current = null; };
-  }, [applyCreatureBroadcastPayload, applyDemoSnapshot, getCurrentCreatures]);
-`;
-addAfter('  useEffect(() => { setNickname(createClientNickname()); commitInventory(readStoredInventory(createDemoInventory())); }, [commitInventory]);\n', lifecycle, 'ensure broadcast lifecycle');
+removeRegex(/\n\s*useEffect\(\(\) => \{[\s\S]*?createCreatureBroadcastChannel\(client, demoTileRef\.current, applyCreatureBroadcastPayload[\s\S]*?\n\s*\}, \[[^\]]*applyCreatureBroadcastPayload[^\]]*\]\);\n/g, 'broadcast lifecycle');
+insertAfter(
+  '  useEffect(() => { setNickname(createClientNickname()); commitInventory(readStoredInventory(createDemoInventory())); }, [commitInventory]);\n',
+  `  useEffect(() => {\n    const client = supabaseClientRef.current;\n    if (!client || !isSupabaseMultiplayerEnabled()) return;\n    let cancelled = false;\n    const playerId = getCurrentMultiplayerPlayerId();\n    const channel = createCreatureBroadcastChannel(client, demoTileRef.current, applyCreatureBroadcastPayload, (request) => {\n      if (!isCreatureHostRef.current || request.requesterId === playerId) return;\n      void broadcastCreaturePositions({ channel, hostId: playerId, tile: demoTileRef.current, creatures: getCurrentCreatures() });\n    });\n    creatureBroadcastChannelRef.current = channel;\n    demoCreaturesRef.current = [];\n    creatureBroadcastTargetsRef.current.clear();\n    demoTileIndexRef.current = createDemoTileIndex(demoResourcesRef.current, demoCreaturesRef.current, demoBuildingsRef.current);\n    applyDemoSnapshot(true);\n    void claimWorldHost(client, playerId, demoTileRef.current).then((result) => {\n      if (cancelled) return;\n      isCreatureHostRef.current = result.isHost;\n      if (result.isHost) {\n        creatureBroadcastTargetsRef.current.clear();\n        demoCreaturesRef.current = createTileBasedDemoCreatures();\n        demoTileIndexRef.current = createDemoTileIndex(demoResourcesRef.current, demoCreaturesRef.current, demoBuildingsRef.current);\n        applyDemoSnapshot(true);\n        void seedMissingWorldCreatures(client, getCurrentCreatures());\n        void broadcastCreaturePositions({ channel, hostId: playerId, tile: demoTileRef.current, creatures: getCurrentCreatures() });\n      } else {\n        window.setTimeout(() => { if (!cancelled) void requestCreatureSnapshot({ channel, requesterId: playerId, tile: demoTileRef.current }); }, 150);\n        window.setTimeout(() => { if (!cancelled && demoCreaturesRef.current.length <= 0) void requestCreatureSnapshot({ channel, requesterId: playerId, tile: demoTileRef.current }); }, 900);\n      }\n    }).catch(() => {\n      if (cancelled) return;\n      isCreatureHostRef.current = false;\n      window.setTimeout(() => { if (!cancelled) void requestCreatureSnapshot({ channel, requesterId: playerId, tile: demoTileRef.current }); }, 150);\n    });\n    return () => {\n      cancelled = true;\n      void client.removeChannel(channel);\n      if (creatureBroadcastChannelRef.current === channel) creatureBroadcastChannelRef.current = null;\n    };\n  }, [applyCreatureBroadcastPayload, applyDemoSnapshot, getCurrentCreatures]);\n`,
+  'ensure broadcast lifecycle',
+);
 
-const guardedLoop = `      const client = supabaseClientRef.current;
-      if (client && isSupabaseMultiplayerEnabled() && now - lastCreatureHostClaimAtRef.current >= creatureHostClaimMs) {
-        lastCreatureHostClaimAtRef.current = now;
-        void claimWorldHost(client, getCurrentMultiplayerPlayerId(), demoTileRef.current).then((result) => {
-          const wasHost = isCreatureHostRef.current;
-          isCreatureHostRef.current = result.isHost;
-          if (result.isHost) creatureBroadcastTargetsRef.current.clear();
-          else if (wasHost) { demoCreaturesRef.current = []; creatureBroadcastTargetsRef.current.clear(); }
-        });
-      }
-      if (!client || !isSupabaseMultiplayerEnabled() || isCreatureHostRef.current) {
-        if (getCurrentCreatures().length <= 0) demoCreaturesRef.current = createTileBasedDemoCreatures();
-        moveDemoCreatures(getCurrentCreatures(), deltaSeconds, now, demoPositionRef.current);
-        const channel = creatureBroadcastChannelRef.current;
-        if (client && channel && isSupabaseMultiplayerEnabled() && now - lastCreatureBroadcastAtRef.current >= creatureBroadcastMs) {
-          lastCreatureBroadcastAtRef.current = now;
-          void broadcastCreaturePositions({ channel, hostId: getCurrentMultiplayerPlayerId(), tile: demoTileRef.current, creatures: getCurrentCreatures() });
-        }
-        if (client && isSupabaseMultiplayerEnabled() && now - lastCreatureSnapshotSaveAtRef.current >= creatureSnapshotSaveMs) {
-          lastCreatureSnapshotSaveAtRef.current = now;
-          void updateWorldCreaturePositions(client, getCurrentCreatures());
-        }
-      } else {
-        if (getCurrentCreatures().length > 0) smoothRemoteCreatures(getCurrentCreatures(), creatureBroadcastTargetsRef.current, deltaSeconds, now);
-      }
-      applyDemoSnapshot(false);`;
+const oldLoop = '      moveDemoCreatures(getCurrentCreatures(), deltaSeconds, now, demoPositionRef.current);\n      applyDemoSnapshot(false);';
+const newLoop = `      const client = supabaseClientRef.current;\n      const multiplayerEnabled = Boolean(client && isSupabaseMultiplayerEnabled());\n      if (multiplayerEnabled && now - lastCreatureHostClaimAtRef.current >= creatureHostClaimMs) {\n        lastCreatureHostClaimAtRef.current = now;\n        void claimWorldHost(client, getCurrentMultiplayerPlayerId(), demoTileRef.current).then((result) => {\n          const wasHost = isCreatureHostRef.current;\n          isCreatureHostRef.current = result.isHost;\n          if (result.isHost) creatureBroadcastTargetsRef.current.clear();\n          else if (wasHost) {\n            demoCreaturesRef.current = [];\n            creatureBroadcastTargetsRef.current.clear();\n            demoTileIndexRef.current = createDemoTileIndex(demoResourcesRef.current, demoCreaturesRef.current, demoBuildingsRef.current);\n          }\n        });\n      }\n      if (!multiplayerEnabled || isCreatureHostRef.current) {\n        if (getCurrentCreatures().length <= 0) {\n          demoCreaturesRef.current = createTileBasedDemoCreatures();\n          demoTileIndexRef.current = createDemoTileIndex(demoResourcesRef.current, demoCreaturesRef.current, demoBuildingsRef.current);\n        }\n        moveDemoCreatures(getCurrentCreatures(), deltaSeconds, now, demoPositionRef.current);\n        const channel = creatureBroadcastChannelRef.current;\n        if (multiplayerEnabled && channel && now - lastCreatureBroadcastAtRef.current >= creatureBroadcastMs) {\n          lastCreatureBroadcastAtRef.current = now;\n          void broadcastCreaturePositions({ channel, hostId: getCurrentMultiplayerPlayerId(), tile: demoTileRef.current, creatures: getCurrentCreatures() });\n        }\n        if (multiplayerEnabled && now - lastCreatureSnapshotSaveAtRef.current >= creatureSnapshotSaveMs) {\n          lastCreatureSnapshotSaveAtRef.current = now;\n          void updateWorldCreaturePositions(client, getCurrentCreatures());\n        }\n      } else {\n        smoothRemoteCreatures(getCurrentCreatures(), creatureBroadcastTargetsRef.current, deltaSeconds, now);\n      }\n      applyDemoSnapshot(false);`;
+replaceExact(oldLoop, newLoop, 'replace local creature loop with host-authoritative sync');
 
-const localLoop = '      moveDemoCreatures(getCurrentCreatures(), deltaSeconds, now, demoPositionRef.current);\n      applyDemoSnapshot(false);';
-if (source.includes(localLoop)) { source = source.split(localLoop).join(guardedLoop); patch('replace standalone local creature loop'); }
+const oldAttack = '    target.hp = Math.max(0, target.hp - 18);\n    if (target.hp <= 0) { updateInventory((current) => addInventoryStack(current, "pal_essence", 1)); setChatLines((prev) => [...prev.slice(-5), `[demo] ${target.speciesId} 처치! 펄 정수 획득`]); }\n    else setChatLines((prev) => [...prev.slice(-5), `[demo] ${target.speciesId}에게 18 피해`]);\n    applyDemoSnapshot(true);';
+const newAttack = `    const client = supabaseClientRef.current;\n    if (client && isSupabaseMultiplayerEnabled()) {\n      void attackWorldCreature(client, target.id, getCurrentMultiplayerPlayerId(), 18).then((result) => {\n        if (!result) return;\n        target.hp = result.hp;\n        target.maxHp = result.maxHp;\n        if (result.defeated) {\n          updateInventory((current) => addInventoryStack(current, "pal_essence", 1));\n          setChatLines((prev) => [...prev.slice(-5), \`[world] \\${target.speciesId} 처치! 펄 정수 획득\`]);\n        } else {\n          setChatLines((prev) => [...prev.slice(-5), \`[world] \\${target.speciesId}에게 \\${result.damageApplied} 피해\`]);\n        }\n        applyDemoSnapshot(true);\n        const channel = creatureBroadcastChannelRef.current;\n        if (channel && isCreatureHostRef.current) void broadcastCreaturePositions({ channel, hostId: getCurrentMultiplayerPlayerId(), tile: demoTileRef.current, creatures: getCurrentCreatures() });\n      });\n      return;\n    }\n    target.hp = Math.max(0, target.hp - 18);\n    if (target.hp <= 0) { updateInventory((current) => addInventoryStack(current, "pal_essence", 1)); setChatLines((prev) => [...prev.slice(-5), \`[demo] \\${target.speciesId} 처치! 펄 정수 획득\`]); }\n    else setChatLines((prev) => [...prev.slice(-5), \`[demo] \\${target.speciesId}에게 18 피해\`]);\n    applyDemoSnapshot(true);`;
+replaceExact(oldAttack, newAttack, 'route creature attacks through supabase rpc');
+
+const oldCapture = '    if (success) { const liveCreature = getCurrentCreatures().find((candidate) => candidate.id === creature.id); if (liveCreature) liveCreature.hp = 0; setChatLines((prev) => [...prev.slice(-5), `[capture] ${getPetSpeciesDefinition(creature.speciesId).name} 포획 성공!`]); }';
+const newCapture = '    if (success) { const liveCreature = getCurrentCreatures().find((candidate) => candidate.id === creature.id); if (liveCreature) { liveCreature.hp = 0; const client = supabaseClientRef.current; if (client && isSupabaseMultiplayerEnabled()) void upsertWorldCreature(client, liveCreature); } setChatLines((prev) => [...prev.slice(-5), `[capture] ${getPetSpeciesDefinition(creature.speciesId).name} 포획 성공!`]); }';
+replaceExact(oldCapture, newCapture, 'persist capture defeat');
 
 if (changed) fs.writeFileSync(target, source);
-else console.log('[patch-existing-client-broadcast-finalize] no changes');
+else console.log(`${tag} no changes`);
