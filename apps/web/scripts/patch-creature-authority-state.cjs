@@ -24,3 +24,5 @@ if (s.includes(strictGuard)) {
 
 if (s !== before) fs.writeFileSync(target, s);
 else console.log(`${tag} no changes`);
+
+require('./patch-creature-save-after-move.cjs');
