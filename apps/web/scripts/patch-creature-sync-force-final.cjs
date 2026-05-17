@@ -128,3 +128,5 @@ if (!source.includes('lastCreatureBroadcastAtRef.current = now;')) {
 
 if (changed) fs.writeFileSync(target, source);
 else console.log(`${tag} no changes`);
+
+require('./patch-creature-db-hydrate-after-final.cjs');
