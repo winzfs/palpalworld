@@ -34,8 +34,14 @@ replaceAll(
   'import { canReplaceWallWithPart, findReplaceableWallForPart, getBuildPartOccupancy, getOccupiedKeys, getPlacedBuildPartOccupancy, getOccupancyKey } from "../buildings/buildPartOccupancy";',
   "occupancy import merge",
 );
+replaceAll(
+  'import { canReplaceWallWithPart, findReplaceableWallForPart } from "../buildings/buildPartOccupancy";\nimport { getBuildPartOccupancy, getOccupiedKeys, getPlacedBuildPartOccupancy, getOccupancyKey } from "../buildings/buildPartOccupancy";',
+  'import { canReplaceWallWithPart, findReplaceableWallForPart, getBuildPartOccupancy, getOccupiedKeys, getPlacedBuildPartOccupancy, getOccupancyKey } from "../buildings/buildPartOccupancy";',
+  "occupancy import merge reversed",
+);
 
 dedupeExactLine('    this.drawBuildPartPreview(ctx, camera.x, camera.y);', "drawBuildPartPreview call");
+dedupeExactLine('import { BuildPartRenderer } from "../rendering/BuildPartRenderer";', "BuildPartRenderer import");
 dedupeExactLine('import { getBuildPartSortKey } from "../buildings/buildPartVisual2p5d";', "sort key import");
 dedupeExactLine('import { getBuildPartVisibility } from "../buildings/houseVisibility2p5d";', "visibility import");
 dedupeExactLine('import { findWalkableFloorAtPosition, getFloorYOffset } from "../buildings/floorTraversal2p5d";', "floor traversal import");
