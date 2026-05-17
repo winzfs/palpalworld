@@ -39,3 +39,4 @@ if (s !== before) fs.writeFileSync(target, s);
 else console.log(`${tag} no changes`);
 
 require('./patch-remote-creatures-into-demo-world.cjs');
+require('./patch-overlay-creature-persist.cjs');
