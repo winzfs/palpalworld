@@ -26,10 +26,14 @@ ensureAfter(
   "floor traversal import",
 );
 
-replaceOnce(
-  '      demoPositionRef.current.x = next.x;\n      demoPositionRef.current.y = next.y;\n      moveDemoCreatures(getCurrentCreatures(), deltaSeconds, now, demoPositionRef.current);',
-  '      const floorState = buildFloorStateRef.current;\n      if (floorState.floorLevel > 0.8 && !floorState.onStair) {\n        const floorHit = findWalkableFloorAtPosition(buildParts, next.x, next.y, floorState.floorLevel);\n        if (!floorHit) {\n          buildFloorStateRef.current = { ...floorState, floorLevel: 0, floorYOffset: 0, overFloor: false, collisionReason: null };\n          setChatLines((prev) => {\n            const last = prev[prev.length - 1] ?? "";\n            if (last.includes("2층 바닥 밖")) return prev;\n            return [...prev.slice(-5), "[build] 2층 바닥 밖으로 벗어나 1층으로 내려왔습니다."];\n          });\n        }\n      }\n      demoPositionRef.current.x = next.x;\n      demoPositionRef.current.y = next.y;\n      moveDemoCreatures(getCurrentCreatures(), deltaSeconds, now, demoPositionRef.current);',
-  "fall recovery tick",
-);
+if (source.includes('const floorHit = findWalkableFloorAtPosition(buildParts, next.x, next.y, floorState.floorLevel);')) {
+  console.log('[patch-floor-fall-recovery-2p5d] already patched fall recovery tick');
+} else {
+  replaceOnce(
+    '      demoPositionRef.current.x = next.x;\n      demoPositionRef.current.y = next.y;\n      moveDemoCreatures(getCurrentCreatures(), deltaSeconds, now, demoPositionRef.current);',
+    '      const floorState = buildFloorStateRef.current;\n      if (floorState.floorLevel > 0.8 && !floorState.onStair) {\n        const floorHit = findWalkableFloorAtPosition(buildParts, next.x, next.y, floorState.floorLevel);\n        if (!floorHit) {\n          buildFloorStateRef.current = { ...floorState, floorLevel: 0, floorYOffset: 0, overFloor: false, collisionReason: null };\n          setChatLines((prev) => {\n            const last = prev[prev.length - 1] ?? "";\n            if (last.includes("2층 바닥 밖")) return prev;\n            return [...prev.slice(-5), "[build] 2층 바닥 밖으로 벗어나 1층으로 내려왔습니다."];\n          });\n        }\n      }\n      demoPositionRef.current.x = next.x;\n      demoPositionRef.current.y = next.y;\n      moveDemoCreatures(getCurrentCreatures(), deltaSeconds, now, demoPositionRef.current);',
+    "fall recovery tick",
+  );
+}
 
 if (changed) fs.writeFileSync(target, source);
