@@ -22,3 +22,4 @@ if (s !== before) fs.writeFileSync(target, s);
 
 require('./patch-creature-authority-state.cjs');
 require('./patch-creature-rescue-visible.cjs');
+require('./patch-remote-players-into-demo-snapshot.cjs');
