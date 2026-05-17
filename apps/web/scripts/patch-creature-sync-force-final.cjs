@@ -131,3 +131,4 @@ else console.log(`${tag} no changes`);
 
 require('./patch-creature-db-hydrate-after-final.cjs');
 require('./patch-creature-db-authoritative-loop.cjs');
+require('./patch-creature-db-persist-direct.cjs');
