@@ -7,15 +7,38 @@ const before = s;
 const tag = '[patch-overlay-creature-persist]';
 const log = (m) => console.log(`${tag} ${m}`);
 
-s = s.replace(
-  '  fetchOnlinePlayers,\n  getOrCreateMultiplayerPlayerId,',
-  '  claimWorldHost,\n  fetchOnlinePlayers,\n  getOrCreateMultiplayerPlayerId,',
-);
+function mergeNamedImport(modulePath, requiredNames) {
+  const escaped = modulePath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const importRegex = new RegExp(`^import \\{([^}]+)\\} from "${escaped}";\\n?`, 'gm');
+  const names = new Set(requiredNames);
+  let found = false;
+  s = s.replace(importRegex, (_full, rawNames) => {
+    found = true;
+    rawNames.split(',').map((name) => name.trim()).filter(Boolean).forEach((name) => names.add(name));
+    return '';
+  });
+  const sortedNames = Array.from(names).sort((a, b) => a.localeCompare(b));
+  const importLine = `import { ${sortedNames.join(', ')} } from "${modulePath}";\n`;
+  s = importLine + s;
+  log(found ? `merged ${modulePath}` : `added ${modulePath}`);
+}
 
-s = s.replace(
-  '  dispatchRemoteCreatureState,\n  fetchWorldCreatures,\n  subscribeWorldCreatures,',
-  '  dispatchRemoteCreatureState,\n  fetchWorldCreatures,\n  subscribeWorldCreatures,\n  updateWorldCreaturePositions,',
-);
+mergeNamedImport('./supabaseMultiplayer', [
+  'claimWorldHost',
+  'fetchOnlinePlayers',
+  'getOrCreateMultiplayerPlayerId',
+  'getSupabaseClient',
+  'isSupabaseMultiplayerEnabled',
+  'subscribeOnlinePlayers',
+  'upsertLocalPresence',
+]);
+
+mergeNamedImport('./supabaseWorldCreatures', [
+  'dispatchRemoteCreatureState',
+  'fetchWorldCreatures',
+  'subscribeWorldCreatures',
+  'updateWorldCreaturePositions',
+]);
 
 const refAnchor = '  const latestResourcesRef = useRef<ResourceNodeState[]>([]);\n';
 if (s.includes(refAnchor) && !s.includes('latestCreaturesRef')) {
