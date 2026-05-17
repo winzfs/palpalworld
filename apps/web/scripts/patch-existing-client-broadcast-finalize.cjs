@@ -113,21 +113,27 @@ const lifecycle = `  useEffect(() => {
       void broadcastCreaturePositions({ channel, hostId: playerId, tile: demoTileRef.current, creatures: getCurrentCreatures() });
     });
     creatureBroadcastChannelRef.current = channel;
+    demoCreaturesRef.current = [];
+    creatureBroadcastTargetsRef.current.clear();
+    demoTileIndexRef.current = createDemoTileIndex(demoResourcesRef.current, demoCreaturesRef.current, demoBuildingsRef.current);
+    applyDemoSnapshot(true);
     void claimWorldHost(client, playerId, demoTileRef.current).then((result) => {
       if (cancelled) return;
       isCreatureHostRef.current = result.isHost;
       if (result.isHost) {
         creatureBroadcastTargetsRef.current.clear();
         if (getCurrentCreatures().length <= 0) demoCreaturesRef.current = createTileBasedDemoCreatures();
-        void broadcastCreaturePositions({ channel, hostId: playerId, tile: demoTileRef.current, creatures: getCurrentCreatures() });
-      } else {
-        demoCreaturesRef.current = [];
-        creatureBroadcastTargetsRef.current.clear();
         demoTileIndexRef.current = createDemoTileIndex(demoResourcesRef.current, demoCreaturesRef.current, demoBuildingsRef.current);
         applyDemoSnapshot(true);
+        void broadcastCreaturePositions({ channel, hostId: playerId, tile: demoTileRef.current, creatures: getCurrentCreatures() });
+      } else {
         window.setTimeout(() => { if (!cancelled) void requestCreatureSnapshot({ channel, requesterId: playerId, tile: demoTileRef.current }); }, 150);
         window.setTimeout(() => { if (!cancelled && demoCreaturesRef.current.length <= 0) void requestCreatureSnapshot({ channel, requesterId: playerId, tile: demoTileRef.current }); }, 900);
       }
+    }).catch(() => {
+      if (cancelled) return;
+      isCreatureHostRef.current = false;
+      window.setTimeout(() => { if (!cancelled) void requestCreatureSnapshot({ channel, requesterId: playerId, tile: demoTileRef.current }); }, 150);
     });
     return () => { cancelled = true; client.removeChannel(channel); if (creatureBroadcastChannelRef.current === channel) creatureBroadcastChannelRef.current = null; };
   }, [applyCreatureBroadcastPayload, applyDemoSnapshot, getCurrentCreatures]);
