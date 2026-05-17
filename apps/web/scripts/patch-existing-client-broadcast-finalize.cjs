@@ -20,7 +20,7 @@ function ensureUseRef(name, expression, anchor, label) {
   addAfter(anchor, line, label);
 }
 
-addAfter('import { PixiGameCanvas } from "./pixi/PixiGameCanvas";\n', 'import { broadcastCreaturePositions, createCreatureBroadcastChannel, type CreaturePositionsBroadcastPayload } from "../multiplayer/supabaseCreatureBroadcast";\nimport { claimWorldHost, getCurrentMultiplayerPlayerId, getSupabaseClient, isSupabaseMultiplayerEnabled } from "../multiplayer/supabaseMultiplayer";\nimport { updateWorldCreaturePositions } from "../multiplayer/supabaseWorldCreatures";\n', 'ensure broadcast imports');
+addAfter('import { PixiGameCanvas } from "./pixi/PixiGameCanvas";\n', 'import { broadcastCreaturePositions, createCreatureBroadcastChannel, requestCreatureSnapshot, type CreaturePositionsBroadcastPayload } from "../multiplayer/supabaseCreatureBroadcast";\nimport { claimWorldHost, getCurrentMultiplayerPlayerId, getSupabaseClient, isSupabaseMultiplayerEnabled } from "../multiplayer/supabaseMultiplayer";\nimport { updateWorldCreaturePositions } from "../multiplayer/supabaseWorldCreatures";\n', 'ensure broadcast imports');
 addAfter('type CreatureWanderTarget = { x: number; y: number; nextRetargetAt: number };\n', 'type CreatureBroadcastTarget = { x: number; y: number; hp: number; maxHp: number; receivedAt: number };\n', 'ensure broadcast target type');
 ensureConst('creatureBroadcastMs', '100');
 ensureConst('creatureSnapshotSaveMs', '1200');
@@ -107,16 +107,30 @@ const lifecycle = `  useEffect(() => {
     const client = supabaseClientRef.current;
     if (!client || !isSupabaseMultiplayerEnabled()) return;
     let cancelled = false;
-    void claimWorldHost(client, getCurrentMultiplayerPlayerId(), demoTileRef.current).then((result) => {
+    const playerId = getCurrentMultiplayerPlayerId();
+    const channel = createCreatureBroadcastChannel(client, demoTileRef.current, applyCreatureBroadcastPayload, (request) => {
+      if (!isCreatureHostRef.current || request.requesterId === playerId) return;
+      void broadcastCreaturePositions({ channel, hostId: playerId, tile: demoTileRef.current, creatures: getCurrentCreatures() });
+    });
+    creatureBroadcastChannelRef.current = channel;
+    void claimWorldHost(client, playerId, demoTileRef.current).then((result) => {
       if (cancelled) return;
       isCreatureHostRef.current = result.isHost;
-      if (result.isHost) creatureBroadcastTargetsRef.current.clear();
-      else { demoCreaturesRef.current = []; demoTileIndexRef.current = createDemoTileIndex(demoResourcesRef.current, demoCreaturesRef.current, demoBuildingsRef.current); applyDemoSnapshot(true); }
+      if (result.isHost) {
+        creatureBroadcastTargetsRef.current.clear();
+        if (getCurrentCreatures().length <= 0) demoCreaturesRef.current = createTileBasedDemoCreatures();
+        void broadcastCreaturePositions({ channel, hostId: playerId, tile: demoTileRef.current, creatures: getCurrentCreatures() });
+      } else {
+        demoCreaturesRef.current = [];
+        creatureBroadcastTargetsRef.current.clear();
+        demoTileIndexRef.current = createDemoTileIndex(demoResourcesRef.current, demoCreaturesRef.current, demoBuildingsRef.current);
+        applyDemoSnapshot(true);
+        window.setTimeout(() => { if (!cancelled) void requestCreatureSnapshot({ channel, requesterId: playerId, tile: demoTileRef.current }); }, 150);
+        window.setTimeout(() => { if (!cancelled && demoCreaturesRef.current.length <= 0) void requestCreatureSnapshot({ channel, requesterId: playerId, tile: demoTileRef.current }); }, 900);
+      }
     });
-    const channel = createCreatureBroadcastChannel(client, demoTileRef.current, applyCreatureBroadcastPayload);
-    creatureBroadcastChannelRef.current = channel;
     return () => { cancelled = true; client.removeChannel(channel); if (creatureBroadcastChannelRef.current === channel) creatureBroadcastChannelRef.current = null; };
-  }, [applyCreatureBroadcastPayload, applyDemoSnapshot]);
+  }, [applyCreatureBroadcastPayload, applyDemoSnapshot, getCurrentCreatures]);
 `;
 addAfter('  useEffect(() => { setNickname(createClientNickname()); commitInventory(readStoredInventory(createDemoInventory())); }, [commitInventory]);\n', lifecycle, 'ensure broadcast lifecycle');
 
