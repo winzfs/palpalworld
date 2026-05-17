@@ -72,4 +72,5 @@ if (oldEffectRegex.test(s)) {
 if (s !== before) fs.writeFileSync(target, s);
 else log('no changes');
 
+require('./patch-creature-db-persist-safe.cjs');
 require('./patch-creature-nonhost-no-move.cjs');
